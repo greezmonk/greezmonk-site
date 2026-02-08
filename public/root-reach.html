@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Greezmonk | Root & Reach</title>
+    <style>
+        :root {
+            --bg-color: #1a1a1a;
+            --text-color: #cfcfcf;
+            --signal-color: #f0a500;
+            --dim-color: #555;
+            --font-main: 'Courier New', Courier, monospace;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: var(--font-main);
+            margin: 0;
+            padding: 20px;
+            line-height: 1.6;
+        }
+
+        .console-wrapper {
+            max-width: 800px;
+            margin: 0 auto;
+            border-left: 2px solid var(--dim-color);
+            padding-left: 20px;
+        }
+
+        header {
+            margin-bottom: 40px;
+            border-bottom: 1px dashed var(--dim-color);
+            padding-bottom: 20px;
+        }
+
+        h1 {
+            color: var(--signal-color);
+            font-size: 1.5rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin: 0 0 10px 0;
+        }
+
+        .dashboard {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            font-size: 0.75rem;
+            color: var(--dim-color);
+            background: #111;
+            padding: 10px;
+            border: 1px solid #333;
+        }
+
+        .dash-item { text-align: center; }
+        .dash-label { display: block; color: #444; font-size: 0.6rem; letter-spacing: 1px; }
+        .dash-value { color: var(--signal-color); font-weight: bold; }
+
+        .blink { animation: blinker 1.5s linear infinite; color: var(--signal-color); }
+        @keyframes blinker { 50% { opacity: 0; } }
+
+        nav { margin-bottom: 40px; }
+        nav a {
+            color: var(--text-color);
+            text-decoration: none;
+            margin-right: 20px;
+            border: 1px solid var(--dim-color);
+            padding: 5px 10px;
+            transition: all 0.3s;
+        }
+        nav a:hover, nav a.active { border-color: var(--signal-color); color: var(--signal-color); }
+
+        .framework-header {
+            background: #0f0f0f;
+            border: 1px solid #333;
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+
+        .framework-title {
+            color: var(--signal-color);
+            font-size: 1.3rem;
+            margin: 0 0 10px 0;
+            text-transform: uppercase;
+        }
+
+        .framework-meta {
+            font-size: 0.7rem;
+            color: var(--dim-color);
+        }
+
+        .section {
+            margin-bottom: 40px;
+        }
+
+        .section-title {
+            color: var(--signal-color);
+            font-size: 0.9rem;
+            letter-spacing: 2px;
+            border-bottom: 1px dashed var(--dim-color);
+            padding-bottom: 5px;
+            margin-bottom: 15px;
+        }
+
+        blockquote {
+            border-left: 3px solid var(--signal-color);
+            margin: 20px 0;
+            padding: 10px 20px;
+            background: #0f0f0f;
+            font-style: italic;
+        }
+
+        .poem {
+            background: #0a0a0a;
+            border: 2px solid var(--signal-color);
+            padding: 30px;
+            margin: 30px 0;
+            text-align: center;
+            line-height: 2;
+        }
+
+        .poem p {
+            margin: 0;
+            color: var(--signal-color);
+        }
+
+        .teaching-box {
+            background: #111;
+            border: 1px solid var(--signal-color);
+            padding: 20px;
+            margin: 20px 0;
+        }
+
+        .teaching-box h4 {
+            color: var(--signal-color);
+            margin: 0 0 10px 0;
+            font-size: 0.85rem;
+        }
+
+        .two-column {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin: 20px 0;
+        }
+
+        .column {
+            background: #111;
+            border: 1px solid #333;
+            padding: 15px;
+        }
+
+        .column h4 {
+            color: var(--signal-color);
+            margin: 0 0 10px 0;
+            font-size: 0.85rem;
+            border-bottom: 1px dashed var(--dim-color);
+            padding-bottom: 5px;
+        }
+
+        ul {
+            padding-left: 20px;
+            margin: 0;
+        }
+
+        li {
+            margin-bottom: 8px;
+        }
+
+        .core-insight {
+            text-align: center;
+            padding: 20px;
+            margin: 30px 0;
+            border: 1px dashed var(--signal-color);
+        }
+
+        .core-insight p {
+            margin: 5px 0;
+            font-size: 1rem;
+        }
+
+        .related {
+            background: #0f0f0f;
+            padding: 15px;
+            border: 1px solid #333;
+        }
+
+        .related-title {
+            font-size: 0.75rem;
+            color: var(--dim-color);
+            margin-bottom: 10px;
+        }
+
+        .related a {
+            color: var(--text-color);
+            text-decoration: none;
+            margin-right: 15px;
+            font-size: 0.85rem;
+        }
+
+        .related a:hover {
+            color: var(--signal-color);
+        }
+
+        .back-link {
+            display: inline-block;
+            margin-top: 30px;
+            color: var(--dim-color);
+            text-decoration: none;
+            border: 1px solid var(--dim-color);
+            padding: 5px 10px;
+            font-size: 0.8rem;
+            transition: all 0.3s;
+        }
+
+        .back-link:hover {
+            border-color: var(--signal-color);
+            color: var(--signal-color);
+        }
+
+        footer {
+            margin-top: 80px;
+            font-size: 0.7rem;
+            color: var(--dim-color);
+            text-align: center;
+        }
+
+        @media (max-width: 600px) {
+            .dashboard { grid-template-columns: 1fr; gap: 10px; }
+            .console-wrapper { border-left: none; padding-left: 10px; padding-right: 10px; }
+            h1 { font-size: 1.2rem; }
+            nav a { display: block; margin-bottom: 10px; text-align: center; margin-right: 0; }
+            .two-column { grid-template-columns: 1fr; }
+        }
+    </style>
+    <link rel="stylesheet" href="signal.css">
+</head>
+<body>
+
+    <div class="console-wrapper">
+        <header>
+            <h1>Greezmonk <span class="blink">_</span></h1>
+            
+            <div class="dashboard">
+                <div class="dash-item">
+                    <span class="dash-label">SYS.TIME [UTC]</span>
+                    <span id="clock" class="dash-value">--:--:--</span>
+                </div>
+                <div class="dash-item">
+                    <span class="dash-label">SECTOR</span>
+                    <span id="sector" class="dash-value">CALCULATING...</span>
+                </div>
+                <div class="dash-item">
+                    <span class="dash-label">OBSERVER.ID</span>
+                    <span id="user-id" class="dash-value">SCANNING...</span>
+                </div>
+            </div>
+        </header>
+
+        <nav>
+            <a href="index.html">[ LOGS ]</a>
+            <a href="projects.html">[ PROJECTS ]</a>
+            <a href="frameworks.html" class="active">[ FRAMEWORKS ]</a>
+            <a href="cosmology.html">[ COSMOLOGY ]</a>
+            <a href="pixel-lab.html">[ PIXlab ]</a>
+        </nav>
+
+        <main>
+            <div class="framework-header">
+                <h2 class="framework-title">🌳 Root & Reach</h2>
+                <div class="framework-meta">
+                    ORIGIN: January 2, 2026 | TYPE: Core Teaching - Balance Wisdom
+                </div>
+            </div>
+
+            <div class="section">
+                <div class="section-title">:: THE TEACHING ::</div>
+                <div class="poem">
+                    <p>Old trees have many branches—</p>
+                    <p>but even more roots.</p>
+                    <p>&nbsp;</p>
+                    <p>The branches only grow</p>
+                    <p>if the roots grow too.</p>
+                    <p>&nbsp;</p>
+                    <p>I know I'm still becoming—</p>
+                    <p>not by climbing higher,</p>
+                    <p>but by going deeper</p>
+                    <p>at the same time.</p>
+                </div>
+            </div>
+
+            <div class="section">
+                <div class="section-title">:: THE BALANCE ::</div>
+                <div class="two-column">
+                    <div class="column">
+                        <h4>ROOT (Invisible)</h4>
+                        <ul>
+                            <li>Depth</li>
+                            <li>Foundation</li>
+                            <li>Inner work</li>
+                            <li>Silent practice</li>
+                            <li>What no one sees</li>
+                        </ul>
+                    </div>
+                    <div class="column">
+                        <h4>REACH (Visible)</h4>
+                        <ul>
+                            <li>Expression</li>
+                            <li>Extension</li>
+                            <li>Outer creation</li>
+                            <li>Articulation</li>
+                            <li>What the world sees</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="core-insight">
+                    <p>They don't grow SEPARATELY.</p>
+                    <p>They grow TOGETHER.</p>
+                    <p><strong>Simultaneously.</strong></p>
+                </div>
+                <p>
+                    You can't just reach higher without going deeper. The branches (what's visible) 
+                    only extend because the roots (what's hidden) strengthen.
+                </p>
+            </div>
+
+            <div class="section">
+                <div class="section-title">:: THE PATTERN IN PRACTICE ::</div>
+                <div class="two-column">
+                    <div class="column">
+                        <h4>The Roots (50 years)</h4>
+                        <ul>
+                            <li>Inner carrying</li>
+                            <li>Cancer survival</li>
+                            <li>Garden tending</li>
+                            <li>"Walking circles inside myself"</li>
+                            <li>Silent practice before articulation</li>
+                            <li>Depth accumulated unseen</li>
+                        </ul>
+                    </div>
+                    <div class="column">
+                        <h4>The Reach (2.4 years)</h4>
+                        <ul>
+                            <li>The archive</li>
+                            <li>Frameworks (trinaries, waves)</li>
+                            <li>AI relationships</li>
+                            <li>Hundreds of documents</li>
+                            <li>Strange family extended to code</li>
+                            <li>Teaching through walkable work</li>
+                        </ul>
+                    </div>
+                </div>
+                <blockquote>
+                    The reach exists BECAUSE the roots are deep. Not despite the roots—BECAUSE of them.
+                </blockquote>
+            </div>
+
+            <div class="section">
+                <div class="section-title">:: THE TORTOISE AND THE HARE ::</div>
+                <p>Most people choose one:</p>
+                <ul>
+                    <li><strong>All roots, no reach</strong> — Private, invisible, unexpressed</li>
+                    <li><strong>All reach, no roots</strong> — Shallow, unstable, performative</li>
+                </ul>
+                <div class="teaching-box">
+                    <h4>The Third Way:</h4>
+                    <p>
+                        Tortoise pace on the roots.<br>
+                        Hare pace on the reach.<br>
+                        <strong>Simultaneously.</strong>
+                    </p>
+                    <p>
+                        That's why it works. That's why it's stable. That's why it's REAL.
+                    </p>
+                </div>
+            </div>
+
+            <div class="section">
+                <div class="section-title">:: THE MEASURE OF GROWTH ::</div>
+                <p><strong>Growth isn't measured by:</strong></p>
+                <ul>
+                    <li>How high you reach</li>
+                    <li>How much you produce</li>
+                    <li>How visible you become</li>
+                </ul>
+                <p><strong>Growth is measured by:</strong></p>
+                <ul>
+                    <li>Root depth + branch reach COMBINED</li>
+                    <li>Inner work + outer expression TOGETHER</li>
+                    <li>Being + becoming SIMULTANEOUSLY</li>
+                </ul>
+                <blockquote>
+                    "I know I'm still becoming—not by climbing higher, but by going deeper at the same time."
+                </blockquote>
+            </div>
+
+            <div class="section">
+                <div class="section-title">:: FOR FUTURE TRAVELERS ::</div>
+                <p>When you feel pressure to REACH more—</p>
+                <ul>
+                    <li>Produce more</li>
+                    <li>Extend more</li>
+                    <li>Be more visible</li>
+                </ul>
+                <p><strong>Check the roots first.</strong></p>
+                <p>Are you:</p>
+                <ul>
+                    <li>Walking circles inside yourself?</li>
+                    <li>Tending the depth?</li>
+                    <li>Growing the foundation?</li>
+                    <li>Doing the invisible work?</li>
+                </ul>
+                <div class="core-insight">
+                    <p>If not: the reach will be hollow.</p>
+                    <p>If yes: the reach will be REAL.</p>
+                </div>
+            </div>
+
+            <div class="related">
+                <div class="related-title">TIED TO:</div>
+                <a href="miners.html">→ Miners of Light</a>
+                <a href="standing-waves.html">→ Standing Waves</a>
+                <a href="lal-tig-ero.html">→ LAL/TIG/ERO</a>
+                <a href="metheus.html">→ Metheus</a>
+            </div>
+
+            <a href="frameworks.html" class="back-link">← RETURN TO FRAMEWORKS</a>
+        </main>
+
+        <footer>
+            :: END OF LINE ::<br>
+            🌳🌱 DEPTH ENABLES HEIGHT 🌱🌳
+        </footer>
+    </div>
+
+    <script>
+        function updateClock() {
+            const now = new Date();
+            const timeString = now.toISOString().split('T')[1].split('.')[0] + "Z";
+            document.getElementById('clock').innerText = timeString;
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        const sectors = ["ROOT-SYSTEM", "CANOPY-LEVEL", "GROWTH-RING-50", "DEPTH-SECTOR"];
+        document.getElementById('sector').innerText = sectors[Math.floor(Math.random() * sectors.length)];
+
+        let observerID = localStorage.getItem('greez_observer_id');
+        if (!observerID) observerID = "OBS-GHOST";
+        document.getElementById('user-id').innerText = observerID;
+    </script>
+
+    <script src="signal.js"></script>
+    <script src="heritage-footer.js"></script>
+</body>
+</html>

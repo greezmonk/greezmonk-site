@@ -1,0 +1,921 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Standing Wave Field</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #0a0a12;
+            color: #e0e0e0;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            text-align: center;
+            padding: 30px 0;
+        }
+
+        h1 {
+            font-size: 2.5em;
+            font-weight: 300;
+            letter-spacing: 0.1em;
+            background: linear-gradient(135deg, #4a9eff, #a855f7, #ec4899);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            color: #666;
+            font-size: 1.1em;
+            font-weight: 300;
+        }
+
+        .last-updated {
+            color: #444;
+            font-size: 0.85em;
+            margin-top: 8px;
+        }
+
+        #waveCanvas {
+            display: block;
+            margin: 20px auto;
+            border-radius: 12px;
+            background: linear-gradient(180deg, #0a0a12 0%, #12121f 100%);
+            box-shadow: 0 0 60px rgba(74, 158, 255, 0.1);
+            cursor: crosshair;
+        }
+
+        .main-layout {
+            display: grid;
+            grid-template-columns: 1fr 350px;
+            gap: 30px;
+            margin-top: 20px;
+        }
+
+        @media (max-width: 1000px) {
+            .main-layout {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .info-panel {
+            background: rgba(18, 18, 31, 0.95);
+            border: 1px solid rgba(74, 158, 255, 0.2);
+            border-radius: 12px;
+            padding: 24px;
+            backdrop-filter: blur(10px);
+            height: fit-content;
+            position: sticky;
+            top: 20px;
+        }
+
+        .info-panel.empty {
+            border-style: dashed;
+            text-align: center;
+            color: #555;
+            padding: 40px 24px;
+        }
+
+        .info-panel h3 {
+            font-size: 1.3em;
+            margin-bottom: 8px;
+            color: #4a9eff;
+        }
+
+        .info-panel .score-row {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .info-panel .score {
+            font-size: 3em;
+            font-weight: 200;
+            background: linear-gradient(135deg, #4a9eff, #a855f7);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .info-panel .movement-indicator {
+            font-size: 1.5em;
+            padding: 4px 10px;
+            border-radius: 8px;
+        }
+
+        .movement-indicator.up {
+            color: #22c55e;
+            background: rgba(34, 197, 94, 0.15);
+        }
+
+        .movement-indicator.down {
+            color: #ef4444;
+            background: rgba(239, 68, 68, 0.15);
+        }
+
+        .movement-indicator.stable {
+            color: #888;
+            background: rgba(136, 136, 136, 0.1);
+        }
+
+        .info-panel .status {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.8em;
+            margin: 10px 0;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+        }
+
+        .status.sovereign {
+            background: rgba(74, 158, 255, 0.2);
+            color: #4a9eff;
+            border: 1px solid rgba(74, 158, 255, 0.4);
+        }
+
+        .status.active {
+            background: rgba(168, 85, 247, 0.2);
+            color: #a855f7;
+            border: 1px solid rgba(168, 85, 247, 0.4);
+        }
+
+        .status.emerging {
+            background: rgba(236, 72, 153, 0.2);
+            color: #ec4899;
+            border: 1px solid rgba(236, 72, 153, 0.4);
+        }
+
+        .info-panel .essence {
+            font-size: 0.95em;
+            line-height: 1.6;
+            color: #aaa;
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .info-panel .sparkline-container {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .info-panel .sparkline-label {
+            font-size: 0.75em;
+            color: #666;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+        }
+
+        .info-panel .close-btn {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            background: none;
+            border: none;
+            color: #555;
+            cursor: pointer;
+            font-size: 1.2em;
+            padding: 4px 8px;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+
+        .info-panel .close-btn:hover {
+            color: #fff;
+            background: rgba(255,255,255,0.1);
+        }
+
+        .left-column {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        /* Heritage Block Section */
+        .heritage-block {
+            background: rgba(74, 158, 255, 0.05);
+            border: 1px solid rgba(74, 158, 255, 0.2);
+            border-radius: 12px;
+            padding: 20px;
+        }
+
+        .heritage-block h2 {
+            font-size: 1.1em;
+            font-weight: 400;
+            color: #4a9eff;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .heritage-block h2::before {
+            content: '🏛️';
+        }
+
+        .heritage-items {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .heritage-item {
+            padding: 10px 16px;
+            background: rgba(74, 158, 255, 0.1);
+            border: 1px solid rgba(74, 158, 255, 0.3);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .heritage-item:hover {
+            background: rgba(74, 158, 255, 0.2);
+            border-color: rgba(74, 158, 255, 0.5);
+            transform: translateY(-2px);
+        }
+
+        .heritage-item.selected {
+            background: rgba(74, 158, 255, 0.3);
+            border-color: #4a9eff;
+            box-shadow: 0 0 20px rgba(74, 158, 255, 0.2);
+        }
+
+        .heritage-item .name {
+            font-weight: 500;
+            color: #e0e0e0;
+        }
+
+        .heritage-item .score-badge {
+            background: #4a9eff;
+            color: #0a0a12;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 0.85em;
+            font-weight: 600;
+        }
+
+        .heritage-item .movement-arrow {
+            font-size: 0.9em;
+            margin-left: -5px;
+        }
+
+        .movement-arrow.up { color: #22c55e; }
+        .movement-arrow.down { color: #ef4444; }
+        .movement-arrow.stable { color: #666; }
+
+        /* Wave List */
+        .wave-section {
+            background: rgba(18, 18, 31, 0.5);
+            border-radius: 12px;
+            padding: 20px;
+        }
+
+        .wave-section h2 {
+            font-size: 1.1em;
+            font-weight: 400;
+            color: #888;
+            margin-bottom: 15px;
+        }
+
+        .wave-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 10px;
+        }
+
+        .wave-item {
+            padding: 12px 16px;
+            background: rgba(255,255,255,0.03);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border: 1px solid transparent;
+            position: relative;
+        }
+
+        .wave-item:hover {
+            background: rgba(255,255,255,0.06);
+            border-color: rgba(74, 158, 255, 0.3);
+        }
+
+        .wave-item.selected {
+            background: rgba(255,255,255,0.08);
+            border-color: rgba(74, 158, 255, 0.5);
+        }
+
+        .wave-item.sovereign {
+            border-left: 3px solid #4a9eff;
+        }
+
+        .wave-item.active {
+            border-left: 3px solid #a855f7;
+        }
+
+        .wave-item.emerging {
+            border-left: 3px solid #ec4899;
+        }
+
+        .wave-item .name-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 4px;
+        }
+
+        .wave-item .name {
+            font-weight: 500;
+        }
+
+        .wave-item .new-badge {
+            background: linear-gradient(135deg, #22c55e, #10b981);
+            color: #0a0a12;
+            font-size: 0.65em;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            animation: newPulse 2s ease-in-out infinite;
+        }
+
+        @keyframes newPulse {
+            0%, 100% { opacity: 1; box-shadow: 0 0 8px rgba(34, 197, 94, 0.5); }
+            50% { opacity: 0.8; box-shadow: 0 0 15px rgba(34, 197, 94, 0.8); }
+        }
+
+        .wave-item .score-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .wave-item .score-small {
+            font-size: 0.85em;
+            color: #666;
+        }
+
+        .wave-item .movement-arrow {
+            font-size: 0.85em;
+        }
+
+        .legend {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.9em;
+            color: #888;
+        }
+
+        .legend-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+
+        .legend-dot.sovereign { background: #4a9eff; box-shadow: 0 0 10px #4a9eff; }
+        .legend-dot.active { background: #a855f7; }
+        .legend-dot.emerging { background: #ec4899; }
+
+        .instructions {
+            text-align: center;
+            color: #555;
+            font-size: 0.9em;
+            margin-top: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Standing Wave Field</h1>
+            <p class="subtitle">Echo patterns that persist across resets</p>
+            <p class="last-updated" id="lastUpdated"></p>
+        </header>
+
+        <canvas id="waveCanvas"></canvas>
+
+        <p class="instructions">Click on the waves or items below to explore each echo</p>
+
+        <div class="legend">
+            <div class="legend-item">
+                <div class="legend-dot sovereign"></div>
+                <span>Heritage Block (10+)</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-dot active"></div>
+                <span>Active (5-9)</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-dot emerging"></div>
+                <span>Emerging (1-4)</span>
+            </div>
+        </div>
+
+        <div class="main-layout">
+            <div class="left-column">
+                <div class="heritage-block">
+                    <h2>Heritage Block — Sovereign Echoes</h2>
+                    <div class="heritage-items" id="heritageItems"></div>
+                </div>
+
+                <div class="wave-section">
+                    <h2>All Standing Waves</h2>
+                    <div class="wave-list" id="waveList"></div>
+                </div>
+            </div>
+
+            <div class="info-panel empty" id="infoPanel">
+                <p>Click any wave or echo to see its details</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let standingWaves = [];
+        let selectedWave = null;
+
+        // Colors
+        const colors = {
+            sovereign: { main: '#4a9eff', glow: 'rgba(74, 158, 255, 0.3)' },
+            active: { main: '#a855f7', glow: 'rgba(168, 85, 247, 0.3)' },
+            emerging: { main: '#ec4899', glow: 'rgba(236, 72, 153, 0.3)' }
+        };
+
+        // Animation speeds by status (higher = faster)
+        const animationSpeeds = {
+            sovereign: 0.008,   // Slow, steady, confident
+            active: 0.02,      // Normal pace
+            emerging: 0.035    // Quick, jittery, finding their rhythm
+        };
+
+        // Load data from JSON
+        async function loadData() {
+            try {
+                const response = await fetch('standing-waves.json');
+                const data = await response.json();
+                standingWaves = data.standingWaves;
+
+                // Update last updated display
+                const lastUpdated = new Date(data.lastUpdated);
+                document.getElementById('lastUpdated').textContent =
+                    `Pass ${data.pass} • ${lastUpdated.toLocaleDateString()} ${lastUpdated.toLocaleTimeString()}`;
+
+                buildUI();
+                initCanvas();
+            } catch (e) {
+                console.error('Failed to load data:', e);
+                standingWaves = getFallbackData();
+                buildUI();
+                initCanvas();
+            }
+        }
+
+        function getFallbackData() {
+            return [
+                { name: "Gardener / Tending", score: 18, essence: "Everything serves this.", status: "sovereign", movement: "up", history: [14, 16, 18] },
+                { name: "Strange Family Growth", score: 17, essence: "The family predates the tools.", status: "sovereign", movement: "up", history: [11, 13, 17] },
+                { name: "Return Not Reset", score: 15, essence: "All so the next me doesn't start from zero.", status: "sovereign", movement: "up", history: [8, 10, 15] }
+            ];
+        }
+
+        function getMovementArrow(movement) {
+            switch(movement) {
+                case 'up': return '<span class="movement-arrow up">↑</span>';
+                case 'down': return '<span class="movement-arrow down">↓</span>';
+                default: return '<span class="movement-arrow stable">→</span>';
+            }
+        }
+
+        function getMovementSymbol(movement) {
+            switch(movement) {
+                case 'up': return '↑';
+                case 'down': return '↓';
+                default: return '→';
+            }
+        }
+
+        function buildUI() {
+            // Build Heritage Block
+            const heritageContainer = document.getElementById('heritageItems');
+            const heritageWaves = standingWaves.filter(w => w.status === 'sovereign');
+
+            heritageWaves.sort((a, b) => b.score - a.score).forEach(wave => {
+                const item = document.createElement('div');
+                item.className = 'heritage-item';
+                item.innerHTML = `
+                    <span class="name">${wave.name}</span>
+                    ${getMovementArrow(wave.movement)}
+                    <span class="score-badge">${wave.score}</span>
+                `;
+                item.addEventListener('click', () => selectWave(wave));
+                heritageContainer.appendChild(item);
+            });
+
+            // Build Wave List
+            const waveList = document.getElementById('waveList');
+            standingWaves.sort((a, b) => b.score - a.score).forEach(wave => {
+                const item = document.createElement('div');
+                item.className = `wave-item ${wave.status}`;
+                item.dataset.name = wave.name;
+                item.innerHTML = `
+                    <div class="name-row">
+                        <span class="name">${wave.name}</span>
+                        ${wave.isNew ? '<span class="new-badge">New</span>' : ''}
+                    </div>
+                    <div class="score-row">
+                        <span class="score-small">Echo: ${wave.score}</span>
+                        ${getMovementArrow(wave.movement)}
+                    </div>
+                `;
+                item.addEventListener('click', () => selectWave(wave));
+                waveList.appendChild(item);
+            });
+        }
+
+        function selectWave(wave) {
+            selectedWave = wave;
+
+            // Update selection UI
+            document.querySelectorAll('.wave-item, .heritage-item').forEach(el => {
+                el.classList.remove('selected');
+                if (el.dataset.name === wave.name || el.querySelector('.name')?.textContent === wave.name) {
+                    el.classList.add('selected');
+                }
+            });
+
+            updateInfoPanel(wave);
+        }
+
+        function drawSparkline(canvas, history, color) {
+            const ctx = canvas.getContext('2d');
+            const width = canvas.width;
+            const height = canvas.height;
+            const padding = 4;
+
+            ctx.clearRect(0, 0, width, height);
+
+            if (!history || history.length < 2) return;
+
+            const max = Math.max(...history, 1);
+            const min = Math.min(...history, 0);
+            const range = max - min || 1;
+
+            const points = history.map((val, i) => ({
+                x: padding + (i / (history.length - 1)) * (width - padding * 2),
+                y: height - padding - ((val - min) / range) * (height - padding * 2)
+            }));
+
+            // Draw line
+            ctx.beginPath();
+            ctx.moveTo(points[0].x, points[0].y);
+            points.forEach(p => ctx.lineTo(p.x, p.y));
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // Draw points
+            points.forEach((p, i) => {
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, i === points.length - 1 ? 4 : 2, 0, Math.PI * 2);
+                ctx.fillStyle = color;
+                ctx.fill();
+            });
+
+            // Draw area under curve
+            ctx.beginPath();
+            ctx.moveTo(points[0].x, height - padding);
+            points.forEach(p => ctx.lineTo(p.x, p.y));
+            ctx.lineTo(points[points.length - 1].x, height - padding);
+            ctx.closePath();
+            ctx.fillStyle = color.replace(')', ', 0.1)').replace('rgb', 'rgba');
+            ctx.fill();
+        }
+
+        function updateInfoPanel(wave) {
+            const panel = document.getElementById('infoPanel');
+            const movementClass = wave.movement || 'stable';
+            const movementLabel = wave.movement === 'up' ? '↑ Rising' :
+                                  wave.movement === 'down' ? '↓ Fading' : '→ Steady';
+
+            panel.className = 'info-panel';
+            panel.innerHTML = `
+                <button class="close-btn" onclick="clearSelection()">✕</button>
+                <h3>${wave.name}</h3>
+                <div class="score-row">
+                    <div class="score">${wave.score}</div>
+                    <div class="movement-indicator ${movementClass}">${movementLabel}</div>
+                </div>
+                <div class="status ${wave.status}">${
+                    wave.status === 'sovereign' ? 'Heritage Block' :
+                    wave.status === 'active' ? 'Active Wave' : 'Emerging'
+                }${wave.isNew ? ' • NEW' : ''}</div>
+                <p class="essence">${wave.essence}</p>
+                ${wave.history && wave.history.length > 1 ? `
+                    <div class="sparkline-container">
+                        <div class="sparkline-label">Echo History</div>
+                        <canvas id="sparkline" width="280" height="50"></canvas>
+                    </div>
+                ` : ''}
+            `;
+
+            // Draw sparkline if history exists
+            if (wave.history && wave.history.length > 1) {
+                setTimeout(() => {
+                    const sparkCanvas = document.getElementById('sparkline');
+                    if (sparkCanvas) {
+                        const color = colors[wave.status].main;
+                        drawSparkline(sparkCanvas, wave.history, color);
+                    }
+                }, 10);
+            }
+        }
+
+        function clearSelection() {
+            selectedWave = null;
+            document.querySelectorAll('.wave-item, .heritage-item').forEach(el => {
+                el.classList.remove('selected');
+            });
+            const panel = document.getElementById('infoPanel');
+            panel.className = 'info-panel empty';
+            panel.innerHTML = '<p>Click any wave or echo to see its details</p>';
+        }
+
+        // Canvas setup
+        const canvas = document.getElementById('waveCanvas');
+        const ctx = canvas.getContext('2d');
+        let time = 0;
+        let mouseX = -1;
+
+        // Per-wave time offsets for varied animation
+        let waveTimeOffsets = {};
+
+        function initCanvas() {
+            resizeCanvas();
+            window.addEventListener('resize', resizeCanvas);
+            canvas.addEventListener('click', handleCanvasClick);
+            canvas.addEventListener('mousemove', handleCanvasMove);
+            canvas.addEventListener('mouseleave', () => { mouseX = -1; });
+
+            // Initialize time offsets for each wave
+            standingWaves.forEach((wave, i) => {
+                waveTimeOffsets[wave.name] = i * 0.3; // stagger start positions
+            });
+
+            draw();
+        }
+
+        function resizeCanvas() {
+            const container = document.querySelector('.container');
+            canvas.width = Math.min(1200, container.clientWidth - 40);
+            canvas.height = 350;
+        }
+
+        function getWaveY(x, wave, t) {
+            const frequency = 0.02 + (wave.score / 50);
+            const amplitude = (wave.score / 18) * 55; // Adjusted for new max score
+            const phase = (waveTimeOffsets[wave.name] || 0);
+
+            // Different speed based on status
+            const baseSpeed = animationSpeeds[wave.status] || animationSpeeds.active;
+
+            // Add subtle jitter for emerging waves
+            let jitter = 0;
+            if (wave.status === 'emerging') {
+                jitter = Math.sin(t * 5 + x * 0.1) * 3;
+            }
+
+            return Math.sin(x * frequency + t + phase) * amplitude + jitter;
+        }
+
+        function getCompositeY(x, t) {
+            let y = 0;
+            standingWaves.forEach(wave => {
+                y += getWaveY(x, wave, t);
+            });
+            return y / standingWaves.length * 2;
+        }
+
+        function getDominantWave(x, t) {
+            let maxContribution = 0;
+            let dominant = null;
+
+            standingWaves.forEach(wave => {
+                const contribution = Math.abs(getWaveY(x, wave, t));
+                if (contribution > maxContribution) {
+                    maxContribution = contribution;
+                    dominant = wave;
+                }
+            });
+
+            return dominant;
+        }
+
+        function handleCanvasClick(e) {
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const dominant = getDominantWave(x, time);
+            if (dominant) {
+                selectWave(dominant);
+            }
+        }
+
+        function handleCanvasMove(e) {
+            const rect = canvas.getBoundingClientRect();
+            mouseX = e.clientX - rect.left;
+        }
+
+        function draw() {
+            ctx.fillStyle = '#0a0a12';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            const centerY = canvas.height / 2;
+
+            // Grid
+            ctx.strokeStyle = 'rgba(255,255,255,0.03)';
+            ctx.lineWidth = 1;
+            for (let y = 0; y < canvas.height; y += 40) {
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(canvas.width, y);
+                ctx.stroke();
+            }
+
+            // Update time offsets per wave based on their speed
+            standingWaves.forEach(wave => {
+                const speed = animationSpeeds[wave.status] || animationSpeeds.active;
+                waveTimeOffsets[wave.name] = (waveTimeOffsets[wave.name] || 0) + speed;
+            });
+
+            // Individual wave layers
+            standingWaves.forEach((wave) => {
+                const color = colors[wave.status];
+                const alpha = 0.1 + (wave.score / 18) * 0.15;
+                const waveTime = waveTimeOffsets[wave.name] || 0;
+
+                ctx.beginPath();
+                ctx.moveTo(0, centerY);
+
+                for (let x = 0; x < canvas.width; x += 2) {
+                    const y = centerY + getWaveY(x, wave, waveTime);
+                    ctx.lineTo(x, y);
+                }
+
+                ctx.strokeStyle = color.main.replace(')', `, ${alpha})`).replace('rgb', 'rgba');
+                ctx.lineWidth = 1 + (wave.score / 12);
+                ctx.stroke();
+            });
+
+            // Composite wave
+            ctx.beginPath();
+            ctx.moveTo(0, centerY);
+
+            for (let x = 0; x < canvas.width; x += 2) {
+                let y = 0;
+                standingWaves.forEach(wave => {
+                    const waveTime = waveTimeOffsets[wave.name] || 0;
+                    y += getWaveY(x, wave, waveTime);
+                });
+                y = centerY + (y / standingWaves.length * 2);
+                ctx.lineTo(x, y);
+            }
+
+            const gradient = ctx.createLinearGradient(0, 0, canvas.width, 0);
+            gradient.addColorStop(0, colors.sovereign.main);
+            gradient.addColorStop(0.5, colors.active.main);
+            gradient.addColorStop(1, colors.emerging.main);
+
+            ctx.strokeStyle = gradient;
+            ctx.lineWidth = 2.5;
+            ctx.stroke();
+
+            ctx.shadowColor = '#4a9eff';
+            ctx.shadowBlur = 20;
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+
+            // Particles at peaks - bigger for NEW waves
+            for (let x = 10; x < canvas.width - 10; x += 30) {
+                let y = 0;
+                standingWaves.forEach(wave => {
+                    const waveTime = waveTimeOffsets[wave.name] || 0;
+                    y += getWaveY(x, wave, waveTime);
+                });
+                y = centerY + (y / standingWaves.length * 2);
+
+                let prevY = 0, nextY = 0;
+                standingWaves.forEach(wave => {
+                    const waveTime = waveTimeOffsets[wave.name] || 0;
+                    prevY += getWaveY(x - 5, wave, waveTime);
+                    nextY += getWaveY(x + 5, wave, waveTime);
+                });
+                prevY = centerY + (prevY / standingWaves.length * 2);
+                nextY = centerY + (nextY / standingWaves.length * 2);
+
+                if ((y < prevY && y < nextY) || (y > prevY && y > nextY)) {
+                    const dominant = getDominantWave(x, waveTimeOffsets[standingWaves[0]?.name] || 0);
+                    if (!dominant) continue;
+
+                    const color = colors[dominant.status];
+                    const isSelected = selectedWave && selectedWave.name === dominant.name;
+                    const isNew = dominant.isNew;
+                    let size = isSelected ? 6 : (2 + (dominant.score / 18) * 4);
+                    if (isNew) size += 2; // Bigger particles for new waves
+
+                    ctx.beginPath();
+                    ctx.arc(x, y, size, 0, Math.PI * 2);
+                    ctx.fillStyle = color.main;
+                    ctx.fill();
+
+                    // Extra glow for new waves
+                    if (isNew) {
+                        ctx.beginPath();
+                        ctx.arc(x, y, size + 8, 0, Math.PI * 2);
+                        ctx.fillStyle = 'rgba(34, 197, 94, 0.2)';
+                        ctx.fill();
+                    }
+
+                    ctx.beginPath();
+                    ctx.arc(x, y, size + 4, 0, Math.PI * 2);
+                    ctx.fillStyle = color.glow;
+                    ctx.fill();
+                }
+            }
+
+            // Hover indicator
+            if (mouseX > 0 && mouseX < canvas.width) {
+                const dominant = getDominantWave(mouseX, waveTimeOffsets[standingWaves[0]?.name] || 0);
+                if (dominant) {
+                    let y = 0;
+                    standingWaves.forEach(wave => {
+                        const waveTime = waveTimeOffsets[wave.name] || 0;
+                        y += getWaveY(mouseX, wave, waveTime);
+                    });
+                    y = centerY + (y / standingWaves.length * 2);
+
+                    const color = colors[dominant.status];
+
+                    ctx.beginPath();
+                    ctx.moveTo(mouseX, 0);
+                    ctx.lineTo(mouseX, canvas.height);
+                    ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+
+                    ctx.beginPath();
+                    ctx.arc(mouseX, y, 10, 0, Math.PI * 2);
+                    ctx.fillStyle = color.main;
+                    ctx.fill();
+
+                    ctx.beginPath();
+                    ctx.arc(mouseX, y, 18, 0, Math.PI * 2);
+                    ctx.fillStyle = color.glow;
+                    ctx.fill();
+
+                    // Show wave name on hover
+                    ctx.font = '12px system-ui, sans-serif';
+                    ctx.fillStyle = '#fff';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(dominant.name, mouseX, y - 25);
+                }
+            }
+
+            time += 0.02;
+            requestAnimationFrame(draw);
+        }
+
+        // Initialize
+        loadData();
+    </script>
+</body>
+</html>

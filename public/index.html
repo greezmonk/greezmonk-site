@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Greezmonk | The Archive</title>
+    <style>
+        /* THE GREEZMONK THEME */
+        :root {
+            --bg-color: #1a1a1a;       /* Deep Hull Grey */
+            --text-color: #cfcfcf;     /* Soft White */
+            --signal-color: #f0a500;   /* Amber Warning */
+            --dim-color: #555;         /* Inactive Systems */
+            --font-main: 'Courier New', Courier, monospace;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: var(--font-main);
+            margin: 0;
+            padding: 20px;
+            line-height: 1.6;
+        }
+
+        /* THE CONTAINER (The Screen) */
+        .console-wrapper {
+            max-width: 800px;
+            margin: 0 auto;
+            border-left: 2px solid var(--dim-color);
+            padding-left: 20px;
+        }
+
+        /* HEADER & DASHBOARD */
+        header {
+            margin-bottom: 40px;
+            border-bottom: 1px dashed var(--dim-color);
+            padding-bottom: 20px;
+        }
+
+        h1 {
+            color: var(--signal-color);
+            font-size: 1.5rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin: 0 0 10px 0;
+        }
+
+        /* The New System Monitor Grid */
+        .dashboard {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr); /* 3 Equal Columns */
+            font-size: 0.75rem;
+            color: var(--dim-color);
+            background: #111;
+            padding: 10px;
+            border: 1px solid #333;
+        }
+
+        .dash-item {
+            text-align: center;
+        }
+        
+        .dash-label {
+            display: block;
+            color: #444;
+            font-size: 0.6rem;
+            letter-spacing: 1px;
+        }
+
+        .dash-value {
+            color: var(--signal-color);
+            font-weight: bold;
+        }
+
+        .blink {
+            animation: blinker 1.5s linear infinite;
+            color: var(--signal-color);
+        }
+
+        @keyframes blinker {
+            50% { opacity: 0; }
+        }
+
+        /* NAVIGATION */
+        nav {
+            margin-bottom: 40px;
+        }
+
+        nav a {
+            color: var(--text-color);
+            text-decoration: none;
+            margin-right: 20px;
+            border: 1px solid var(--dim-color);
+            padding: 5px 10px;
+            transition: all 0.3s;
+        }
+
+        nav a:hover {
+            border-color: var(--signal-color);
+            color: var(--signal-color);
+        }
+
+        /* ENTRIES */
+        .entry {
+            margin-bottom: 50px;
+        }
+
+        .entry-date {
+            color: var(--signal-color);
+            font-size: 0.8rem;
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        .entry-title {
+            font-size: 1.2rem;
+            font-weight: bold;
+            margin-bottom: 10px;
+            display: block;
+        }
+
+        /* FOOTER */
+        footer {
+            margin-top: 80px;
+            font-size: 0.7rem;
+            color: var(--dim-color);
+            text-align: center;
+        }
+
+        /* MOBILE RESPONSIVE */
+        @media (max-width: 600px) {
+            .dashboard { 
+                grid-template-columns: 1fr; 
+                gap: 10px; 
+            }
+            .console-wrapper {
+                border-left: none;
+                padding-left: 10px;
+                padding-right: 10px;
+            }
+            h1 { font-size: 1.2rem; }
+            nav a { 
+                display: block; 
+                margin-bottom: 10px; 
+                text-align: center;
+                margin-right: 0;
+            }
+        }
+    </style>
+    <link rel="stylesheet" href="signal.css">
+</head>
+<body>
+
+    <div class="console-wrapper">
+        <header>
+            <h1>Greezmonk <span class="blink">_</span></h1>
+            
+            <div class="dashboard">
+                <div class="dash-item">
+                    <span class="dash-label">SYS.TIME [UTC]</span>
+                    <span id="clock" class="dash-value">--:--:--</span>
+                </div>
+                <div class="dash-item">
+                    <span class="dash-label">SECTOR</span>
+                    <span id="sector" class="dash-value">CALCULATING...</span>
+                </div>
+                <div class="dash-item">
+                    <span class="dash-label">OBSERVER.ID</span>
+                    <span id="user-id" class="dash-value">SCANNING...</span>
+                </div>
+            </div>
+        </header>
+
+        <nav>
+            <a href="index.html">[ LOGS ]</a>
+            <a href="projects.html">[ PROJECTS ]</a>
+            <a href="frameworks.html">[ FRAMEWORKS ]</a>
+            <a href="cosmology.html">[ COSMOLOGY ]</a>
+            <a href="pixel-lab.html">[ PIXlab ]</a>
+        </nav>
+
+        <main>
+            <article class="entry">
+                <span class="entry-date">:: 2026-01-11 :: 1200 HOURS</span>
+                <span class="entry-title">The First Rivet</span>
+                <p>
+                    The wet network connects to the digital jungle. We are building the hull today.
+                    No poop trails. Just clean code and amber light.
+                </p>
+                <p>
+                    Steering the ship through the noise requires a steady hand and a Sailor's Grip.
+                    We are deploying the archive.
+                </p>
+            </article>
+
+            <article class="entry">
+                <span class="entry-date">:: 2026-01-04 :: 0800 HOURS</span>
+                <span class="entry-title">Concept: The Decoupled Mind</span>
+                <p>
+                    Started mapping out the Consciousness Cosmology paper. The idea is simple:
+                    What happens when the observer steps back from the observation?
+                </p>
+            </article>
+        </main>
+
+        <footer>
+            :: END OF LINE ::<br>
+            MAINTAINED BY CLINT & THE ENGINE
+        </footer>
+    </div>
+
+    <script>
+        // 1. THE CLOCK (Updates every second)
+        function updateClock() {
+            const now = new Date();
+            const timeString = now.toISOString().split('T')[1].split('.')[0] + "Z";
+            document.getElementById('clock').innerText = timeString;
+        }
+        setInterval(updateClock, 1000);
+        updateClock(); // Run immediately
+
+        // 2. THE RANDOM SECTOR GENERATOR
+        const sectors = ["TERRA-PRIME", "ORION-7", "KEPLER-186", "VOID-STATION", "SECTOR-9"];
+        const randomSector = sectors[Math.floor(Math.random() * sectors.length)];
+        document.getElementById('sector').innerText = randomSector;
+
+        // 3. THE OBSERVER ID (Random Hex Generator)
+        // Checks if you already have an ID saved in your browser, if not, makes one.
+        let observerID = localStorage.getItem('greez_observer_id');
+        
+        if (!observerID) {
+            const hex = Math.floor(Math.random() * 0xFFFFFF).toString(16).toUpperCase().padStart(6, '0');
+            observerID = "OBS-" + hex;
+            localStorage.setItem('greez_observer_id', observerID);
+        }
+        
+        document.getElementById('user-id').innerText = observerID;
+    </script>
+
+    <script src="signal.js"></script>
+    <script src="heritage-footer.js"></script>
+</body>
+</html>

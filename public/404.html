@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Greezmonk | Signal Lost</title>
+    <style>
+        /* THE GREEZMONK THEME */
+        :root {
+            --bg-color: #0d0d0d;       /* Darker than normal - Deep Void */
+            --text-color: #cfcfcf;
+            --signal-color: #f0a500;   /* Amber */
+            --error-color: #ff3333;    /* Red for Danger */
+            --dim-color: #444;
+            --font-main: 'Courier New', Courier, monospace;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: var(--font-main);
+            margin: 0;
+            padding: 20px;
+            overflow: hidden; /* Lock the screen for the effect */
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* SCANLINES (The Soulwear) */
+        .scanlines {
+            position: fixed;
+            top: 0; left: 0; width: 100vw; height: 100vh;
+            background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0) 50%, rgba(0,0,0,0.2) 50%, rgba(0,0,0,0.2));
+            background-size: 100% 4px;
+            pointer-events: none;
+            z-index: 99;
+            opacity: 0.3;
+        }
+
+        /* THE RADAR VISUAL */
+        .radar-container {
+            position: relative;
+            width: 200px;
+            height: 200px;
+            border: 1px dashed var(--dim-color);
+            border-radius: 50%;
+            margin-bottom: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .radar-blip {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            border: 1px solid var(--error-color);
+            opacity: 0;
+            animation: pulse 2s infinite ease-out;
+        }
+        
+        .radar-blip:nth-child(2) { animation-delay: 0.5s; }
+        .radar-blip:nth-child(3) { animation-delay: 1.0s; }
+
+        @keyframes pulse {
+            0% { transform: scale(0.1); opacity: 1; }
+            100% { transform: scale(1.5); opacity: 0; }
+        }
+
+        .radar-center {
+            width: 10px;
+            height: 10px;
+            background: var(--error-color);
+            border-radius: 50%;
+            box-shadow: 0 0 10px var(--error-color);
+        }
+
+        /* TEXT CONTENT */
+        h1 {
+            font-size: 4rem;
+            color: var(--dim-color);
+            margin: 0;
+            opacity: 0.5;
+            letter-spacing: 10px;
+        }
+
+        .status-message {
+            color: var(--error-color);
+            font-size: 1.2rem;
+            margin-bottom: 30px;
+            text-transform: uppercase;
+            font-weight: bold;
+        }
+
+        /* THE TERMINAL LOG */
+        .console-log {
+            width: 300px;
+            height: 100px;
+            background: #000;
+            border: 1px solid var(--dim-color);
+            padding: 10px;
+            font-size: 0.7rem;
+            color: #888;
+            overflow: hidden;
+            margin-bottom: 30px;
+            text-align: left;
+            font-family: monospace;
+        }
+
+        .log-entry { display: block; margin-bottom: 4px; }
+        .log-error { color: var(--error-color); }
+        .log-warn { color: var(--signal-color); }
+
+        /* BUTTONS */
+        .nav-btn {
+            border: 1px solid var(--signal-color);
+            color: var(--signal-color);
+            background: transparent;
+            padding: 10px 20px;
+            text-decoration: none;
+            font-weight: bold;
+            transition: all 0.3s;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .nav-btn:hover {
+            background: var(--signal-color);
+            color: #000;
+            box-shadow: 0 0 15px var(--signal-color);
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="scanlines"></div>
+
+    <div class="radar-container">
+        <div class="radar-blip"></div>
+        <div class="radar-blip"></div>
+        <div class="radar-blip"></div>
+        <div class="radar-center"></div>
+    </div>
+
+    <h1>404</h1>
+    <div class="status-message">
+        <span class="blink">⚠</span> SIGNAL LOST
+    </div>
+
+    <div class="console-log" id="log-window">
+        </div>
+
+    <a href="/index.html" class="nav-btn">
+        [ INITIATE EMERGENCY JUMP ]
+    </a>
+
+    <script>
+        // TYPEWRITER LOG EFFECT
+        const logWindow = document.getElementById('log-window');
+        const messages = [
+            { text: "Scanning sector coordinates...", type: "normal" },
+            { text: "Ping: 192.168.X.X ... Unreachable", type: "log-error" },
+            { text: "Tracing signal path...", type: "normal" },
+            { text: "ERROR: Void depth exceeds safety limits", type: "log-error" },
+            { text: "Navigational computer: OFFLINE", type: "log-error" },
+            { text: "Attempting to re-route...", type: "log-warn" },
+            { text: "Suggest immediate return to base.", type: "normal" }
+        ];
+
+        let lineIndex = 0;
+
+        function addLogLine() {
+            if (lineIndex < messages.length) {
+                const msg = messages[lineIndex];
+                const line = document.createElement('span');
+                line.className = "log-entry " + (msg.type || "");
+                line.innerHTML = `> ${msg.text}`;
+                
+                logWindow.appendChild(line);
+                logWindow.scrollTop = logWindow.scrollHeight; // Auto scroll
+                
+                lineIndex++;
+                // Random delay between lines for realism
+                setTimeout(addLogLine, Math.random() * 800 + 200);
+            }
+        }
+
+        // Start the log sequence
+        setTimeout(addLogLine, 500);
+
+        // Simple Blinker for the warning icon
+        setInterval(() => {
+            const blinker = document.querySelector('.blink');
+            blinker.style.opacity = (blinker.style.opacity === '0' ? '1' : '0');
+        }, 800);
+    </script>
+
+</body>
+</html>

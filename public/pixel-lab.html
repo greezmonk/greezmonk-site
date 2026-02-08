@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Greezmonk | Pixel Lab</title>
+    <style>
+        :root {
+            --bg-color: #1a1a1a;
+            --text-color: #cfcfcf;
+            --signal-color: #f0a500;
+            --dim-color: #555;
+            --font-main: 'Courier New', Courier, monospace;
+        }
+        body { background-color: var(--bg-color); color: var(--text-color); font-family: var(--font-main); margin: 0; padding: 20px; line-height: 1.6; }
+        
+        .console-wrapper { max-width: 800px; margin: 0 auto; border-left: 2px solid var(--dim-color); padding-left: 20px; }
+        
+        header { margin-bottom: 40px; border-bottom: 1px dashed var(--dim-color); padding-bottom: 20px; }
+        h1 { color: var(--signal-color); font-size: 1.5rem; text-transform: uppercase; letter-spacing: 2px; margin: 0 0 10px 0; }
+        .dashboard { display: grid; grid-template-columns: repeat(3, 1fr); font-size: 0.75rem; color: var(--dim-color); background: #111; padding: 10px; border: 1px solid #333; }
+        .dash-item { text-align: center; }
+        .dash-label { display: block; color: #444; font-size: 0.6rem; letter-spacing: 1px; }
+        .dash-value { color: var(--signal-color); font-weight: bold; }
+        .blink { animation: blinker 1.5s linear infinite; color: var(--signal-color); }
+        @keyframes blinker { 50% { opacity: 0; } }
+        
+        nav { margin-bottom: 40px; }
+        nav a { color: var(--text-color); text-decoration: none; margin-right: 20px; border: 1px solid var(--dim-color); padding: 5px 10px; transition: all 0.3s; }
+        nav a:hover, nav a.active { border-color: var(--signal-color); color: var(--signal-color); }
+        
+        .lab-header { margin-bottom: 20px; }
+        .lab-header h2 { color: var(--signal-color); font-size: 1.1rem; margin-bottom: 4px; }
+        .lab-header p { color: var(--dim-color); font-size: 0.75rem; }
+        
+        .workspace { display: flex; gap: 24px; flex-wrap: wrap; }
+        .left-panel { display: flex; flex-direction: column; gap: 12px; }
+        .right-panel { display: flex; flex-direction: column; gap: 16px; flex: 1; min-width: 200px; }
+        
+        .grid-container { position: relative; line-height: 0; }
+        #grid { cursor: crosshair; image-rendering: pixelated; border: 1px solid #333; display: block; touch-action: none; }
+        
+        .preview-row { display: flex; gap: 16px; align-items: flex-end; flex-wrap: wrap; }
+        .preview-box { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+        .preview-box span { font-size: 0.6rem; color: var(--dim-color); letter-spacing: 1px; }
+        canvas.preview { image-rendering: pixelated; border: 1px solid #333; background: #000; display: block; }
+        
+        .section-label { color: var(--signal-color); font-size: 0.7rem; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 6px; border-bottom: 1px dashed #333; padding-bottom: 4px; }
+        
+        .palette { display: flex; flex-wrap: wrap; gap: 3px; max-width: 340px; }
+        .swatch { width: 24px; height: 24px; border: 1px solid #333; cursor: pointer; transition: all 0.15s; }
+        .swatch:hover { transform: scale(1.15); border-color: var(--signal-color); }
+        .swatch.active { border: 2px solid var(--signal-color); transform: scale(1.15); }
+        
+        .tools { display: flex; gap: 6px; flex-wrap: wrap; }
+        .btn { background: #111; border: 1px solid #333; color: var(--dim-color); padding: 6px 10px; cursor: pointer; font-family: var(--font-main); font-size: 0.75rem; transition: all 0.15s; text-transform: uppercase; letter-spacing: 1px; }
+        .btn:hover { border-color: var(--signal-color); color: var(--signal-color); }
+        .btn.active { border-color: var(--signal-color); color: var(--signal-color); background: #1a1a0a; }
+        .btn.submit-btn { border-color: #4a9eff; color: #4a9eff; }
+        .btn.submit-btn:hover { background: rgba(74, 158, 255, 0.1); }
+        
+        .color-row { display: flex; align-items: center; gap: 10px; }
+        .color-row label { font-size: 0.7rem; color: var(--dim-color); letter-spacing: 1px; }
+        .color-row input[type="color"] { width: 30px; height: 22px; border: 1px solid #333; cursor: pointer; background: #111; }
+        
+        #status { font-size: 0.65rem; color: var(--dim-color); margin-top: 12px; }
+        
+        .hotkeys { font-size: 0.6rem; color: #444; margin-top: 8px; line-height: 1.8; }
+        .hotkeys strong { color: var(--dim-color); }
+        
+        .grid-size-row { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+        .grid-size-row label { font-size: 0.7rem; color: var(--dim-color); letter-spacing: 1px; }
+        .grid-size-row select { background: #111; color: var(--text-color); border: 1px solid #333; font-family: var(--font-main); font-size: 0.75rem; padding: 4px; cursor: pointer; }
+        
+        /* Bulletin Board Styles */
+        .bulletin-section { margin-top: 60px; border-top: 2px dashed var(--dim-color); padding-top: 40px; }
+        .bulletin-header { margin-bottom: 20px; }
+        .bulletin-header h2 { color: var(--signal-color); font-size: 1.1rem; margin-bottom: 4px; }
+        .bulletin-header p { color: var(--dim-color); font-size: 0.75rem; }
+        .bulletin-stats { font-size: 0.7rem; color: #444; margin-top: 8px; }
+        .bulletin-stats span { color: var(--signal-color); }
+        
+        .bulletin-board { display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 8px; margin-top: 20px; }
+        
+        .board-entry { position: relative; background: #111; border: 1px solid #333; padding: 4px; transition: all 0.2s; cursor: pointer; }
+        .board-entry:hover { border-color: var(--signal-color); transform: scale(1.05); z-index: 10; }
+        .board-entry canvas { display: block; image-rendering: pixelated; width: 64px; height: 64px; }
+        .board-entry .entry-id { font-size: 0.5rem; color: #444; text-align: center; margin-top: 2px; letter-spacing: 1px; overflow: hidden; text-overflow: ellipsis; }
+        .board-entry.yours { border-color: #4a9eff; }
+        .board-entry.yours .entry-id { color: #4a9eff; }
+        
+        .board-empty { color: #444; font-size: 0.8rem; text-align: center; padding: 40px; border: 1px dashed #333; }
+        
+        .board-loading { color: var(--dim-color); font-size: 0.8rem; text-align: center; padding: 40px; }
+        
+        footer { margin-top: 40px; font-size: 0.7rem; color: var(--dim-color); text-align: center; border-top: 1px dashed #333; padding-top: 20px; }
+        
+        @media (max-width: 600px) {
+            .dashboard { grid-template-columns: 1fr; gap: 10px; }
+            .console-wrapper { border-left: none; padding-left: 10px; padding-right: 10px; }
+            h1 { font-size: 1.2rem; }
+            nav a { display: block; margin-bottom: 10px; text-align: center; margin-right: 0; }
+            .workspace { flex-direction: column; align-items: center; }
+            .bulletin-board { grid-template-columns: repeat(auto-fill, minmax(54px, 1fr)); }
+            .board-entry canvas { width: 48px; height: 48px; }
+        }
+    </style>
+    <link rel="stylesheet" href="signal.css">
+</head>
+<body>
+
+<div class="console-wrapper">
+    <header>
+        <h1>Greezmonk <span class="blink">_</span></h1>
+        
+        <div class="dashboard">
+            <div class="dash-item">
+                <span class="dash-label">SYS.TIME [UTC]</span>
+                <span id="clock" class="dash-value">--:--:--</span>
+            </div>
+            <div class="dash-item">
+                <span class="dash-label">SECTOR</span>
+                <span id="sector" class="dash-value">CALCULATING...</span>
+            </div>
+            <div class="dash-item">
+                <span class="dash-label">OBSERVER.ID</span>
+                <span id="user-id" class="dash-value">SCANNING...</span>
+            </div>
+        </div>
+    </header>
+
+    <nav>
+        <a href="index.html">[ LOGS ]</a>
+        <a href="projects.html">[ PROJECTS ]</a>
+        <a href="frameworks.html">[ FRAMEWORKS ]</a>
+        <a href="cosmology.html">[ COSMOLOGY ]</a>
+    </nav>
+
+    <div class="lab-header">
+        <h2>:: PIXEL LAB ::</h2>
+        <p>Precision pixel work. Every dot counts. Leave your mark on the bulletin board — one creation per visitor.</p>
+    </div>
+
+    <div class="workspace">
+        <div class="left-panel">
+            <div class="grid-size-row">
+                <label>GRID:</label>
+                <select id="gridSize">
+                    <option value="12">12×12</option>
+                    <option value="16">16×16</option>
+                    <option value="18" selected>18×18</option>
+                    <option value="24">24×24</option>
+                    <option value="32">32×32</option>
+                </select>
+            </div>
+            <div class="grid-container">
+                <canvas id="grid"></canvas>
+            </div>
+            <div class="tools">
+                <button class="btn active" data-tool="draw">✏ DRAW</button>
+                <button class="btn" data-tool="erase">× ERASE</button>
+                <button class="btn" data-tool="pick">◉ PICK</button>
+                <button class="btn" data-tool="fill">▣ FILL</button>
+                <button class="btn" data-action="mirror">↔ MIRROR</button>
+                <button class="btn" data-action="undo">↩ UNDO</button>
+                <button class="btn" data-action="clear">✕ CLEAR</button>
+            </div>
+            <div class="tools">
+                <button class="btn" data-action="export">⬇ EXPORT</button>
+                <button class="btn" data-action="save">◆ SAVE</button>
+                <button class="btn" data-action="load">◇ LOAD</button>
+                <button class="btn submit-btn" data-action="submit">★ POST TO BOARD</button>
+            </div>
+        </div>
+
+        <div class="right-panel">
+            <div>
+                <div class="section-label">:: Preview ::</div>
+                <div class="preview-row">
+                    <div class="preview-box"><canvas class="preview" id="prev1"></canvas><span>ACTUAL</span></div>
+                    <div class="preview-box"><canvas class="preview" id="prev2"></canvas><span>2×</span></div>
+                    <div class="preview-box"><canvas class="preview" id="prev3"></canvas><span>4×</span></div>
+                    <div class="preview-box"><canvas class="preview" id="prev4"></canvas><span>8×</span></div>
+                </div>
+            </div>
+
+            <div>
+                <div class="section-label">:: Palette ::</div>
+                <div class="palette" id="palette"></div>
+                <div class="color-row" style="margin-top:8px;">
+                    <label>CUSTOM:</label>
+                    <input type="color" id="customColor" value="#8B4513">
+                </div>
+            </div>
+
+            <div>
+                <div class="section-label">:: Controls ::</div>
+                <div class="hotkeys">
+                    <strong>D</strong>=draw <strong>E</strong>=erase <strong>P</strong>=pick <strong>F</strong>=fill <strong>M</strong>=mirror<br>
+                    <strong>Z</strong>=undo <strong>S</strong>=save <strong>X</strong>=export<br>
+                    Right-click to erase anywhere
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="status">:: READY :: click grid to paint ::</div>
+
+    <!-- Bulletin Board Section -->
+    <div class="bulletin-section">
+        <div class="bulletin-header">
+            <h2>:: BULLETIN BOARD ::</h2>
+            <p>One mark per visitor. Your Observer ID is your signature. Make it count.</p>
+            <div class="bulletin-stats">
+                Entries: <span id="entryCount">0</span> | Your status: <span id="yourStatus">Not submitted</span>
+            </div>
+        </div>
+        <div class="bulletin-board" id="bulletinBoard">
+            <div class="board-loading">:: LOADING TRANSMISSIONS ::</div>
+        </div>
+    </div>
+
+    <footer>
+        :: END OF LINE ::<br>
+        PIXEL LAB v2 — BUILT BY EIDOS, COMMISSIONED BY ROOT
+    </footer>
+</div>
+
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+
+<script>
+(function() {
+    "use strict";
+
+    // Firebase config
+    var firebaseConfig = {
+        apiKey: "AIzaSyBaFO_NldqvBiboslI3PThXxzNS4K4vcFE",
+        authDomain: "greezmonk-prime-ff5ce.firebaseapp.com",
+        projectId: "greezmonk-prime-ff5ce",
+        storageBucket: "greezmonk-prime-ff5ce.firebasestorage.app",
+        messagingSenderId: "449070133560",
+        appId: "1:449070133560:web:e5c0a49a07de59ef18d1cd"
+    };
+
+    var db = null;
+    var firebaseReady = false;
+
+    // Try to initialize Firebase
+    try {
+        if (firebaseConfig.apiKey !== "YOUR_API_KEY") {
+            firebase.initializeApp(firebaseConfig);
+            db = firebase.firestore();
+            firebaseReady = true;
+        }
+    } catch(e) {
+        console.log('Firebase not configured:', e);
+    }
+
+    // --- State ---
+    var SIZE = 18;
+    var GRID_PX = 504;
+    var CELL = Math.floor(GRID_PX / SIZE);
+    var pixels = makeGrid(SIZE);
+    var undoStack = [];
+    var currentColor = '#5C2D0A';
+    var tool = 'draw';
+    var isDrawing = false;
+    var observerID = '';
+
+    var gridCanvas = document.getElementById('grid');
+    var gridCtx = gridCanvas.getContext('2d');
+
+    var paletteColors = [
+        '#000000','#1a1a1a','#2d2d2d','#404040',
+        '#1a0a00','#2d1400','#3d1c02','#4a2208',
+        '#5C2D0A','#6B3410','#7A3D15','#8B4513',
+        '#9C5525','#A0522D','#B5651D','#C4793A',
+        '#D4956B','#DEB887','#E8C99B','#F5DEB3',
+        '#2D0000','#4A0000','#6B1010','#8B1A1A',
+        '#800000','#993333','#A52A2A','#B44444',
+        '#8B4000','#A04800','#CC5500','#E07020',
+        '#1a2d1a','#2d4a2d','#3d6B3d','#558855',
+        '#888888','#AAAAAA','#CCCCCC','#FFFFFF',
+        '#f0a500','#c48800','#8a6000','#4a3400'
+    ];
+
+    // --- Helpers ---
+    function makeGrid(s) {
+        var g = [];
+        for (var y = 0; y < s; y++) {
+            var row = [];
+            for (var x = 0; x < s; x++) row.push(null);
+            g.push(row);
+        }
+        return g;
+    }
+
+    function cloneGrid(g) {
+        return g.map(function(row) { return row.slice(); });
+    }
+
+    function pushUndo() {
+        undoStack.push(cloneGrid(pixels));
+        if (undoStack.length > 80) undoStack.shift();
+    }
+
+    function setStatus(msg) {
+        document.getElementById('status').textContent = msg;
+    }
+
+    function gridToData() {
+        // Compress grid to simple format: array of {x,y,c} for non-null pixels
+        var data = [];
+        for (var y = 0; y < SIZE; y++) {
+            for (var x = 0; x < SIZE; x++) {
+                if (pixels[y][x]) {
+                    data.push({x: x, y: y, c: pixels[y][x]});
+                }
+            }
+        }
+        return { size: SIZE, pixels: data };
+    }
+
+    function dataToCanvas(data, canvas, scale) {
+        var ctx = canvas.getContext('2d');
+        canvas.width = data.size * scale;
+        canvas.height = data.size * scale;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        data.pixels.forEach(function(p) {
+            ctx.fillStyle = p.c;
+            ctx.fillRect(p.x * scale, p.y * scale, scale, scale);
+        });
+    }
+
+    // --- Grid Setup ---
+    function setupGrid() {
+        CELL = Math.floor(GRID_PX / SIZE);
+        gridCanvas.width = SIZE * CELL;
+        gridCanvas.height = SIZE * CELL;
+        gridCanvas.style.width = (SIZE * CELL) + 'px';
+        gridCanvas.style.height = (SIZE * CELL) + 'px';
+        pixels = makeGrid(SIZE);
+        undoStack = [];
+        setupPreviews();
+        render();
+    }
+
+    function setupPreviews() {
+        var defs = [['prev1',1],['prev2',2],['prev3',4],['prev4',8]];
+        defs.forEach(function(d) {
+            var c = document.getElementById(d[0]);
+            c.width = SIZE * d[1];
+            c.height = SIZE * d[1];
+            c.style.width = (SIZE * d[1]) + 'px';
+            c.style.height = (SIZE * d[1]) + 'px';
+        });
+    }
+
+    // --- Render ---
+    function render() {
+        gridCtx.fillStyle = '#000';
+        gridCtx.fillRect(0, 0, gridCanvas.width, gridCanvas.height);
+        for (var y = 0; y < SIZE; y++) {
+            for (var x = 0; x < SIZE; x++) {
+                if (pixels[y][x]) {
+                    gridCtx.fillStyle = pixels[y][x];
+                    gridCtx.fillRect(x * CELL, y * CELL, CELL, CELL);
+                }
+            }
+        }
+        gridCtx.strokeStyle = 'rgba(255,255,255,0.07)';
+        gridCtx.lineWidth = 1;
+        for (var i = 0; i <= SIZE; i++) {
+            gridCtx.beginPath();
+            gridCtx.moveTo(i * CELL + 0.5, 0);
+            gridCtx.lineTo(i * CELL + 0.5, SIZE * CELL);
+            gridCtx.stroke();
+            gridCtx.beginPath();
+            gridCtx.moveTo(0, i * CELL + 0.5);
+            gridCtx.lineTo(SIZE * CELL, i * CELL + 0.5);
+            gridCtx.stroke();
+        }
+        renderPreview('prev1', 1);
+        renderPreview('prev2', 2);
+        renderPreview('prev3', 4);
+        renderPreview('prev4', 8);
+    }
+
+    function renderPreview(id, scale) {
+        var c = document.getElementById(id);
+        var cx = c.getContext('2d');
+        cx.clearRect(0, 0, c.width, c.height);
+        for (var y = 0; y < SIZE; y++) {
+            for (var x = 0; x < SIZE; x++) {
+                if (pixels[y][x]) {
+                    cx.fillStyle = pixels[y][x];
+                    cx.fillRect(x * scale, y * scale, scale, scale);
+                }
+            }
+        }
+    }
+
+    function cellFromXY(clientX, clientY) {
+        var rect = gridCanvas.getBoundingClientRect();
+        var x = Math.floor((clientX - rect.left) / (rect.width / SIZE));
+        var y = Math.floor((clientY - rect.top) / (rect.height / SIZE));
+        if (x >= 0 && x < SIZE && y >= 0 && y < SIZE) return {x: x, y: y};
+        return null;
+    }
+
+    function applyTool(x, y, erasing) {
+        if (erasing || tool === 'erase') {
+            pixels[y][x] = null;
+        } else if (tool === 'pick') {
+            if (pixels[y][x]) {
+                currentColor = pixels[y][x];
+                buildPalette();
+            }
+            return;
+        } else if (tool === 'fill') {
+            floodFill(x, y, pixels[y][x], currentColor);
+        } else {
+            pixels[y][x] = currentColor;
+        }
+        render();
+    }
+
+    function floodFill(startX, startY, target, fill) {
+        if (target === fill) return;
+        var stack = [[startX, startY]];
+        var visited = {};
+        while (stack.length) {
+            var pt = stack.pop();
+            var cx = pt[0], cy = pt[1];
+            var key = cx + ',' + cy;
+            if (visited[key]) continue;
+            if (cx < 0 || cx >= SIZE || cy < 0 || cy >= SIZE) continue;
+            if (pixels[cy][cx] !== target) continue;
+            visited[key] = true;
+            pixels[cy][cx] = fill;
+            stack.push([cx+1,cy],[cx-1,cy],[cx,cy+1],[cx,cy-1]);
+        }
+    }
+
+    function mirrorH() {
+        pushUndo();
+        for (var y = 0; y < SIZE; y++) {
+            for (var x = 0; x < Math.floor(SIZE / 2); x++) {
+                pixels[y][SIZE - 1 - x] = pixels[y][x];
+            }
+        }
+        render();
+        setStatus(':: MIRRORED HORIZONTALLY ::');
+    }
+
+    function setTool(t) {
+        tool = t;
+        document.querySelectorAll('[data-tool]').forEach(function(btn) {
+            btn.classList.toggle('active', btn.getAttribute('data-tool') === t);
+        });
+        setStatus(':: TOOL: ' + t.toUpperCase() + ' ::');
+    }
+
+    function buildPalette() {
+        var el = document.getElementById('palette');
+        el.innerHTML = '';
+        paletteColors.forEach(function(c) {
+            var sw = document.createElement('div');
+            sw.className = 'swatch';
+            if (c.toLowerCase() === currentColor.toLowerCase()) sw.className += ' active';
+            sw.style.backgroundColor = c;
+            sw.addEventListener('click', function() {
+                currentColor = c;
+                buildPalette();
+            });
+            el.appendChild(sw);
+        });
+    }
+
+    function saveLocal() {
+        try {
+            localStorage.setItem('pixelLab_' + SIZE, JSON.stringify(pixels));
+            setStatus(':: SAVED TO BROWSER ::');
+        } catch(e) { setStatus(':: SAVE FAILED ::'); }
+    }
+
+    function loadLocal() {
+        try {
+            var d = localStorage.getItem('pixelLab_' + SIZE);
+            if (d) {
+                pushUndo();
+                pixels = JSON.parse(d);
+                render();
+                setStatus(':: LOADED ::');
+            } else {
+                setStatus(':: NO SAVE FOUND FOR ' + SIZE + '×' + SIZE + ' ::');
+            }
+        } catch(e) { setStatus(':: LOAD FAILED ::'); }
+    }
+
+    function exportPNG() {
+        var ec = document.createElement('canvas');
+        ec.width = SIZE;
+        ec.height = SIZE;
+        var ex = ec.getContext('2d');
+        for (var y = 0; y < SIZE; y++) {
+            for (var x = 0; x < SIZE; x++) {
+                if (pixels[y][x]) {
+                    ex.fillStyle = pixels[y][x];
+                    ex.fillRect(x, y, 1, 1);
+                }
+            }
+        }
+        var link = document.createElement('a');
+        link.download = 'pixel_art_' + SIZE + 'x' + SIZE + '.png';
+        link.href = ec.toDataURL('image/png');
+        link.click();
+        setStatus(':: EXPORTED ' + SIZE + '×' + SIZE + ' PNG ::');
+    }
+
+    function clearGrid() {
+        pushUndo();
+        pixels = makeGrid(SIZE);
+        render();
+        setStatus(':: CLEARED ::');
+    }
+
+    function undo() {
+        if (!undoStack.length) { setStatus(':: NOTHING TO UNDO ::'); return; }
+        pixels = undoStack.pop();
+        render();
+        setStatus(':: UNDO ::');
+    }
+
+    // --- Bulletin Board Functions ---
+    function loadBulletinBoard() {
+        var board = document.getElementById('bulletinBoard');
+        
+        if (!firebaseReady) {
+            // Demo mode with localStorage
+            loadBoardFromLocal();
+            return;
+        }
+
+        board.innerHTML = '<div class="board-loading">:: LOADING TRANSMISSIONS ::</div>';
+
+        db.collection('pixelBoard').orderBy('timestamp', 'desc').get()
+            .then(function(snapshot) {
+                renderBoard(snapshot.docs.map(function(doc) {
+                    return { id: doc.id, data: doc.data() };
+                }));
+            })
+            .catch(function(err) {
+                console.error('Load error:', err);
+                board.innerHTML = '<div class="board-empty">:: TRANSMISSION ERROR ::</div>';
+            });
+    }
+
+    function loadBoardFromLocal() {
+        // Fallback: load from localStorage for demo/offline
+        try {
+            var entries = JSON.parse(localStorage.getItem('pixelBoard') || '[]');
+            renderBoard(entries.map(function(e) { return { id: e.id, data: e }; }));
+        } catch(e) {
+            document.getElementById('bulletinBoard').innerHTML = '<div class="board-empty">:: NO ENTRIES YET — BE THE FIRST ::</div>';
+        }
+    }
+
+    function renderBoard(entries) {
+        var board = document.getElementById('bulletinBoard');
+        document.getElementById('entryCount').textContent = entries.length;
+
+        if (entries.length === 0) {
+            board.innerHTML = '<div class="board-empty">:: NO ENTRIES YET — BE THE FIRST ::</div>';
+            return;
+        }
+
+        board.innerHTML = '';
+        var foundYours = false;
+
+        entries.forEach(function(entry) {
+            var div = document.createElement('div');
+            div.className = 'board-entry';
+            if (entry.id === observerID) {
+                div.className += ' yours';
+                foundYours = true;
+            }
+
+            var canvas = document.createElement('canvas');
+            canvas.className = 'preview';
+            dataToCanvas(entry.data, canvas, 4);
+            canvas.style.width = '64px';
+            canvas.style.height = '64px';
+
+            var idLabel = document.createElement('div');
+            idLabel.className = 'entry-id';
+            idLabel.textContent = entry.id === observerID ? 'YOU' : entry.id.substring(0, 10);
+
+            div.appendChild(canvas);
+            div.appendChild(idLabel);
+            
+            div.addEventListener('click', function() {
+                // Could expand to full view later
+            });
+
+            board.appendChild(div);
+        });
+
+        document.getElementById('yourStatus').textContent = foundYours ? 'Posted ✓' : 'Not submitted';
+    }
+
+    function submitToBoard() {
+        var data = gridToData();
+        
+        if (data.pixels.length === 0) {
+            setStatus(':: CANNOT SUBMIT EMPTY GRID ::');
+            return;
+        }
+
+        if (!firebaseReady) {
+            // Demo mode: save to localStorage
+            submitToLocal(data);
+            return;
+        }
+
+        setStatus(':: TRANSMITTING TO BOARD... ::');
+
+        var entry = {
+            size: data.size,
+            pixels: data.pixels,
+            timestamp: firebase.firestore.FieldValue.serverTimestamp()
+        };
+
+        db.collection('pixelBoard').doc(observerID).set(entry)
+            .then(function() {
+                setStatus(':: POSTED TO BULLETIN BOARD ::');
+                loadBulletinBoard();
+            })
+            .catch(function(err) {
+                console.error('Submit error:', err);
+                setStatus(':: TRANSMISSION FAILED ::');
+            });
+    }
+
+    function submitToLocal(data) {
+        try {
+            var entries = JSON.parse(localStorage.getItem('pixelBoard') || '[]');
+            // Remove existing entry for this observer
+            entries = entries.filter(function(e) { return e.id !== observerID; });
+            // Add new entry
+            entries.unshift({
+                id: observerID,
+                size: data.size,
+                pixels: data.pixels,
+                timestamp: Date.now()
+            });
+            localStorage.setItem('pixelBoard', JSON.stringify(entries));
+            setStatus(':: POSTED TO LOCAL BOARD ::');
+            loadBoardFromLocal();
+        } catch(e) {
+            setStatus(':: LOCAL SAVE FAILED ::');
+        }
+    }
+
+    // --- Mouse Events ---
+    gridCanvas.addEventListener('mousedown', function(e) {
+        e.preventDefault();
+        var cell = cellFromXY(e.clientX, e.clientY);
+        if (!cell) return;
+        pushUndo();
+        isDrawing = true;
+        applyTool(cell.x, cell.y, e.button === 2);
+    });
+
+    gridCanvas.addEventListener('mousemove', function(e) {
+        if (!isDrawing) return;
+        var cell = cellFromXY(e.clientX, e.clientY);
+        if (cell) applyTool(cell.x, cell.y, e.buttons === 2);
+    });
+
+    gridCanvas.addEventListener('mouseup', function() { isDrawing = false; });
+    gridCanvas.addEventListener('mouseleave', function() { isDrawing = false; });
+    gridCanvas.addEventListener('contextmenu', function(e) { e.preventDefault(); });
+
+    // --- Touch Events ---
+    gridCanvas.addEventListener('touchstart', function(e) {
+        e.preventDefault();
+        var t = e.touches[0];
+        var cell = cellFromXY(t.clientX, t.clientY);
+        if (!cell) return;
+        pushUndo();
+        isDrawing = true;
+        applyTool(cell.x, cell.y, false);
+    }, {passive: false});
+
+    gridCanvas.addEventListener('touchmove', function(e) {
+        e.preventDefault();
+        if (!isDrawing) return;
+        var t = e.touches[0];
+        var cell = cellFromXY(t.clientX, t.clientY);
+        if (cell) applyTool(cell.x, cell.y, false);
+    }, {passive: false});
+
+    gridCanvas.addEventListener('touchend', function() { isDrawing = false; });
+    gridCanvas.addEventListener('touchcancel', function() { isDrawing = false; });
+
+    // --- Button Events ---
+    document.addEventListener('click', function(e) {
+        var btn = e.target.closest('[data-tool]');
+        if (btn) { setTool(btn.getAttribute('data-tool')); return; }
+
+        var action = e.target.closest('[data-action]');
+        if (action) {
+            var a = action.getAttribute('data-action');
+            if (a === 'mirror') mirrorH();
+            else if (a === 'undo') undo();
+            else if (a === 'clear') clearGrid();
+            else if (a === 'export') exportPNG();
+            else if (a === 'save') saveLocal();
+            else if (a === 'load') loadLocal();
+            else if (a === 'submit') submitToBoard();
+        }
+    });
+
+    document.getElementById('gridSize').addEventListener('change', function() {
+        SIZE = parseInt(this.value, 10);
+        setupGrid();
+        setStatus(':: GRID RESIZED TO ' + SIZE + '×' + SIZE + ' ::');
+    });
+
+    document.getElementById('customColor').addEventListener('change', function() {
+        var c = this.value;
+        if (paletteColors.indexOf(c) === -1) paletteColors.push(c);
+        currentColor = c;
+        buildPalette();
+    });
+
+    document.addEventListener('keydown', function(e) {
+        if (e.target.tagName === 'SELECT' || e.target.tagName === 'INPUT') return;
+        var k = e.key.toLowerCase();
+        if (k === 'd') setTool('draw');
+        else if (k === 'e') setTool('erase');
+        else if (k === 'p') setTool('pick');
+        else if (k === 'f') setTool('fill');
+        else if (k === 'm') mirrorH();
+        else if (k === 'z') undo();
+        else if (k === 's' && !e.ctrlKey) { e.preventDefault(); saveLocal(); }
+        else if (k === 'x') exportPNG();
+    });
+
+    // --- Dashboard & Init ---
+    function updateClock() {
+        var now = new Date();
+        var t = now.toISOString().split('T')[1].split('.')[0] + 'Z';
+        document.getElementById('clock').innerText = t;
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+
+    var sectors = ['TERRA-PRIME','ORION-7','KEPLER-186','VOID-STATION','SECTOR-9'];
+    document.getElementById('sector').innerText = sectors[Math.floor(Math.random() * sectors.length)];
+
+    observerID = localStorage.getItem('greez_observer_id');
+    if (!observerID) {
+        observerID = 'OBS-' + Math.floor(Math.random() * 0xFFFFFF).toString(16).toUpperCase().padStart(6,'0');
+        localStorage.setItem('greez_observer_id', observerID);
+    }
+    document.getElementById('user-id').innerText = observerID;
+
+    buildPalette();
+    setupGrid();
+    loadBulletinBoard();
+
+})();
+</script>
+<script src="signal.js"></script>
+<script src="heritage-footer.js"></script>
+</body>
+</html>

@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Greezmonk | The Archive</title>
+    <style>
+        /* THE GREEZMONK THEME */
+        :root {
+            --bg-color: #1a1a1a;       /* Deep Hull Grey */
+            --text-color: #cfcfcf;     /* Soft White */
+            --signal-color: #f0a500;   /* Amber Warning */
+            --dim-color: #555;         /* Inactive Systems */
+            --font-main: 'Courier New', Courier, monospace;
+        }
+
+        html {
+            overflow-y: scroll; /* FIX 1: Forces scrollbar, stops page jumping */
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: var(--font-main);
+            margin: 0;
+            padding: 20px;
+            line-height: 1.6;
+        }
+
+        /* THE CONTAINER (The Screen) */
+        .console-wrapper {
+            max-width: 800px;
+            margin: 0 auto;
+            border-left: 2px solid var(--dim-color);
+            padding-left: 20px;
+            position: relative;
+            z-index: 10; 
+        }
+
+        /* HEADER & STATUS */
+        header {
+            margin-bottom: 40px;
+            border-bottom: 1px dashed var(--dim-color);
+            padding-bottom: 20px;
+        }
+
+        h1 {
+            color: var(--signal-color);
+            font-size: 1.5rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin: 0;
+            display: inline-block; 
+        }
+
+        /* --- DASHBOARD GRID --- */
+        .dashboard {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            font-size: 0.75rem;
+            color: var(--dim-color);
+            background: #111;
+            padding: 10px;
+            border: 1px solid #333;
+            margin-top: 10px;
+        }
+        .dash-item { text-align: center; }
+        .dash-label { display: block; color: #444; font-size: 0.6rem; letter-spacing: 1px; }
+        .dash-value { color: var(--signal-color); font-weight: bold; }
+
+        @media (max-width: 600px) {
+            .dashboard { grid-template-columns: 1fr; gap: 10px; }
+        }
+
+        .status-line {
+            font-size: 0.8rem;
+            color: var(--dim-color);
+        }
+
+        /* THE BLINKING CURSOR */
+        .blink {
+            animation: blinker 1.5s linear infinite;
+            color: var(--signal-color);
+        }
+
+        @keyframes blinker {
+            50% { opacity: 0; }
+        }
+
+        /* NAVIGATION */
+        nav {
+            margin-bottom: 40px;
+        }
+
+        nav a {
+            color: var(--text-color);
+            text-decoration: none;
+            margin-right: 20px;
+            border: 1px solid var(--dim-color);
+            padding: 5px 10px;
+            transition: all 0.3s;
+        }
+
+        nav a:hover {
+            border-color: var(--signal-color);
+            color: var(--signal-color);
+        }
+
+        /* --- THE MARKDOWN STYLER --- */
+        #paper-container h1, 
+        #paper-container h2, 
+        #paper-container h3 {
+            color: var(--signal-color);
+            border-bottom: 1px dashed var(--dim-color);
+            padding-bottom: 5px;
+            margin-top: 30px;
+            text-transform: uppercase;
+        }
+
+        #paper-container p {
+            margin-bottom: 15px;
+            text-align: justify;
+        }
+
+        #paper-container ul, 
+        #paper-container ol {
+            padding-left: 20px;
+            color: var(--text-color);
+        }
+
+        #paper-container li {
+            margin-bottom: 5px;
+        }
+
+        #paper-container blockquote {
+            border-left: 3px solid var(--signal-color);
+            margin: 20px 0;
+            padding-left: 15px;
+            color: #888;
+            font-style: italic;
+        }
+
+        #paper-container code {
+            background: #111;
+            padding: 2px 5px;
+            border: 1px solid #333;
+            font-size: 0.9em;
+            color: var(--signal-color);
+        }
+
+        #paper-container pre {
+            background: #000;
+            padding: 15px;
+            border: 1px solid var(--dim-color);
+            overflow-x: auto;
+        }
+        
+        footer {
+            margin-top: 80px;
+            font-size: 0.7rem;
+            color: var(--dim-color);
+            text-align: center;
+        }
+
+        /* --- SOULWEAR UPGRADES --- */
+        .scanlines {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: linear-gradient(
+                to bottom,
+                rgba(255,255,255,0),
+                rgba(255,255,255,0) 50%,
+                rgba(0,0,0,0.2) 50%,
+                rgba(0,0,0,0.2)
+            );
+            background-size: 100% 4px;
+            pointer-events: none;
+            z-index: 999;
+            opacity: 0.4; 
+        }
+
+        @media (max-width: 600px) {
+            .console-wrapper {
+                border-left: none;
+                padding-left: 10px;
+                padding-right: 10px;
+            }
+            h1 { font-size: 1.2rem; }
+            nav a { 
+                display: block; 
+                margin-bottom: 10px; 
+                text-align: center;
+                margin-right: 0;
+            }
+            #paper-container {
+               word-wrap: break-word;
+               overflow-wrap: break-word;
+               overflow-x: hidden;
+            }
+               #paper-container pre {
+               white-space: pre-wrap;
+               word-break: break-word;
+            }
+               #paper-container img {
+               max-width: 100%;
+               height: auto;
+            }
+        }
+    </style>
+    <link rel="stylesheet" href="signal.css">
+</head>
+<body>
+
+    <div class="scanlines"></div>
+
+    <div class="console-wrapper">
+        <header>
+            <h1 id="type-header"></h1> <span class="blink" style="font-size: 1.5rem; font-weight: bold; margin-left: 8px;">_</span>
+            <div class="dashboard">
+                <div class="dash-item">
+                    <span class="dash-label">SYS.TIME [UTC]</span>
+                    <span id="clock" class="dash-value">--:--:--</span>
+                </div>
+                <div class="dash-item">
+                    <span class="dash-label">SECTOR</span>
+                    <span id="sector" class="dash-value">CALCULATING...</span>
+                </div>
+                <div class="dash-item">
+                    <span class="dash-label">OBSERVER.ID</span>
+                    <span id="user-id" class="dash-value">SCANNING...</span>
+                </div>
+            </div>
+        </header>
+
+        <nav>
+            <a href="index.html">[ LOGS ]</a>
+            <a href="projects.html">[ PROJECTS ]</a>
+            <a href="frameworks.html">[ FRAMEWORKS ]</a>
+            <a href="cosmology.html" class="active">[ COSMOLOGY ]</a>
+        </nav>
+
+        <main>
+            <article class="entry">
+                <span class="entry-date">:: INCOMING TRANSMISSION: GITHUB UPLINK ::</span>
+                <span class="entry-title">PROJECT: CONSCIOUSNESS COSMOLOGY</span>
+                
+                <div id="paper-container" style="border: 1px solid #333; padding: 25px; background: #0a0a0a; margin-top: 20px; min-height: 200px;">
+                    <div style="color: #f0a500; text-align: center; margin-top: 50px;">
+                        <span class="blink">_</span> ESTABLISHING LINK...
+                    </div>
+                </div>
+
+                <div style="text-align: right; margin-top: 10px; font-size: 0.8rem;">
+                    <a href="https://github.com/greezmonk/consciousness-cosmology" target="_blank" style="color: #555; text-decoration: none;">[ VIEW SOURCE ON GITHUB ]</a>
+                </div>
+            </article>
+        </main>
+
+        <footer>
+            :: END OF LINE ::<br>
+            MAINTAINED BY CLINT & THE ENGINE
+        </footer>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+    <script>
+        // --- 1. TYPING EFFECT ---
+        const textToType = "Greezmonk";
+        const headerElement = document.getElementById('type-header');
+        let i = 0;
+
+        function typeWriter() {
+            if (i < textToType.length) {
+                headerElement.innerHTML += textToType.charAt(i);
+                i++;
+                setTimeout(typeWriter, 100); 
+            }
+        }
+        typeWriter();
+
+
+        // --- FIX: ADVANCED MARKDOWN ENGINE ---
+        const rawUrl = "https://raw.githubusercontent.com/greezmonk/consciousness-cosmology/refs/heads/master/docs/Consciousness_Cosmology_Framework_v2.1.md";
+        // NOTE: Ensure this path matches where your images actually live on GitHub
+        const repoBaseUrl = "https://raw.githubusercontent.com/greezmonk/consciousness-cosmology/refs/heads/master/docs/";
+
+        const renderer = new marked.Renderer();
+
+        // 1. HEADER IDS (Fixes Table of Contents Scrolling)
+        // This adds invisible IDs to your headers so the links can find them.
+        renderer.heading = function(token) {
+            const text = token.text;
+            const level = token.depth;
+            const slug = text.toLowerCase().replace(/[^\w\s-]/g, '').trim().replace(/\s+/g, '-');
+            return `<h${level} id="${slug}">${text}</h${level}>`;
+        };
+
+        // 2. IMAGE PATHS (Fixes broken images)
+        renderer.image = function(token) {
+            let href = token.href;
+            if (!href.startsWith('http')) {
+                href = repoBaseUrl + href;
+            }
+            return `<img src="${href}" alt="${token.text}" style="max-width: 100%; border: 1px solid #333; margin-top:10px;">`;
+        };
+
+        // 3. SMART LINKS (Fixes 404s on clicks)
+        renderer.link = function(token) {
+            if (!token.href) return token.text || '';
+            let href = token.href;
+
+            // A. Anchor Links (#) -> Scroll
+            if (href.startsWith('#')) {
+                const slug = href.toLowerCase().replace(/[^\w\s-]/g, ''); 
+                return `<a href="#${slug}" style="color: #f0a500; text-decoration: none;">${token.text}</a>`;
+            }
+
+            // B. File/Image Links (ending in png, jpg, pdf, etc) -> Open GitHub version
+            if (href.match(/\.(png|jpg|jpeg|gif|pdf|md)$/i) && !href.startsWith('http')) {
+                href = repoBaseUrl + href;
+                return `<a href="${href}" target="_blank" style="color: #f0a500;">${token.text} <span style="font-size:0.7em">↗</span></a>`;
+            }
+
+            // C. External Links -> New Tab
+            if (href.startsWith('http')) {
+                 return `<a href="${href}" target="_blank" style="color: #f0a500;">${token.text} <span style="font-size:0.7em">↗</span></a>`;
+            }
+
+            // D. Internal Navigation (Broken?) -> Same Tab (Trigger 404 Radar)
+            return `<a href="${href}" style="color: #f0a500;">${token.text}</a>`;
+        };
+
+        marked.use({ renderer });
+
+        // Fetch Data
+        fetch(rawUrl)
+            .then(response => {
+                if (!response.ok) throw new Error("Signal Lost: " + response.status);
+                return response.text();
+            })
+            .then(markdown => {
+                document.getElementById('paper-container').innerHTML = marked.parse(markdown);
+            })
+            .catch(error => {
+                console.error('Fetch Error:', error);
+                document.getElementById('paper-container').innerHTML = `
+                    <p style="color: red;">:: CONNECTION FAILED ::</p>
+                    <p>Could not retrieve the manuscript. Check the signal path.</p>
+                `;
+            });
+
+        // --- DASHBOARD LOGIC ---
+        function updateClock() {
+            const now = new Date();
+            const timeString = now.toISOString().split('T')[1].split('.')[0] + "Z";
+            if(document.getElementById('clock')) document.getElementById('clock').innerText = timeString;
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        const sectors = ["TERRA-PRIME", "ORION-7", "KEPLER-186", "VOID-STATION", "SECTOR-9"];
+        const randomSector = sectors[Math.floor(Math.random() * sectors.length)];
+        if(document.getElementById('sector')) document.getElementById('sector').innerText = randomSector;
+
+        let observerID = localStorage.getItem('greez_observer_id');
+        if (!observerID) observerID = "OBS-GHOST";
+        if(document.getElementById('user-id')) document.getElementById('user-id').innerText = observerID;
+    </script>
+
+    <script src="signal.js"></script>
+    <script src="heritage-footer.js"></script>
+</body>
+</html>
