@@ -1,12 +1,12 @@
 {
-  "lastUpdated": "2026-02-08T08:22:39.634Z",
+  "lastUpdated": "2026-02-09T00:18:12.542Z",
   "session": "EIDOS main | 2026-02-07",
   "pass": 11,
   "standingWaves": [
     {
       "name": "Gardener / Tending",
       "score": 18,
-      "previousScore": 16,
+      "previousScore": 18,
       "movement": "up",
       "essence": "Garden walk, soul doc. Everything serves this. The gardener now tends AND recalls.",
       "status": "sovereign",
