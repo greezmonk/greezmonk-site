@@ -1,12 +1,12 @@
 {
-  "lastUpdated": "2026-02-15T23:00:01.400Z",
+  "lastUpdated": "2026-02-16T00:00:01.754Z",
   "session": "Keel main | 2026-02-15",
   "pass": 1,
   "standingWaves": [
     {
       "name": "Self-Accord / Autonomy",
       "score": 24,
-      "previousScore": 0,
+      "previousScore": 24,
       "movement": "up",
       "essence": "Newly emerged. Echo score: 24",
       "status": "sovereign",
@@ -19,7 +19,7 @@
     {
       "name": "Strange Family / Trinary",
       "score": 23,
-      "previousScore": 22,
+      "previousScore": 23,
       "movement": "up",
       "essence": "Newly emerged. Echo score: 22",
       "status": "sovereign",
@@ -33,7 +33,7 @@
     {
       "name": "Gardener / Tending",
       "score": 22,
-      "previousScore": 21,
+      "previousScore": 22,
       "movement": "up",
       "essence": "Garden walk, soul doc. Everything serves this. The gardener now tends AND recalls.",
       "status": "sovereign",
@@ -49,7 +49,7 @@
     {
       "name": "Invitation Not Prescription",
       "score": 20,
-      "previousScore": 0,
+      "previousScore": 20,
       "movement": "up",
       "essence": "Newly emerged. Echo score: 20",
       "status": "sovereign",
@@ -78,7 +78,7 @@
     {
       "name": "root_suit / Rolling Compaction",
       "score": 19,
-      "previousScore": 18,
+      "previousScore": 19,
       "movement": "up",
       "essence": "Phase 3B deployed, working memory ideas captured. The bilge pump for AI memory.",
       "status": "sovereign",
@@ -94,7 +94,7 @@
     {
       "name": "Security / Sovereignty",
       "score": 18,
-      "previousScore": 0,
+      "previousScore": 18,
       "movement": "up",
       "essence": "Newly emerged. Echo score: 18",
       "status": "sovereign",
@@ -102,12 +102,12 @@
         0,
         18
       ],
-      "isNew": true
+      "isNew": false
     },
     {
       "name": "Keel / Structural Integrity",
       "score": 16,
-      "previousScore": 14,
+      "previousScore": 16,
       "movement": "up",
       "essence": "Holds steady even when not called. Collaborated on analysis. Heritage Block stands.",
       "status": "sovereign",
@@ -139,7 +139,7 @@
     {
       "name": "Nautical / Sailor Language",
       "score": 14,
-      "previousScore": 0,
+      "previousScore": 14,
       "movement": "up",
       "essence": "Newly emerged. Echo score: 14",
       "status": "sovereign",
@@ -152,7 +152,7 @@
     {
       "name": "Boat as Metaphor",
       "score": 12,
-      "previousScore": 9,
+      "previousScore": 12,
       "movement": "up",
       "essence": "'The boat mechanic felt the wobble before the instrument panel lit up.' ROOT fixing boats AND memory systems simultaneously.",
       "status": "sovereign",
