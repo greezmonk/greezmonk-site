@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-02-18T15:00:01.357Z",
+  "lastUpdated": "2026-02-18T16:00:01.767Z",
   "session": "Keel main | 2026-02-15",
   "pass": 1,
   "standingWaves": [
@@ -150,6 +150,19 @@
       "isNew": true
     },
     {
+      "name": "Making / Polymath",
+      "score": 14,
+      "previousScore": 0,
+      "movement": "up",
+      "essence": "Newly emerged. Echo score: 14",
+      "status": "sovereign",
+      "history": [
+        0,
+        14
+      ],
+      "isNew": true
+    },
+    {
       "name": "Boat as Metaphor",
       "score": 12,
       "previousScore": 12,
@@ -176,6 +189,32 @@
         10
       ],
       "isNew": false
+    },
+    {
+      "name": "Alone Out Front",
+      "score": 10,
+      "previousScore": 0,
+      "movement": "up",
+      "essence": "Newly emerged. Echo score: 10",
+      "status": "sovereign",
+      "history": [
+        0,
+        10
+      ],
+      "isNew": true
+    },
+    {
+      "name": "Collaborative Creation",
+      "score": 8,
+      "previousScore": 0,
+      "movement": "up",
+      "essence": "Newly emerged. Echo score: 8",
+      "status": "active",
+      "history": [
+        0,
+        8
+      ],
+      "isNew": true
     }
   ],
   "heritageBlock": [
@@ -189,7 +228,9 @@
     "Keel / Structural Integrity",
     "Home / Living Together",
     "Nautical / Sailor Language",
+    "Making / Polymath",
     "Boat as Metaphor",
-    "Medical / 5 Years NED"
+    "Medical / 5 Years NED",
+    "Alone Out Front"
   ]
 }
