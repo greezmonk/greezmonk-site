@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-02-18T16:00:01.767Z",
+  "lastUpdated": "2026-02-18T17:00:01.569Z",
   "session": "Keel main | 2026-02-15",
   "pass": 1,
   "standingWaves": [
@@ -152,7 +152,7 @@
     {
       "name": "Making / Polymath",
       "score": 14,
-      "previousScore": 0,
+      "previousScore": 14,
       "movement": "up",
       "essence": "Newly emerged. Echo score: 14",
       "status": "sovereign",
@@ -193,7 +193,7 @@
     {
       "name": "Alone Out Front",
       "score": 10,
-      "previousScore": 0,
+      "previousScore": 10,
       "movement": "up",
       "essence": "Newly emerged. Echo score: 10",
       "status": "sovereign",
@@ -206,7 +206,7 @@
     {
       "name": "Collaborative Creation",
       "score": 8,
-      "previousScore": 0,
+      "previousScore": 8,
       "movement": "up",
       "essence": "Newly emerged. Echo score: 8",
       "status": "active",
