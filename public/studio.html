@@ -38,6 +38,29 @@
     font: 10px 'Courier New', monospace; text-transform: uppercase; letter-spacing: 0.5px;
   }
   .presets button:hover, .toolbar button:hover { border-color: var(--accent-dim); color: var(--text); }
+  .favorites { display: flex; gap: 3px; width: 100%; margin-top: 4px; }
+  .fav-slot {
+    flex: 1; min-width: 0; font: 9px 'Courier New', monospace; padding: 3px 2px;
+    background: var(--input-bg); border: 1px dashed var(--border); color: var(--dim);
+    border-radius: 2px; cursor: pointer; text-align: center; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap;
+  }
+  .fav-slot.occupied { color: var(--text); }
+  .fav-slot.active { border-color: var(--accent); border-style: solid; color: var(--accent); background: rgba(240,165,0,0.08); }
+  .fav-slot:hover { border-color: var(--accent-dim); }
+  .palette-grid { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+  .pal-swatch {
+    width: 28px; height: 20px; border: 1px dashed var(--border); border-radius: 2px;
+    cursor: pointer; transition: all 0.2s;
+  }
+  .pal-swatch:hover { transform: scale(1.2); border-color: var(--accent); }
+  .pal-swatch.active { border: 2px solid var(--accent); border-style: solid; }
+  .pal-name { font-size: 9px; color: var(--dim); margin-top: 6px; margin-bottom: 2px; text-transform: uppercase; letter-spacing: 1px; }
+  .pal-section { margin-bottom: 6px; }
+  .pal-custom-row { display: flex; gap: 4px; margin-top: 6px; align-items: center; }
+  .pal-custom-row input[type="color"] { width: 28px; height: 20px; border: 1px dashed var(--border); background: var(--input-bg); cursor: pointer; padding: 0; }
+  .pal-custom-row button { font: 9px 'Courier New',monospace; padding: 2px 6px; background: var(--input-bg); border: 1px dashed var(--border); color: var(--dim); cursor: pointer; border-radius: 2px; }
+  .pal-custom-row button:hover { border-color: var(--accent); color: var(--accent); }
   .presets button.active, .toolbar button.active { border-color: var(--accent); border-style: solid; color: var(--accent); background: rgba(240,165,0,0.08); }
   .toolbar { display: flex; gap: 5px; align-items: center; }
   #mic-select {
@@ -136,6 +159,16 @@
     <button onclick="loadPreset('water')" id="pre-water">Water</button>
     <button onclick="loadPreset('fire')" id="pre-fire">Fire</button>
   </div>
+  <div class="toolbar">
+    <button onclick="randomize()" title="Random preset (r)">random</button>
+    <button onclick="toggleAutoRandom()" id="btn-auto" title="Auto-random mode (a)">auto: off</button>
+    <button onclick="saveConfig()" title="Save to file">save</button>
+    <button onclick="document.getElementById('load-file').click()" title="Load from file">load</button>
+    <button onclick="document.getElementById('load-library').click()" title="Load config library folder">library</button>
+    <input type="file" id="load-file" accept=".json" style="display:none" onchange="loadConfig(event)">
+    <input type="file" id="load-library" accept=".json" multiple style="display:none" onchange="loadLibrary(event)">
+  </div>
+  <div class="favorites" id="fav-bar"></div>
 </header>
 
 <div id="sidebar"></div>
@@ -171,6 +204,8 @@ const DEFAULTS = {
   brighten: 0, darken: 0, solarize: 0, invert: 0,
   wave_scale: 1, wave_smoothing: 0.75,
   bloom_strength: 0.3, bloom_threshold: 0.4,
+  audio_bass_gain: 1, audio_mid_gain: 1, audio_treb_gain: 1, audio_trigger: 0,
+  transition_speed: 0.03, auto_interval: 20,
 };
 
 const PRESETS = {
@@ -284,6 +319,17 @@ const GROUPS = [
     { type: 'slider', key: 'ib_a', min: 0, max: 1, step: 0.01, label: 'inner A' },
     { type: 'color', keys: ['ib_r','ib_g','ib_b','ib_a'] },
   ]},
+  { name: 'Randomizer', controls: [
+    { type: 'slider', key: 'transition_speed', min: 0.005, max: 0.15, step: 0.005, label: 'morph speed' },
+    { type: 'slider', key: 'auto_interval', min: 5, max: 120, step: 1, label: 'auto interval (s)' },
+    { type: 'palette' },
+  ]},
+  { name: 'Audio Sensitivity', controls: [
+    { type: 'slider', key: 'audio_bass_gain', min: 0, max: 3, step: 0.01, label: 'bass gain' },
+    { type: 'slider', key: 'audio_mid_gain', min: 0, max: 3, step: 0.01, label: 'mid gain' },
+    { type: 'slider', key: 'audio_treb_gain', min: 0, max: 3, step: 0.01, label: 'treb gain' },
+    { type: 'slider', key: 'audio_trigger', min: 0, max: 1, step: 0.01, label: 'trigger threshold' },
+  ]},
   { name: 'Bloom', controls: [
     { type: 'slider', key: 'bloom_strength', min: 0, max: 1, step: 0.01, label: 'strength' },
     { type: 'slider', key: 'bloom_threshold', min: 0, max: 1, step: 0.01, label: 'threshold' },
@@ -310,6 +356,7 @@ function buildUI() {
       else if (c.type === 'wavemode') body.appendChild(mkWaveMode());
       else if (c.type === 'toggles') body.appendChild(mkToggles(c.keys));
       else if (c.type === 'color') body.appendChild(mkColor(c.keys));
+      else if (c.type === 'palette') body.appendChild(mkPalette());
     }
     div.appendChild(body);
     sb.appendChild(div);
@@ -387,6 +434,124 @@ function mkColor(keys) {
   d.appendChild(p); return d;
 }
 
+// =====================================================
+// COLOR PALETTES
+// =====================================================
+const PALETTES = {
+  ember: { name: 'Ember', colors: [[1,.4,.05],[.95,.6,.1],[1,.75,.2],[.8,.25,.05],[.6,.1,.02]] },
+  ocean: { name: 'Deep Ocean', colors: [[.1,.3,.8],[.15,.5,.9],[.05,.2,.6],[.2,.7,1],[.02,.15,.4]] },
+  neon: { name: 'Neon', colors: [[1,.1,.5],[.2,1,.4],[.1,.8,1],[1,.9,.1],[.8,.1,1]] },
+  sunset: { name: 'Sunset', colors: [[1,.4,.2],[.95,.55,.25],[1,.7,.3],[.8,.2,.3],[.5,.1,.3]] },
+  ice: { name: 'Ice', colors: [[.7,.85,1],[.5,.7,.95],[.9,.95,1],[.3,.5,.8],[.6,.9,.95]] },
+  forest: { name: 'Forest', colors: [[.1,.5,.15],[.3,.7,.2],[.05,.35,.1],[.5,.8,.3],[.2,.4,.05]] },
+  void: { name: 'Void', colors: [[.3,.05,.4],[.5,.1,.6],[.15,.02,.25],[.7,.2,.8],[.1,.0,.15]] },
+  monochrome: { name: 'Mono', colors: [[1,1,1],[.7,.7,.7],[.4,.4,.4],[.85,.85,.85],[.2,.2,.2]] },
+};
+
+const CUSTOM_PAL_KEY = 'visualizer-studio-custom-palettes';
+let customPalettes = {};
+let activePalette = null; // null = no palette constraint on random
+
+function loadCustomPalettes() {
+  try {
+    const saved = localStorage.getItem(CUSTOM_PAL_KEY);
+    if (saved) customPalettes = JSON.parse(saved);
+  } catch(e) {}
+}
+function saveCustomPalettes() {
+  localStorage.setItem(CUSTOM_PAL_KEY, JSON.stringify(customPalettes));
+}
+loadCustomPalettes();
+
+function getAllPalettes() {
+  return { ...PALETTES, ...customPalettes };
+}
+
+function applyPaletteColor(color) {
+  state.wave_r = color[0]; state.wave_g = color[1]; state.wave_b = color[2];
+  syncUI(); updateMilk();
+}
+
+function getRandomPaletteColor() {
+  if (!activePalette) return null;
+  const all = getAllPalettes();
+  const pal = all[activePalette];
+  if (!pal) return null;
+  return pal.colors[Math.floor(Math.random() * pal.colors.length)];
+}
+
+function mkPalette() {
+  const d = document.createElement('div'); d.className = 'ctl';
+  d.id = 'palette-container';
+  rebuildPaletteUI(d);
+  return d;
+}
+
+function rebuildPaletteUI(container) {
+  if (!container) container = document.getElementById('palette-container');
+  if (!container) return;
+  container.innerHTML = '';
+
+  // "None" option
+  const noneLabel = document.createElement('div');
+  noneLabel.className = 'pal-name';
+  noneLabel.innerHTML = 'palette for random <span style="color:var(--accent)">' + (activePalette ? getAllPalettes()[activePalette]?.name || activePalette : 'none') + '</span>';
+  container.appendChild(noneLabel);
+
+  const noneBtn = document.createElement('button');
+  noneBtn.className = 'tog' + (!activePalette ? ' on' : '');
+  noneBtn.textContent = 'none';
+  noneBtn.style.cssText = 'font:9px "Courier New",monospace;margin-bottom:6px;';
+  noneBtn.onclick = () => { activePalette = null; rebuildPaletteUI(); };
+  container.appendChild(noneBtn);
+
+  // Built-in palettes
+  const all = getAllPalettes();
+  for (const [key, pal] of Object.entries(all)) {
+    const sec = document.createElement('div'); sec.className = 'pal-section';
+    const name = document.createElement('div'); name.className = 'pal-name';
+    name.textContent = pal.name + (customPalettes[key] ? ' *' : '');
+    sec.appendChild(name);
+    const grid = document.createElement('div'); grid.className = 'palette-grid';
+    for (const c of pal.colors) {
+      const sw = document.createElement('div'); sw.className = 'pal-swatch';
+      sw.style.background = `rgb(${c[0]*255|0},${c[1]*255|0},${c[2]*255|0})`;
+      sw.title = `Click: apply | Right-click: set as random palette`;
+      sw.onclick = () => applyPaletteColor(c);
+      sw.oncontextmenu = (e) => { e.preventDefault(); activePalette = key; rebuildPaletteUI(); };
+      grid.appendChild(sw);
+    }
+    // Select palette button
+    const selBtn = document.createElement('div');
+    selBtn.className = 'pal-swatch' + (activePalette === key ? ' active' : '');
+    selBtn.style.cssText = 'width:16px;height:20px;display:flex;align-items:center;justify-content:center;font-size:9px;color:var(--dim);';
+    selBtn.innerHTML = activePalette === key ? '&#10003;' : '&#9654;';
+    selBtn.title = 'Use this palette for random';
+    selBtn.onclick = () => { activePalette = activePalette === key ? null : key; rebuildPaletteUI(); };
+    grid.appendChild(selBtn);
+    sec.appendChild(grid);
+    container.appendChild(sec);
+  }
+
+  // Custom palette creator
+  const customRow = document.createElement('div'); customRow.className = 'pal-custom-row';
+  const picker = document.createElement('input'); picker.type = 'color'; picker.value = '#f0a500';
+  const addBtn = document.createElement('button'); addBtn.textContent = '+ add to custom';
+  addBtn.onclick = () => {
+    const hex = picker.value;
+    const r = parseInt(hex.slice(1,3),16)/255;
+    const g = parseInt(hex.slice(3,5),16)/255;
+    const b = parseInt(hex.slice(5,7),16)/255;
+    if (!customPalettes._custom) customPalettes._custom = { name: 'My Palette', colors: [] };
+    customPalettes._custom.colors.push([+r.toFixed(3),+g.toFixed(3),+b.toFixed(3)]);
+    saveCustomPalettes(); rebuildPaletteUI();
+  };
+  const clearBtn = document.createElement('button'); clearBtn.textContent = 'clear';
+  clearBtn.onclick = () => { delete customPalettes._custom; saveCustomPalettes(); if(activePalette==='_custom') activePalette=null; rebuildPaletteUI(); };
+  customRow.appendChild(picker); customRow.appendChild(addBtn); customRow.appendChild(clearBtn);
+  container.appendChild(customRow);
+}
+
 function syncUI() {
   for (const g of GROUPS) for (const c of g.controls) {
     if (c.type === 'slider') {
@@ -414,6 +579,8 @@ function onParamChange() {
   // Clear preset highlight when manually changing
   document.querySelectorAll('.presets button').forEach(b => b.classList.remove('active'));
   currentPresetName = ''; // disable per-frame equations when manually tweaking
+  // Restart auto-random timer if interval changed
+  restartAutoIfRunning();
 }
 
 function updateMilk() {
@@ -756,14 +923,28 @@ async function toggleMic() {
 populateMicList();
 
 function getAudio(t) {
+  let bass, mid, treb;
   if (useMic && analyser) {
     analyser.getByteFrequencyData(audioFreq);
     const n=audioFreq.length, bE=Math.floor(n*.1), mE=Math.floor(n*.4);
     let b=0,m=0,tr=0;
     for(let i=0;i<bE;i++)b+=audioFreq[i]; for(let i=bE;i<mE;i++)m+=audioFreq[i]; for(let i=mE;i<n;i++)tr+=audioFreq[i];
-    return{bass:b/(bE*255),mid:m/((mE-bE)*255),treb:tr/((n-mE)*255)};
+    bass=b/(bE*255); mid=m/((mE-bE)*255); treb=tr/((n-mE)*255);
+  } else {
+    bass=.5+.4*Math.sin(t*1.2); mid=.3+.3*Math.sin(t*2.7+1); treb=.2+.2*Math.sin(t*5.3+2);
   }
-  return{bass:.5+.4*Math.sin(t*1.2),mid:.3+.3*Math.sin(t*2.7+1),treb:.2+.2*Math.sin(t*5.3+2)};
+  // Apply gain
+  bass = Math.min(bass * state.audio_bass_gain, 1);
+  mid = Math.min(mid * state.audio_mid_gain, 1);
+  treb = Math.min(treb * state.audio_treb_gain, 1);
+  // Apply trigger threshold — below threshold maps to 0
+  const thr = state.audio_trigger;
+  if (thr > 0) {
+    bass = bass > thr ? (bass - thr) / (1 - thr) : 0;
+    mid = mid > thr ? (mid - thr) / (1 - thr) : 0;
+    treb = treb > thr ? (treb - thr) / (1 - thr) : 0;
+  }
+  return { bass, mid, treb };
 }
 
 function getWave(t) {
@@ -815,6 +996,7 @@ let frameCount=0, lastFpsTime=performance.now(), fps=0, startTime=performance.no
 
 function render() {
   if(paused){requestAnimationFrame(render);return;}
+  stepTransition();
   const now=performance.now(), t=(now-startTime)/1000;
   const w=canvas.width, h=canvas.height, aspect=w/h;
   const audio=getAudio(t), wave=getWave(t);
@@ -908,7 +1090,10 @@ function render() {
   // FPS
   frameCount++;
   if(now-lastFpsTime>500){fps=Math.round(frameCount/((now-lastFpsTime)/1000));frameCount=0;lastFpsTime=now;}
-  document.getElementById('hud').innerHTML=`${fps} <span class="d">fps</span> ${useMic?'<span class="d">|</span> MIC':''}`;
+  const trans = transitionTarget ? ' <span class="d">|</span> ~' : '';
+  const autoTag = autoRandomInterval ? ' <span class="d">|</span> AUTO' : '';
+  const libTag = configLibrary.length ? ` <span class="d">|</span> LIB:${configLibrary.length}` : '';
+  document.getElementById('hud').innerHTML=`${fps} <span class="d">fps</span> ${useMic?'<span class="d">|</span> MIC':''}${trans}${autoTag}${libTag}`;
 
   requestAnimationFrame(render);
 }
@@ -923,9 +1108,256 @@ function loadPreset(name) {
   const btn=document.getElementById(`pre-${name}`); if(btn) btn.classList.add('active');
 }
 
-// Keyboard
+// =====================================================
+// SAVE / LOAD CONFIG
+// =====================================================
+function saveConfig() {
+  const data = JSON.stringify({ version: 1, name: currentPresetName || 'custom', state: {...state} }, null, 2);
+  const blob = new Blob([data], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `visualizer-${(currentPresetName||'custom').replace(/\s+/g,'-')}-${Date.now()}.json`;
+  a.click(); URL.revokeObjectURL(a.href);
+}
+
+function loadConfig(event) {
+  const file = event.target.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const data = JSON.parse(e.target.result);
+      if (data.state) {
+        Object.assign(state, DEFAULTS, data.state);
+        currentPresetName = '';
+        syncUI(); updateMilk();
+        document.querySelectorAll('.presets button').forEach(b => b.classList.remove('active'));
+      }
+    } catch(err) { console.warn('Invalid config file', err); }
+  };
+  reader.readAsText(file);
+  event.target.value = ''; // reset so same file can be loaded again
+}
+
+// =====================================================
+// FAVORITES (10 slots, localStorage, Shift+1-0)
+// =====================================================
+const FAV_KEY = 'visualizer-studio-favorites';
+let favorites = new Array(10).fill(null);
+
+function loadFavorites() {
+  try {
+    const saved = localStorage.getItem(FAV_KEY);
+    if (saved) favorites = JSON.parse(saved);
+  } catch(e) {}
+}
+
+function saveFavorites() {
+  localStorage.setItem(FAV_KEY, JSON.stringify(favorites));
+}
+
+function buildFavBar() {
+  const bar = document.getElementById('fav-bar');
+  bar.innerHTML = '';
+  for (let i = 0; i < 10; i++) {
+    const btn = document.createElement('button');
+    btn.className = 'fav-slot' + (favorites[i] ? ' occupied' : '');
+    btn.textContent = favorites[i] ? favorites[i].name || `F${i+1}` : `${(i+1)%10}`;
+    btn.title = favorites[i]
+      ? `Shift+${(i+1)%10}: ${favorites[i].name}\nCtrl+Shift+${(i+1)%10}: overwrite`
+      : `Shift+${(i+1)%10}: empty\nCtrl+Shift+${(i+1)%10}: save here`;
+    btn.onclick = () => recallFavorite(i);
+    bar.appendChild(btn);
+  }
+}
+
+function storeFavorite(slot) {
+  favorites[slot] = { name: currentPresetName || 'custom', state: {...state} };
+  saveFavorites(); buildFavBar();
+  // Flash feedback
+  const btns = document.querySelectorAll('.fav-slot');
+  if (btns[slot]) { btns[slot].classList.add('active'); setTimeout(() => btns[slot].classList.remove('active'), 600); }
+}
+
+function recallFavorite(slot) {
+  if (!favorites[slot]) return;
+  Object.assign(state, DEFAULTS, favorites[slot].state);
+  currentPresetName = '';
+  syncUI(); updateMilk();
+  document.querySelectorAll('.presets button').forEach(b => b.classList.remove('active'));
+  // Highlight slot
+  document.querySelectorAll('.fav-slot').forEach(b => b.classList.remove('active'));
+  const btns = document.querySelectorAll('.fav-slot');
+  if (btns[slot]) btns[slot].classList.add('active');
+}
+
+loadFavorites();
+
+// =====================================================
+// CONFIG LIBRARY (loaded .json files for curated random)
+// =====================================================
+let configLibrary = []; // array of {name, state} objects
+
+function loadLibrary(event) {
+  const files = event.target.files; if (!files.length) return;
+  let loaded = 0;
+  for (const file of files) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = JSON.parse(e.target.result);
+        if (data.state) {
+          configLibrary.push({ name: data.name || file.name.replace('.json',''), state: data.state });
+        }
+      } catch(err) {}
+      loaded++;
+      if (loaded === files.length) {
+        document.getElementById('btn-auto').title = `Auto-random (a) | Library: ${configLibrary.length} configs`;
+      }
+    };
+    reader.readAsText(file);
+  }
+  event.target.value = '';
+}
+
+// =====================================================
+// RANDOM WITH SMOOTH TRANSITIONS
+// =====================================================
+let transitionTarget = null;
+let transitionProgress = 0;
+let transitionFrom = null; // snapshot of state before transition
+
+function randomize() {
+  let target;
+
+  // If library has configs, pull from there
+  if (configLibrary.length > 0) {
+    const pick = configLibrary[Math.floor(Math.random() * configLibrary.length)];
+    target = { ...DEFAULTS, ...pick.state };
+  } else {
+    // Generate random config
+    target = { ...DEFAULTS };
+    target.wave_mode = Math.floor(Math.random() * 8);
+    target.wave_a = 0.6 + Math.random() * 0.4;
+    target.wave_x = 0.3 + Math.random() * 0.4;
+    target.wave_y = 0.3 + Math.random() * 0.4;
+    target.wave_mystery = (Math.random() - 0.5) * 2;
+    target.wave_dots = Math.random() > 0.7 ? 1 : 0;
+    target.wave_thick = Math.random() > 0.4 ? 1 : 0;
+    target.wave_additive = Math.random() > 0.3 ? 1 : 0;
+    target.wave_brighten = Math.random() > 0.6 ? 1 : 0;
+    target.zoom = 0.95 + Math.random() * 0.15;
+    target.rot = (Math.random() - 0.5) * 0.08;
+    target.warp = Math.random() * 1.5;
+    target.cx = 0.4 + Math.random() * 0.2;
+    target.cy = 0.4 + Math.random() * 0.2;
+    target.dx = (Math.random() - 0.5) * 0.02;
+    target.dy = (Math.random() - 0.5) * 0.02;
+    target.sx = 0.95 + Math.random() * 0.1;
+    target.sy = 0.95 + Math.random() * 0.1;
+    target.decay = 0.92 + Math.random() * 0.07;
+    target.gamma = 0.8 + Math.random() * 1.5;
+    target.wave_scale = 0.3 + Math.random() * 3;
+    target.wave_smoothing = Math.random();
+    target.brighten = Math.random() > 0.8 ? 1 : 0;
+    target.darken = Math.random() > 0.7 ? 1 : 0;
+    target.solarize = Math.random() > 0.9 ? 1 : 0;
+    target.invert = Math.random() > 0.85 ? 1 : 0;
+    target.bloom_strength = Math.random() * 0.6;
+    target.bloom_threshold = 0.2 + Math.random() * 0.5;
+
+    // Apply palette colors if active
+    const palColor = getRandomPaletteColor();
+    if (palColor) {
+      target.wave_r = palColor[0]; target.wave_g = palColor[1]; target.wave_b = palColor[2];
+    } else {
+      target.wave_r = Math.random(); target.wave_g = Math.random(); target.wave_b = Math.random();
+    }
+  }
+
+  // Preserve audio settings and randomizer settings
+  target.audio_bass_gain = state.audio_bass_gain;
+  target.audio_mid_gain = state.audio_mid_gain;
+  target.audio_treb_gain = state.audio_treb_gain;
+  target.audio_trigger = state.audio_trigger;
+  target.transition_speed = state.transition_speed;
+  target.auto_interval = state.auto_interval;
+
+  transitionFrom = { ...state };
+  transitionTarget = target;
+  transitionProgress = 0;
+  currentPresetName = '';
+  document.querySelectorAll('.presets button').forEach(b => b.classList.remove('active'));
+}
+
+// Keys that should snap (integers/booleans), not lerp
+const SNAP_KEYS = new Set(['wave_mode','wave_dots','wave_thick','wave_additive','wave_brighten','brighten','darken','solarize','invert']);
+
+function stepTransition() {
+  if (!transitionTarget) return;
+  transitionProgress += state.transition_speed;
+  if (transitionProgress >= 1) {
+    Object.assign(state, transitionTarget);
+    transitionTarget = null; transitionFrom = null;
+    syncUI(); updateMilk();
+    return;
+  }
+  const t = transitionProgress;
+  const ease = t < 0.5 ? 2*t*t : 1 - Math.pow(-2*t+2, 2)/2; // ease in-out
+  for (const k of Object.keys(transitionTarget)) {
+    if (k.startsWith('_')) continue;
+    if (SNAP_KEYS.has(k)) {
+      state[k] = ease > 0.5 ? transitionTarget[k] : (transitionFrom ? transitionFrom[k] : state[k]);
+    } else if (typeof transitionTarget[k] === 'number') {
+      const from = transitionFrom ? transitionFrom[k] : (state[k] ?? DEFAULTS[k] ?? 0);
+      state[k] = from + (transitionTarget[k] - from) * ease;
+    }
+  }
+  if (Math.floor(transitionProgress * 10) !== Math.floor((transitionProgress - state.transition_speed) * 10)) {
+    syncUI();
+  }
+}
+
+// =====================================================
+// AUTO-RANDOM
+// =====================================================
+let autoRandomInterval = null;
+
+function toggleAutoRandom() {
+  if (autoRandomInterval) {
+    clearInterval(autoRandomInterval);
+    autoRandomInterval = null;
+    document.getElementById('btn-auto').textContent = 'auto: off';
+    document.getElementById('btn-auto').classList.remove('active');
+  } else {
+    randomize(); // immediate first hit
+    autoRandomInterval = setInterval(randomize, state.auto_interval * 1000);
+    document.getElementById('btn-auto').textContent = 'auto: ON';
+    document.getElementById('btn-auto').classList.add('active');
+  }
+}
+
+// Restart auto-random interval when interval changes
+function restartAutoIfRunning() {
+  if (autoRandomInterval) {
+    clearInterval(autoRandomInterval);
+    autoRandomInterval = setInterval(randomize, state.auto_interval * 1000);
+  }
+}
+
+// =====================================================
+// KEYBOARD
+// =====================================================
 document.addEventListener('keydown', e => {
   if(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA') return;
+
+  // Shift+1-0: recall favorites, Ctrl+Shift+1-0: store favorites
+  const numKey = e.key >= '0' && e.key <= '9' ? parseInt(e.key) : -1;
+  if (e.shiftKey && numKey >= 0) {
+    const slot = numKey === 0 ? 9 : numKey - 1; // Shift+1=slot0, Shift+0=slot9
+    if (e.ctrlKey) { storeFavorite(slot); } else { recallFavorite(slot); }
+    e.preventDefault(); return;
+  }
+
   switch(e.key){
     case '1': loadPreset('cyan_vscope'); break;
     case '2': loadPreset('slow_burn'); break;
@@ -933,6 +1365,8 @@ document.addEventListener('keydown', e => {
     case '4': loadPreset('metheus'); break;
     case '5': loadPreset('water'); break;
     case '6': loadPreset('fire'); break;
+    case 'r': randomize(); break;
+    case 'a': toggleAutoRandom(); break;
     case 'f': goFullscreen(); break;
     case 'm': toggleMic(); break;
     case ' ': paused=!paused; e.preventDefault(); break;
@@ -941,6 +1375,7 @@ document.addEventListener('keydown', e => {
 
 // Init
 buildUI();
+buildFavBar();
 initFBs();
 loadPreset('metheus');
 render();
