@@ -119,6 +119,16 @@
     pointer-events: none;
   }
   #hud .d { color: var(--dim); }
+  #attribution {
+    position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%);
+    font: 11px 'Courier New', monospace; color: var(--accent);
+    background: rgba(0,0,0,0.6); padding: 4px 14px; border-radius: 2px;
+    pointer-events: none; text-align: center; opacity: 0; transition: opacity 0.8s;
+    white-space: nowrap; max-width: 90%;
+  }
+  #attribution.show { opacity: 1; }
+  #attribution .attr-title { color: var(--text); }
+  #attribution .attr-author { color: var(--dim); font-size: 9px; }
 
   #output-panel {
     grid-column: 1 / -1; grid-row: 3; background: var(--panel); border-top: 1px dashed var(--border);
@@ -176,6 +186,7 @@
 <div id="preview-wrap">
   <canvas id="c"></canvas>
   <div id="hud">--</div>
+  <div id="attribution"></div>
 </div>
 
 <div id="output-panel">
@@ -1193,9 +1204,31 @@ function recallFavorite(slot) {
 loadFavorites();
 
 // =====================================================
-// CONFIG LIBRARY (loaded .json files for curated random)
+// CONFIG LIBRARY (built-in + user loaded)
 // =====================================================
-let configLibrary = []; // array of {name, state} objects
+let configLibrary = []; // array of {name, author, state} objects
+let currentAttribution = null;
+let attrTimeout = null;
+
+function showAttribution(name, author) {
+  const el = document.getElementById('attribution');
+  el.innerHTML = `<span class="attr-title">${name}</span> <span class="attr-author">— ${author || 'Unknown'}</span>`;
+  el.classList.add('show');
+  if (attrTimeout) clearTimeout(attrTimeout);
+  attrTimeout = setTimeout(() => el.classList.remove('show'), 4000);
+}
+
+// Load built-in library from server
+async function loadBuiltInLibrary() {
+  try {
+    const resp = await fetch('presets-library.json');
+    if (!resp.ok) return;
+    const data = await resp.json();
+    if (Array.isArray(data)) {
+      configLibrary = data;
+    }
+  } catch(e) { /* local file, no server — that's fine */ }
+}
 
 function loadLibrary(event) {
   const files = event.target.files; if (!files.length) return;
@@ -1205,19 +1238,21 @@ function loadLibrary(event) {
     reader.onload = (e) => {
       try {
         const data = JSON.parse(e.target.result);
-        if (data.state) {
-          configLibrary.push({ name: data.name || file.name.replace('.json',''), state: data.state });
+        if (Array.isArray(data)) {
+          // Bulk library file
+          configLibrary = configLibrary.concat(data);
+        } else if (data.state) {
+          configLibrary.push({ name: data.name || file.name.replace('.json',''), author: data.author || '', state: data.state });
         }
       } catch(err) {}
       loaded++;
-      if (loaded === files.length) {
-        document.getElementById('btn-auto').title = `Auto-random (a) | Library: ${configLibrary.length} configs`;
-      }
     };
     reader.readAsText(file);
   }
   event.target.value = '';
 }
+
+loadBuiltInLibrary();
 
 // =====================================================
 // RANDOM WITH SMOOTH TRANSITIONS
@@ -1233,6 +1268,7 @@ function randomize() {
   if (configLibrary.length > 0) {
     const pick = configLibrary[Math.floor(Math.random() * configLibrary.length)];
     target = { ...DEFAULTS, ...pick.state };
+    showAttribution(pick.name || 'Untitled', pick.author || 'Community');
   } else {
     // Generate random config
     target = { ...DEFAULTS };
