@@ -1445,6 +1445,11 @@ function randomize() {
       showAttribution(nameA, authorA);
     }
 
+    // 35% chance: swap in a new/sacred geometry wave shape
+    if (Math.random() < 0.35) {
+      target.wave_mode = 8 + Math.floor(Math.random() * 16); // modes 8-23
+    }
+
     // Safety clamps
     if (target.decay > 0.99) target.decay = 0.985;
     if (target.gamma > 2.5) target.gamma = 2.0;
