@@ -1459,8 +1459,20 @@ function randomize() {
     if (target.zoom > 1.15) target.zoom = 1.1;
     if (target.wave_a < 0.2) target.wave_a = 0.8;
     if (target.wave_scale < 0.7) target.wave_scale = 0.7;
-    if ((target.wave_r||0)+(target.wave_g||0)+(target.wave_b||0) < 0.15) {
-      target.wave_r = 0.8; target.wave_g = 0.6; target.wave_b = 0.3;
+    // Colorize: if too dark OR too white (milkdrop presets often use 1,1,1 with wavecodes we don't have)
+    const cSum = (target.wave_r||0)+(target.wave_g||0)+(target.wave_b||0);
+    const cMin = Math.min(target.wave_r||0, target.wave_g||0, target.wave_b||0);
+    if (cSum < 0.15 || cMin > 0.7) {
+      // Try palette first, fall back to random saturated color
+      const palColor = getRandomPaletteColor();
+      if (palColor) {
+        target.wave_r = palColor[0]; target.wave_g = palColor[1]; target.wave_b = palColor[2];
+      } else {
+        // Generate a saturated color — one channel high, one low, one random
+        const channels = [0.7 + Math.random() * 0.3, Math.random() * 0.4, Math.random()];
+        channels.sort(() => Math.random() - 0.5); // shuffle
+        target.wave_r = channels[0]; target.wave_g = channels[1]; target.wave_b = channels[2];
+      }
     }
   } else {
     // Generate random config
