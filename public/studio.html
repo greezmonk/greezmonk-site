@@ -162,6 +162,7 @@
       <option value="">-- mic select --</option>
     </select>
     <button id="btn-mic" onclick="toggleMic()">mic: off</button>
+    <button id="btn-sys" onclick="startSystemAudio()" title="Capture system/tab audio (no mic needed)">system audio</button>
     <button id="btn-fs" onclick="goFullscreen()">fullscreen</button>
   </div>
   <div class="presets">
@@ -975,9 +976,54 @@ async function toggleMic() {
     if (currentStream) { currentStream.getTracks().forEach(t => t.stop()); currentStream = null; }
     document.getElementById('btn-mic').textContent = 'mic: off';
     document.getElementById('btn-mic').classList.remove('active');
+    document.getElementById('btn-sys').textContent = 'system audio';
+    document.getElementById('btn-sys').classList.remove('active');
     return;
   }
+  document.getElementById('btn-sys').textContent = 'system audio';
+  document.getElementById('btn-sys').classList.remove('active');
   await startMic(selectedDeviceId || '');
+}
+
+async function startSystemAudio() {
+  try {
+    // getDisplayMedia with audio captures system/tab audio
+    const stream = await navigator.mediaDevices.getDisplayMedia({
+      video: true, // required by API, we'll discard it
+      audio: true
+    });
+    // Stop the video track — we only need audio
+    stream.getVideoTracks().forEach(t => t.stop());
+
+    if (!stream.getAudioTracks().length) {
+      console.warn('No audio track — user may not have checked "Share audio"');
+      return;
+    }
+
+    if (!audioCtx) {
+      audioCtx = new AudioContext(); analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 512; analyser.smoothingTimeConstant = 0.8;
+      audioTime = new Uint8Array(analyser.fftSize);
+      audioFreq = new Uint8Array(analyser.frequencyBinCount);
+    }
+    // Stop existing stream
+    if (currentStream) { currentStream.getTracks().forEach(t => t.stop()); }
+    currentStream = stream;
+    audioCtx.createMediaStreamSource(stream).connect(analyser);
+    useMic = true; // reuse the mic flag for audio reactivity
+
+    document.getElementById('btn-mic').textContent = 'mic: off';
+    document.getElementById('btn-mic').classList.remove('active');
+    document.getElementById('btn-sys').textContent = 'sys: ON';
+    document.getElementById('btn-sys').classList.add('active');
+
+    // If the user stops screen share, reset
+    stream.getAudioTracks()[0].onended = () => {
+      useMic = false; currentStream = null;
+      document.getElementById('btn-sys').textContent = 'system audio';
+      document.getElementById('btn-sys').classList.remove('active');
+    };
+  } catch(e) { console.warn('System audio denied or unsupported', e); }
 }
 
 // Populate mic list on load
@@ -1252,7 +1298,7 @@ function render() {
   const autoTag = autoRandomInterval ? ' <span class="d">|</span> AUTO' : '';
   const chaosTag = chaosEnabled ? ' <span class="d">|</span> CHAOS' : '';
   const libTag = configLibrary.length ? ` <span class="d">|</span> LIB:${configLibrary.length}` : '';
-  document.getElementById('hud').innerHTML=`${fps} <span class="d">fps</span> ${useMic?'<span class="d">|</span> MIC':''}${trans}${autoTag}${chaosTag}${libTag}`;
+  document.getElementById('hud').innerHTML=`${fps} <span class="d">fps</span> ${useMic?(document.getElementById('btn-sys').classList.contains('active')?'<span class="d">|</span> SYS':'<span class="d">|</span> MIC'):''}${trans}${autoTag}${chaosTag}${libTag}`;
 
   requestAnimationFrame(render);
 }
