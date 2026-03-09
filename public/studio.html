@@ -1268,11 +1268,14 @@ function randomize() {
   if (configLibrary.length > 0) {
     const pick = configLibrary[Math.floor(Math.random() * configLibrary.length)];
     target = { ...DEFAULTS, ...pick.state };
-    // Clamp values that cause white-out
-    if (target.decay > 0.985) target.decay = 0.985;
-    if (target.gamma > 2.2) target.gamma = 2.2;
-    if (target.zoom > 1.15) target.zoom = 1.15;
-    if (target.brighten && target.decay > 0.97) target.brighten = 0;
+    // Safety clamps (library should be clean, but just in case)
+    if (target.decay > 0.99) target.decay = 0.985;
+    if (target.gamma > 2.5) target.gamma = 2.0;
+    if (target.zoom > 1.15) target.zoom = 1.1;
+    if (target.wave_a < 0.2) target.wave_a = 0.8;
+    if ((target.wave_r||0)+(target.wave_g||0)+(target.wave_b||0) < 0.15) {
+      target.wave_r = 0.8; target.wave_g = 0.6; target.wave_b = 0.3; // fallback amber
+    }
     showAttribution(pick.name || 'Untitled', pick.author || 'Community');
   } else {
     // Generate random config
