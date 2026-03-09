@@ -1265,20 +1265,47 @@ function randomize() {
 
   // If library has configs, pull from there
   if (configLibrary.length > 0) {
-    const pick = configLibrary[Math.floor(Math.random() * configLibrary.length)];
-    const pState = pick.state || pick.s; // support both full and compact format
-    const pName = pick.name || pick.n || 'Untitled';
-    const pAuthor = pick.author || pick.a || 'Community';
-    target = { ...DEFAULTS, ...pState };
+    const pickA = configLibrary[Math.floor(Math.random() * configLibrary.length)];
+    const stateA = pickA.state || pickA.s;
+    const nameA = pickA.name || pickA.n || 'Untitled';
+    const authorA = pickA.author || pickA.a || 'Community';
+
+    // 40% chance: blend two presets (motion from one, color/wave from another)
+    if (configLibrary.length > 1 && Math.random() < 0.4) {
+      let pickB = pickA;
+      while (pickB === pickA) pickB = configLibrary[Math.floor(Math.random() * configLibrary.length)];
+      const stateB = pickB.state || pickB.s;
+      const nameB = pickB.name || pickB.n || 'Untitled';
+      const authorB = pickB.author || pickB.a || 'Community';
+
+      // Take wave/color from A, motion/warp from B
+      target = { ...DEFAULTS, ...stateA };
+      target.zoom = stateB.zoom ?? target.zoom;
+      target.rot = stateB.rot ?? target.rot;
+      target.warp = stateB.warp ?? target.warp;
+      target.cx = stateB.cx ?? target.cx;
+      target.cy = stateB.cy ?? target.cy;
+      target.dx = stateB.dx ?? target.dx;
+      target.dy = stateB.dy ?? target.dy;
+      target.sx = stateB.sx ?? target.sx;
+      target.sy = stateB.sy ?? target.sy;
+      target.decay = stateB.decay ?? target.decay;
+
+      showAttribution(nameA + ' + ' + nameB, authorA + ' / ' + authorB);
+    } else {
+      target = { ...DEFAULTS, ...stateA };
+      showAttribution(nameA, authorA);
+    }
+
     // Safety clamps
     if (target.decay > 0.99) target.decay = 0.985;
     if (target.gamma > 2.5) target.gamma = 2.0;
     if (target.zoom > 1.15) target.zoom = 1.1;
     if (target.wave_a < 0.2) target.wave_a = 0.8;
+    if (target.wave_scale < 0.5) target.wave_scale = 0.5;
     if ((target.wave_r||0)+(target.wave_g||0)+(target.wave_b||0) < 0.15) {
       target.wave_r = 0.8; target.wave_g = 0.6; target.wave_b = 0.3;
     }
-    showAttribution(pName, pAuthor);
   } else {
     // Generate random config
     target = { ...DEFAULTS };
@@ -1302,7 +1329,7 @@ function randomize() {
     target.sy = 0.95 + Math.random() * 0.1;
     target.decay = 0.92 + Math.random() * 0.06; // cap at 0.98 to prevent white-out
     target.gamma = 0.8 + Math.random() * 1.2; // cap at 2.0
-    target.wave_scale = 0.3 + Math.random() * 3;
+    target.wave_scale = 0.5 + Math.random() * 2.5;
     target.wave_smoothing = Math.random();
     target.brighten = 0; // avoid white-out — brighten compounds with high decay
     target.darken = Math.random() > 0.6 ? 1 : 0;
