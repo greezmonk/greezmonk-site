@@ -20,11 +20,10 @@
     grid-template-rows: auto 1fr auto;
     height: 100vh;
   }
-  body.fullscreen-mode { grid-template-columns: 1fr; grid-template-rows: 1fr; }
+  body.fullscreen-mode { grid-template-columns: 1fr; }
   body.fullscreen-mode #sidebar,
   body.fullscreen-mode #output-panel,
   body.fullscreen-mode header { display: none; }
-  body.fullscreen-mode #preview-wrap { grid-column: 1; grid-row: 1; width: 100%; height: 100%; }
 
   header {
     grid-column: 1 / -1; grid-row: 1; padding: 8px 16px;
@@ -163,7 +162,6 @@
       <option value="">-- mic select --</option>
     </select>
     <button id="btn-mic" onclick="toggleMic()">mic: off</button>
-    <button id="btn-sys" onclick="startSystemAudio()" title="Capture system/tab audio (no mic needed)">system audio</button>
     <button id="btn-fs" onclick="goFullscreen()">fullscreen</button>
   </div>
   <div class="presets">
@@ -682,7 +680,7 @@ function copyMilk() {
 // =====================================================
 const canvas = document.getElementById('c');
 const gl = canvas.getContext('webgl2', { alpha: false, antialias: false, powerPreference: 'high-performance' });
-if (!gl) { document.body.innerHTML = '<div style="color:#f0a500;font:16px monospace;padding:40px;max-width:500px"><p style="font-size:20px;margin-bottom:20px">WebGL2 not available</p><p style="color:#c8c0b0;font-size:13px">This browser doesn\'t support WebGL2. Try:<br>• Chrome or Edge on a phone/laptop<br>• Cast/mirror to TV instead of using the TV browser<br>• Update your browser to the latest version</p></div>'; throw 'no gl'; }
+if (!gl) { document.body.innerHTML = '<p style="color:#f0a500;font:20px monospace;padding:40px">WebGL2 required</p>'; throw 'no gl'; }
 const useFloat = !!gl.getExtension('EXT_color_buffer_float');
 
 function mkShader(t,s) { const sh=gl.createShader(t); gl.shaderSource(sh,s); gl.compileShader(sh); if(!gl.getShaderParameter(sh,gl.COMPILE_STATUS)){console.error(gl.getShaderInfoLog(sh));} return sh; }
@@ -905,11 +903,8 @@ function cleanupFBs() {
 function initFBs() {
   const wrap = document.getElementById('preview-wrap');
   const dpr = Math.min(window.devicePixelRatio||1, 2);
-  const w = wrap.clientWidth * dpr, h = wrap.clientHeight * dpr;
-  // Retry if dimensions are zero (fullscreen transition not complete)
-  if (w < 1 || h < 1) { setTimeout(initFBs, 200); return; }
-  canvas.width = w;
-  canvas.height = h;
+  canvas.width = wrap.clientWidth * dpr;
+  canvas.height = wrap.clientHeight * dpr;
   fbW=canvas.width; fbH=canvas.height;
   cleanupFBs();
   // Main ping-pong
@@ -955,7 +950,7 @@ async function switchMic(deviceId) {
 
 async function startMic(deviceId) {
   if (!audioCtx) {
-    audioCtx = new AudioContext(); if(audioCtx.state==='suspended') audioCtx.resume(); analyser = audioCtx.createAnalyser();
+    audioCtx = new AudioContext(); analyser = audioCtx.createAnalyser();
     analyser.fftSize = 512; analyser.smoothingTimeConstant = 0.8;
     audioTime = new Uint8Array(analyser.fftSize);
     audioFreq = new Uint8Array(analyser.frequencyBinCount);
@@ -980,54 +975,9 @@ async function toggleMic() {
     if (currentStream) { currentStream.getTracks().forEach(t => t.stop()); currentStream = null; }
     document.getElementById('btn-mic').textContent = 'mic: off';
     document.getElementById('btn-mic').classList.remove('active');
-    document.getElementById('btn-sys').textContent = 'system audio';
-    document.getElementById('btn-sys').classList.remove('active');
     return;
   }
-  document.getElementById('btn-sys').textContent = 'system audio';
-  document.getElementById('btn-sys').classList.remove('active');
   await startMic(selectedDeviceId || '');
-}
-
-async function startSystemAudio() {
-  try {
-    // getDisplayMedia with audio captures system/tab audio
-    const stream = await navigator.mediaDevices.getDisplayMedia({
-      video: true, // required by API, we'll discard it
-      audio: true
-    });
-    // Stop the video track — we only need audio
-    stream.getVideoTracks().forEach(t => t.stop());
-
-    if (!stream.getAudioTracks().length) {
-      console.warn('No audio track — user may not have checked "Share audio"');
-      return;
-    }
-
-    if (!audioCtx) {
-      audioCtx = new AudioContext(); if(audioCtx.state==='suspended') audioCtx.resume(); analyser = audioCtx.createAnalyser();
-      analyser.fftSize = 512; analyser.smoothingTimeConstant = 0.8;
-      audioTime = new Uint8Array(analyser.fftSize);
-      audioFreq = new Uint8Array(analyser.frequencyBinCount);
-    }
-    // Stop existing stream
-    if (currentStream) { currentStream.getTracks().forEach(t => t.stop()); }
-    currentStream = stream;
-    audioCtx.createMediaStreamSource(stream).connect(analyser);
-    useMic = true; // reuse the mic flag for audio reactivity
-
-    document.getElementById('btn-mic').textContent = 'mic: off';
-    document.getElementById('btn-mic').classList.remove('active');
-    document.getElementById('btn-sys').textContent = 'sys: ON';
-    document.getElementById('btn-sys').classList.add('active');
-
-    // If the user stops screen share, reset
-    stream.getAudioTracks()[0].onended = () => {
-      useMic = false; currentStream = null;
-      document.getElementById('btn-sys').textContent = 'system audio';
-      document.getElementById('btn-sys').classList.remove('active');
-    };
-  } catch(e) { console.warn('System audio denied or unsupported', e); }
 }
 
 // Populate mic list on load
@@ -1156,28 +1106,18 @@ function buildWaveVerts(samples, aspect) {
 // Resize
 function resize() { initFBs(); }
 window.addEventListener('resize', resize);
-document.addEventListener('fullscreenchange', () => setTimeout(resize, 150));
-document.addEventListener('webkitfullscreenchange', () => setTimeout(resize, 150));
+document.addEventListener('fullscreenchange', () => setTimeout(resize, 100));
 
-// Fullscreen — handle vendor prefixes for mobile
+// Fullscreen
 function goFullscreen() {
-  const el = document.documentElement; // use full document for mobile compat
-  const isFS = document.fullscreenElement || document.webkitFullscreenElement;
-  if (isFS) {
-    (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+  if (document.fullscreenElement) {
+    document.exitFullscreen();
     document.body.classList.remove('fullscreen-mode');
   } else {
-    (el.requestFullscreen || el.webkitRequestFullscreen).call(el);
+    document.body.requestFullscreen();
     document.body.classList.add('fullscreen-mode');
   }
 }
-// Sync class on fullscreen exit (e.g. swipe down on mobile, Escape key)
-document.addEventListener('fullscreenchange', () => {
-  if (!document.fullscreenElement) document.body.classList.remove('fullscreen-mode');
-});
-document.addEventListener('webkitfullscreenchange', () => {
-  if (!document.webkitFullscreenElement) document.body.classList.remove('fullscreen-mode');
-});
 
 // Render loop
 let frameCount=0, lastFpsTime=performance.now(), fps=0, startTime=performance.now();
@@ -1312,7 +1252,7 @@ function render() {
   const autoTag = autoRandomInterval ? ' <span class="d">|</span> AUTO' : '';
   const chaosTag = chaosEnabled ? ' <span class="d">|</span> CHAOS' : '';
   const libTag = configLibrary.length ? ` <span class="d">|</span> LIB:${configLibrary.length}` : '';
-  document.getElementById('hud').innerHTML=`${fps} <span class="d">fps</span> ${useMic?(document.getElementById('btn-sys').classList.contains('active')?'<span class="d">|</span> SYS':'<span class="d">|</span> MIC'):''}${trans}${autoTag}${chaosTag}${libTag}`;
+  document.getElementById('hud').innerHTML=`${fps} <span class="d">fps</span> ${useMic?'<span class="d">|</span> MIC':''}${trans}${autoTag}${chaosTag}${libTag}`;
 
   requestAnimationFrame(render);
 }
@@ -1320,10 +1260,6 @@ function render() {
 // Preset loading
 function loadPreset(name) {
   const p=PRESETS[name]; if(!p) return;
-  // Kill chaos and auto when manually selecting a preset
-  if (chaosEnabled) toggleChaos();
-  if (autoRandomInterval) toggleAutoRandom();
-  transitionTarget = null; transitionFrom = null; // cancel any in-flight transition
   currentPresetName=name;
   Object.assign(state, DEFAULTS, {...p}); delete state._name;
   syncUI(); updateMilk();
@@ -1650,18 +1586,18 @@ const CHAOS_PARAMS = {
   dy:    { min: -0.015, max: 0.015, drift: 0.3 },
   sx:    { min: 0.95, max: 1.05, drift: 0.3 },
   sy:    { min: 0.95, max: 1.05, drift: 0.3 },
-  decay: { min: 0.93, max: 0.985, drift: 0.3 },
-  gamma: { min: 0.7, max: 1.6, drift: 0.2 },
-  wave_r: { min: 0.1, max: 1, drift: 0.4 },
-  wave_g: { min: 0.05, max: 1, drift: 0.4 },
-  wave_b: { min: 0.05, max: 1, drift: 0.4 },
-  wave_a: { min: 0.5, max: 1, drift: 0.15 },
+  decay: { min: 0.91, max: 0.985, drift: 0.4 },
+  gamma: { min: 0.5, max: 2, drift: 0.3 },
+  wave_r: { min: 0, max: 1, drift: 0.5 },
+  wave_g: { min: 0, max: 1, drift: 0.5 },
+  wave_b: { min: 0, max: 1, drift: 0.5 },
+  wave_a: { min: 0.3, max: 1, drift: 0.2 },
   wave_x: { min: 0.2, max: 0.8, drift: 0.3 },
   wave_y: { min: 0.2, max: 0.8, drift: 0.3 },
   wave_mystery: { min: -2, max: 2, drift: 0.4 },
   wave_scale: { min: 0.5, max: 4, drift: 0.3 },
-  bloom_strength: { min: 0.05, max: 0.5, drift: 0.15 },
-  bloom_threshold: { min: 0.2, max: 0.6, drift: 0.1 },
+  bloom_strength: { min: 0, max: 0.8, drift: 0.2 },
+  bloom_threshold: { min: 0.1, max: 0.8, drift: 0.2 },
 };
 
 // Each param has its own random walk velocity
@@ -1697,13 +1633,9 @@ function stepChaos() {
     state.wave_mode = Math.floor(Math.random() * 24);
   }
 
-  // Keep wave color saturated — at least one channel must be bright
-  const maxC = Math.max(state.wave_r||0, state.wave_g||0, state.wave_b||0);
-  if (maxC < 0.5) {
-    // Boost the strongest channel to keep color vivid
-    const channels = ['wave_r','wave_g','wave_b'];
-    const strongest = channels.reduce((a,b) => (state[a]||0) > (state[b]||0) ? a : b);
-    state[strongest] = Math.max(state[strongest], 0.7);
+  // Keep wave color visible
+  if ((state.wave_r||0)+(state.wave_g||0)+(state.wave_b||0) < 0.2) {
+    state.wave_r = Math.max(state.wave_r, 0.3);
   }
 
   // Sync UI every ~30 frames to avoid performance hit
