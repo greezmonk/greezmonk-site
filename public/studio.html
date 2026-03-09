@@ -392,13 +392,14 @@ function mkSlider(c) {
 }
 
 const WAVE_NAMES = ['circle','x-cross','cross','blob','rings','v-line','sine','organic',
-  'star','lissajous','helix','infinity','pulse','spiral','diamond','spectrum'];
+  'star','lissajous','helix','infinity','pulse','spiral','diamond','spectrum',
+  'flower','seed','metatron','sri yantra','vesica','golden','merkaba','torus knot'];
 
 function mkWaveMode() {
   const d = document.createElement('div'); d.className = 'ctl';
   d.innerHTML = '<label><span>wave_mode</span></label>';
   const grid = document.createElement('div'); grid.className = 'wm-grid';
-  for (let i = 0; i < 16; i++) {
+  for (let i = 0; i < 24; i++) {
     const btn = document.createElement('div');
     btn.className = 'wm-btn' + (state.wave_mode === i ? ' active' : '');
     btn.id = `wm-${i}`;
@@ -414,14 +415,24 @@ function mkWaveMode() {
     };
     grid.appendChild(btn);
   }
-  // Expand/collapse button
-  const expBtn = document.createElement('button'); expBtn.className = 'wm-expand'; expBtn.textContent = '+ more shapes';
+  // Expand buttons
+  const expBtn = document.createElement('button'); expBtn.className = 'wm-expand'; expBtn.id = 'wm-exp1'; expBtn.textContent = '+ more shapes';
   expBtn.onclick = () => {
     const showing = expBtn.textContent.startsWith('+');
     for (let i = 8; i < 16; i++) document.getElementById(`wm-${i}`).style.display = showing ? '' : 'none';
+    document.getElementById('wm-exp2').style.display = showing ? '' : 'none';
     expBtn.textContent = showing ? '- fewer shapes' : '+ more shapes';
+    if (!showing) { for (let i = 16; i < 24; i++) document.getElementById(`wm-${i}`).style.display = 'none'; document.getElementById('wm-exp2').textContent = '+ sacred geometry'; }
   };
   grid.appendChild(expBtn);
+  const sacBtn = document.createElement('button'); sacBtn.className = 'wm-expand'; sacBtn.id = 'wm-exp2'; sacBtn.textContent = '+ sacred geometry'; sacBtn.style.display = 'none';
+  sacBtn.style.color = '#f0a500';
+  sacBtn.onclick = () => {
+    const showing = sacBtn.textContent.startsWith('+');
+    for (let i = 16; i < 24; i++) document.getElementById(`wm-${i}`).style.display = showing ? '' : 'none';
+    sacBtn.textContent = showing ? '- sacred geometry' : '+ sacred geometry';
+  };
+  grid.appendChild(sacBtn);
   d.appendChild(grid); return d;
 }
 
@@ -444,7 +455,16 @@ function drawWaveThumb(cvs, mode) {
   else if (mode===12) { for(let r=3;r<=11;r+=4) ctx.arc(cx,cy,r,0,Math.PI*2); } // pulse rings
   else if (mode===13) { for(let a=0;a<=12;a+=.1){const r2=2+a*.8;const x2=cx+r2*Math.cos(a),y2=cy+r2*Math.sin(a);a===0?ctx.moveTo(x2,y2):ctx.lineTo(x2,y2);} } // spiral
   else if (mode===14) { const s=10; ctx.moveTo(cx,cy-s); ctx.lineTo(cx+s,cy); ctx.lineTo(cx,cy+s); ctx.lineTo(cx-s,cy); ctx.closePath(); } // diamond
-  else { const n=8; for(let i=0;i<n;i++){const x2=6+i*(w-12)/n,bh=4+Math.random()*10;ctx.moveTo(x2,cy+6);ctx.lineTo(x2,cy+6-bh);} } // spectrum
+  else if (mode===15) { const n=8; for(let i=0;i<n;i++){const x2=6+i*(w-12)/n,bh=4+Math.random()*10;ctx.moveTo(x2,cy+6);ctx.lineTo(x2,cy+6-bh);} } // spectrum
+  // Sacred geometry 16-23
+  else if (mode===16) { const r=5; for(let i=0;i<6;i++){const a=i/6*6.283,ox=cx+r*Math.cos(a),oy=cy+r*Math.sin(a);ctx.moveTo(ox+r,oy);ctx.arc(ox,oy,r,0,Math.PI*2);} ctx.moveTo(cx+r,cy);ctx.arc(cx,cy,r,0,Math.PI*2); } // flower of life
+  else if (mode===17) { const r=5; ctx.arc(cx,cy,r,0,Math.PI*2); for(let i=0;i<6;i++){const a=i/6*6.283;ctx.moveTo(cx+r*Math.cos(a)+r,cy+r*Math.sin(a));ctx.arc(cx+r*Math.cos(a),cy+r*Math.sin(a),r,0,Math.PI*2);} } // seed of life
+  else if (mode===18) { const r=4,pts=[]; for(let i=0;i<13;i++){const a=i<1?0:((i-1)/12)*6.283,d=i<1?0:i<7?r:r*2;pts.push([cx+d*Math.cos(a),cy+d*Math.sin(a)]);} for(let i=0;i<pts.length;i++)for(let j=i+1;j<pts.length;j++){ctx.moveTo(pts[i][0],pts[i][1]);ctx.lineTo(pts[j][0],pts[j][1]);} } // metatron's cube
+  else if (mode===19) { for(let i=0;i<4;i++){const s=4+i*2.5,a1=Math.PI/2;ctx.moveTo(cx+s*Math.cos(a1),cy-s*Math.sin(a1));for(let j=1;j<=3;j++){const a2=a1+j*2.094;ctx.lineTo(cx+s*Math.cos(a2),cy-s*Math.sin(a2));}ctx.closePath();ctx.moveTo(cx+s*Math.cos(-a1),cy-s*Math.sin(-a1));for(let j=1;j<=3;j++){const a2=-a1+j*2.094;ctx.lineTo(cx+s*Math.cos(a2),cy-s*Math.sin(a2));}ctx.closePath();} } // sri yantra
+  else if (mode===20) { const r=8,d=r*0.577; ctx.arc(cx-d,cy,r,0,Math.PI*2); ctx.moveTo(cx+d+r,cy); ctx.arc(cx+d,cy,r,0,Math.PI*2); } // vesica piscis
+  else if (mode===21) { const phi=1.618; let r2=0.5; for(let a=0;a<=16;a+=.1){r2=0.5*Math.pow(phi,a/6.283);const x2=cx+r2*Math.cos(a),y2=cy+r2*Math.sin(a);if(r2>14)break;a===0?ctx.moveTo(x2,y2):ctx.lineTo(x2,y2);} } // golden spiral
+  else if (mode===22) { const s=10,v2=[[0,-s],[s*.866,s*.5],[-s*.866,s*.5],[0,s*.4]]; const edges=[[0,1],[0,2],[1,2],[0,3],[1,3],[2,3]]; for(const[a,b]of edges){ctx.moveTo(cx+v2[a][0],cy+v2[a][1]);ctx.lineTo(cx+v2[b][0],cy+v2[b][1]);} } // merkaba/tetrahedron
+  else { const r=10; for(let a=0;a<=18.85;a+=.08){const p=2,q=3,x2=cx+(r+4*Math.cos(q*a))*Math.cos(p*a)*.5,y2=cy+(r+4*Math.cos(q*a))*Math.sin(p*a)*.5;a===0?ctx.moveTo(x2,y2):ctx.lineTo(x2,y2);} } // torus knot
   ctx.stroke();
 }
 
@@ -599,7 +619,11 @@ function syncUI() {
     } else if (c.type === 'wavemode') {
       document.querySelectorAll('.wm-btn').forEach(b => b.classList.remove('active'));
       const a = document.getElementById(`wm-${state.wave_mode}`);
-      if(a) { a.classList.add('active'); if(state.wave_mode >= 8) a.style.display = ''; }
+      if(a) {
+        a.classList.add('active'); a.style.display = '';
+        if(state.wave_mode >= 8) { for(let j=8;j<16;j++) document.getElementById(`wm-${j}`).style.display=''; const e1=document.getElementById('wm-exp1'); if(e1) e1.textContent='- fewer shapes'; const e2=document.getElementById('wm-exp2'); if(e2) e2.style.display=''; }
+        if(state.wave_mode >= 16) { for(let j=16;j<24;j++) document.getElementById(`wm-${j}`).style.display=''; const e2=document.getElementById('wm-exp2'); if(e2) e2.textContent='- sacred geometry'; }
+      }
     }
   }
   // Color previews
@@ -1015,7 +1039,65 @@ function buildWaveVerts(samples, aspect) {
     else if(mode===12){const rings=3,ri=Math.floor(t*rings),tf=(t*rings)%1,a=tf*6.283,r=sc*(.15+ri*.12)+val*sc*.15+my*.03;x=Math.cos(a)*r;y=Math.sin(a)*r;} // pulse rings
     else if(mode===13){const a=t*12.56+my*2,r=sc*(.05+t*.35)+val*sc*.15;x=Math.cos(a)*r;y=Math.sin(a)*r;} // spiral
     else if(mode===14){const a=t*6.283,r=sc*.35/(Math.abs(Math.cos(a))+Math.abs(Math.sin(a))+.01)+val*sc*.15+my*.03;x=Math.cos(a)*r;y=Math.sin(a)*r;} // diamond
-    else{const bx=(t-.5)*2*sc,by=val*sc*.6+my*.04;x=bx;y=by;} // spectrum (same as mode 6 fallback)
+    else if(mode===15){const bx=(t-.5)*2*sc,by=val*sc*.6+my*.04;x=bx;y=by;} // spectrum
+    // Sacred geometry 16-23
+    else if(mode===16){ // Flower of Life — 7 circles traced sequentially
+      const circ=7,ci=Math.floor(t*circ),tf=(t*circ)%1,a=tf*6.283;
+      let ox=0,oy=0; if(ci>0){const ca=(ci-1)/6*6.283;ox=Math.cos(ca)*sc*.2;oy=Math.sin(ca)*sc*.2;}
+      const r=sc*.2+val*sc*.08+my*.02; x=ox+Math.cos(a)*r; y=oy+Math.sin(a)*r;
+    }
+    else if(mode===17){ // Seed of Life — 7 circles, tighter
+      const circ=7,ci=Math.floor(t*circ),tf=(t*circ)%1,a=tf*6.283;
+      let ox=0,oy=0; if(ci>0){const ca=(ci-1)/6*6.283;ox=Math.cos(ca)*sc*.15;oy=Math.sin(ca)*sc*.15;}
+      const r=sc*.15+val*sc*.06+my*.02; x=ox+Math.cos(a)*r; y=oy+Math.sin(a)*r;
+    }
+    else if(mode===18){ // Metatron's Cube — circles + connecting lines
+      const phase=t*3; // 3 phases: inner ring, outer ring, connections
+      if(phase<1){ // Inner 6 circles + center
+        const circ=7,ci=Math.floor(phase*circ),tf=(phase*circ)%1,a=tf*6.283;
+        let ox=0,oy=0; if(ci>0){const ca=(ci-1)/6*6.283;ox=Math.cos(ca)*sc*.12;oy=Math.sin(ca)*sc*.12;}
+        const r=sc*.06+val*sc*.03; x=ox+Math.cos(a)*r; y=oy+Math.sin(a)*r;
+      } else if(phase<2){ // Outer 6 circles
+        const ci=Math.floor((phase-1)*6),tf=((phase-1)*6)%1,a=tf*6.283;
+        const ca=ci/6*6.283,d=sc*.24; const ox=Math.cos(ca)*d,oy=Math.sin(ca)*d;
+        const r=sc*.06+val*sc*.03; x=ox+Math.cos(a)*r; y=oy+Math.sin(a)*r;
+      } else { // Connecting lines — radiate from center through all 12 points
+        const li=Math.floor((phase-2)*12),lf=((phase-2)*12)%1;
+        const ca=li/12*6.283,d=li<6?sc*.12:sc*.24;
+        x=lf*Math.cos(ca)*d+val*sc*.02; y=lf*Math.sin(ca)*d+val*sc*.02;
+      }
+    }
+    else if(mode===19){ // Sri Yantra — nested opposing triangles
+      const tri=8,ti=Math.floor(t*tri),tf=(t*tri)%1; // 4 up + 4 down triangles
+      const layer=Math.floor(ti/2), up=ti%2===0;
+      const s=sc*(.1+layer*.08)+val*sc*.05+my*.02;
+      const base=up?-Math.PI/2:Math.PI/2, a=base+tf*6.283;
+      const side=Math.floor(tf*3), sf=(tf*3)%1;
+      const a1=base+side*2.094, a2=base+(side+1)*2.094;
+      x=Math.cos(a1)*s+(Math.cos(a2)*s-Math.cos(a1)*s)*sf; y=Math.sin(a1)*s+(Math.sin(a2)*s-Math.sin(a1)*s)*sf;
+    }
+    else if(mode===20){ // Vesica Piscis — two overlapping circles
+      const half=t<0.5, tf=half?(t*2):(t-0.5)*2, a=tf*6.283;
+      const offset=sc*.12, r=sc*.2+val*sc*.08+my*.02;
+      x=(half?-offset:offset)+Math.cos(a)*r; y=Math.sin(a)*r;
+    }
+    else if(mode===21){ // Golden Spiral — Fibonacci
+      const phi=1.618, maxTurns=4+my;
+      const a=t*maxTurns*6.283, r=sc*.04*Math.pow(phi,a/6.283)+val*sc*.05;
+      x=Math.cos(a)*r; y=Math.sin(a)*r;
+    }
+    else if(mode===22){ // Merkaba — two interlocked tetrahedra (2D projection = Star of David)
+      const tri=2, ti=Math.floor(t*tri), tf=(t*tri)%1;
+      const s=sc*.35+val*sc*.1+my*.03;
+      const base=ti===0?-Math.PI/2:Math.PI/2;
+      const side=Math.floor(tf*3), sf=(tf*3)%1;
+      const a1=base+side*2.094, a2=base+(side+1)*2.094;
+      x=Math.cos(a1)*s+(Math.cos(a2)*s-Math.cos(a1)*s)*sf; y=Math.sin(a1)*s+(Math.sin(a2)*s-Math.sin(a1)*s)*sf;
+    }
+    else{ // Torus Knot — parametric (p,q) knot
+      const p=2,q=3, a=t*6.283*2, R=sc*.25, r2=sc*.1+val*sc*.08;
+      x=(R+r2*Math.cos(q*a+my))*Math.cos(p*a)*.7; y=(R+r2*Math.cos(q*a+my))*Math.sin(p*a)*.7;
+    }
     v[i*2]=cx+x*2/aspect; v[i*2+1]=cy+y*2;
   }
   return v;
@@ -1375,7 +1457,7 @@ function randomize() {
   } else {
     // Generate random config
     target = { ...DEFAULTS };
-    target.wave_mode = Math.floor(Math.random() * 16);
+    target.wave_mode = Math.floor(Math.random() * 24);
     target.wave_a = 0.6 + Math.random() * 0.4;
     target.wave_x = 0.3 + Math.random() * 0.4;
     target.wave_y = 0.3 + Math.random() * 0.4;
@@ -1543,7 +1625,7 @@ function stepChaos() {
 
   // Occasionally change wave_mode (~every 15 seconds)
   if (chaosFrameCount % 900 === 0 && Math.random() < 0.5) {
-    state.wave_mode = Math.floor(Math.random() * 16);
+    state.wave_mode = Math.floor(Math.random() * 24);
   }
 
   // Keep wave color visible
