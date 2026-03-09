@@ -106,7 +106,10 @@
     cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center;
     font-size: 9px; color: var(--dim); padding: 2px;
   }
-  .wm-btn canvas { width: 34px; height: 18px; }
+  .wm-btn canvas { width: 34px; height: 18px; pointer-events: none; }
+  .wm-grid.expanded { grid-template-columns: repeat(4,1fr); }
+  .wm-expand { grid-column: 1 / -1; font: 9px 'Courier New', monospace; padding: 3px; background: var(--input-bg); border: 1px dashed var(--border); color: var(--dim); border-radius: 2px; cursor: pointer; text-align: center; }
+  .wm-expand:hover { border-color: var(--accent-dim); color: var(--text); }
   .wm-btn.active { border-color: var(--accent); border-style: solid; color: var(--accent); background: rgba(240,165,0,0.06); }
   .cprev { width: 100%; height: 5px; border-radius: 1px; margin-top: 2px; border: 1px dashed var(--border); }
 
@@ -172,6 +175,7 @@
   <div class="toolbar">
     <button onclick="randomize()" title="Random preset (r)">random</button>
     <button onclick="toggleAutoRandom()" id="btn-auto" title="Auto-random mode (a)">auto: off</button>
+    <button onclick="toggleChaos()" id="btn-chaos" title="Chaos drift mode (c)">chaos: off</button>
     <button onclick="saveConfig()" title="Save to file">save</button>
     <button onclick="document.getElementById('load-file').click()" title="Load from file">load</button>
     <button onclick="document.getElementById('load-library').click()" title="Load config library folder">library</button>
@@ -387,18 +391,22 @@ function mkSlider(c) {
   return d;
 }
 
+const WAVE_NAMES = ['circle','x-cross','cross','blob','rings','v-line','sine','organic',
+  'star','lissajous','helix','infinity','pulse','spiral','diamond','spectrum'];
+
 function mkWaveMode() {
   const d = document.createElement('div'); d.className = 'ctl';
   d.innerHTML = '<label><span>wave_mode</span></label>';
   const grid = document.createElement('div'); grid.className = 'wm-grid';
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < 16; i++) {
     const btn = document.createElement('div');
     btn.className = 'wm-btn' + (state.wave_mode === i ? ' active' : '');
     btn.id = `wm-${i}`;
+    if (i >= 8) btn.style.display = 'none';
     const cvs = document.createElement('canvas'); cvs.width = 68; cvs.height = 36;
     drawWaveThumb(cvs, i);
     btn.appendChild(cvs);
-    const lbl = document.createElement('span'); lbl.textContent = i; btn.appendChild(lbl);
+    const lbl = document.createElement('span'); lbl.textContent = WAVE_NAMES[i] || i; lbl.style.fontSize = '7px'; btn.appendChild(lbl);
     btn.onclick = () => {
       document.querySelectorAll('.wm-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
@@ -406,6 +414,14 @@ function mkWaveMode() {
     };
     grid.appendChild(btn);
   }
+  // Expand/collapse button
+  const expBtn = document.createElement('button'); expBtn.className = 'wm-expand'; expBtn.textContent = '+ more shapes';
+  expBtn.onclick = () => {
+    const showing = expBtn.textContent.startsWith('+');
+    for (let i = 8; i < 16; i++) document.getElementById(`wm-${i}`).style.display = showing ? '' : 'none';
+    expBtn.textContent = showing ? '- fewer shapes' : '+ more shapes';
+  };
+  grid.appendChild(expBtn);
   d.appendChild(grid); return d;
 }
 
@@ -419,7 +435,16 @@ function drawWaveThumb(cvs, mode) {
   else if (mode===4) { ctx.arc(cx,cy,11,0,Math.PI*2); ctx.moveTo(cx+6,cy); ctx.arc(cx,cy,6,0,Math.PI*2); }
   else if (mode===5) { ctx.moveTo(cx,cy-12); ctx.lineTo(cx,cy+12); }
   else if (mode===6) { for(let x=6;x<w-6;x++){const y=cy+Math.sin((x-6)*0.15)*8;x===6?ctx.moveTo(x,y):ctx.lineTo(x,y);} }
-  else { for(let a=0;a<=6.3;a+=.1){const r=8+2*Math.sin(a*5)+2*Math.cos(a*2);a===0?ctx.moveTo(cx+r*Math.cos(a),cy+r*Math.sin(a)):ctx.lineTo(cx+r*Math.cos(a),cy+r*Math.sin(a));} ctx.closePath(); }
+  else if (mode===7) { for(let a=0;a<=6.3;a+=.1){const r=8+2*Math.sin(a*5)+2*Math.cos(a*2);a===0?ctx.moveTo(cx+r*Math.cos(a),cy+r*Math.sin(a)):ctx.lineTo(cx+r*Math.cos(a),cy+r*Math.sin(a));} ctx.closePath(); }
+  // New shapes 8-15
+  else if (mode===8) { for(let i=0;i<7;i++){const a=i/7*6.283;ctx.moveTo(cx,cy);ctx.lineTo(cx+Math.cos(a)*12,cy+Math.sin(a)*12);} } // star
+  else if (mode===9) { for(let a=0;a<=6.3;a+=.05){const x2=cx+12*Math.sin(a),y2=cy+8*Math.sin(a*2);a===0?ctx.moveTo(x2,y2):ctx.lineTo(x2,y2);} } // lissajous
+  else if (mode===10) { for(let x2=6;x2<w-6;x2++){const t2=(x2-6)/(w-12),y2=cy+Math.sin(t2*6.28)*6;x2===6?ctx.moveTo(x2,y2):ctx.lineTo(x2,y2);} ctx.stroke(); ctx.beginPath(); for(let x2=6;x2<w-6;x2++){const t2=(x2-6)/(w-12),y2=cy-Math.sin(t2*6.28)*6;x2===6?ctx.moveTo(x2,y2):ctx.lineTo(x2,y2);} } // helix
+  else if (mode===11) { for(let a=0;a<=6.3;a+=.05){const r2=10/(1+Math.pow(Math.cos(a),2));const x2=cx+r2*Math.cos(a),y2=cy+r2*Math.sin(a)*Math.cos(a);a===0?ctx.moveTo(x2,y2):ctx.lineTo(x2,y2);} } // infinity
+  else if (mode===12) { for(let r=3;r<=11;r+=4) ctx.arc(cx,cy,r,0,Math.PI*2); } // pulse rings
+  else if (mode===13) { for(let a=0;a<=12;a+=.1){const r2=2+a*.8;const x2=cx+r2*Math.cos(a),y2=cy+r2*Math.sin(a);a===0?ctx.moveTo(x2,y2):ctx.lineTo(x2,y2);} } // spiral
+  else if (mode===14) { const s=10; ctx.moveTo(cx,cy-s); ctx.lineTo(cx+s,cy); ctx.lineTo(cx,cy+s); ctx.lineTo(cx-s,cy); ctx.closePath(); } // diamond
+  else { const n=8; for(let i=0;i<n;i++){const x2=6+i*(w-12)/n,bh=4+Math.random()*10;ctx.moveTo(x2,cy+6);ctx.lineTo(x2,cy+6-bh);} } // spectrum
   ctx.stroke();
 }
 
@@ -573,7 +598,8 @@ function syncUI() {
       for (const k of c.keys) { const b = document.getElementById(`t-${k}`); if(b) b.className = 'tog'+(state[k]?' on':''); }
     } else if (c.type === 'wavemode') {
       document.querySelectorAll('.wm-btn').forEach(b => b.classList.remove('active'));
-      const a = document.getElementById(`wm-${state.wave_mode}`); if(a) a.classList.add('active');
+      const a = document.getElementById(`wm-${state.wave_mode}`);
+      if(a) { a.classList.add('active'); if(state.wave_mode >= 8) a.style.display = ''; }
     }
   }
   // Color previews
@@ -980,7 +1006,16 @@ function buildWaveVerts(samples, aspect) {
     else if(mode===4){const a=t*6.283,ring=t<.5?0:1,t2=(t*2)%1,a2=t2*6.283,rB=sc*(.3+ring*.2),r=rB+val*sc*.3*(ring+1)+my*.03;x=Math.cos(a2)*r;y=Math.sin(a2)*r;}
     else if(mode===5){const p=(t-.5)*2;x=val*sc*.5+my*.05;y=p*sc;}
     else if(mode===6){const p=(t-.5)*2;x=p*sc;y=val*sc*.6+my*.04;}
-    else{const a=t*6.283,r=sc*.35*(1+val*.5+.3*Math.sin(a*3+my*4));x=Math.cos(a)*r;y=Math.sin(a)*r;}
+    else if(mode===7){const a=t*6.283,r=sc*.35*(1+val*.5+.3*Math.sin(a*3+my*4));x=Math.cos(a)*r;y=Math.sin(a)*r;}
+    // New shapes 8-15
+    else if(mode===8){const a=t*6.283,spikes=7,spike=Math.cos(t*spikes*6.283)*.5+.5,r=sc*(.2+spike*.35+val*.2+my*.05);x=Math.cos(a)*r;y=Math.sin(a)*r;} // star
+    else if(mode===9){const a=t*6.283;x=sc*.4*Math.sin(a+my)+val*sc*.2;y=sc*.3*Math.sin(a*2)+val*sc*.15;} // lissajous
+    else if(mode===10){const p=(t-.5)*2,strand=i%2===0?1:-1;x=p*sc;y=strand*Math.sin(p*3.14+my)*sc*.25+val*sc*.3;} // helix
+    else if(mode===11){const a=t*6.283,r=sc*.35/(1+Math.pow(Math.cos(a),2)+my*.1);x=r*Math.cos(a)+val*sc*.1;y=r*Math.sin(a)*Math.cos(a)+val*sc*.1;} // infinity
+    else if(mode===12){const rings=3,ri=Math.floor(t*rings),tf=(t*rings)%1,a=tf*6.283,r=sc*(.15+ri*.12)+val*sc*.15+my*.03;x=Math.cos(a)*r;y=Math.sin(a)*r;} // pulse rings
+    else if(mode===13){const a=t*12.56+my*2,r=sc*(.05+t*.35)+val*sc*.15;x=Math.cos(a)*r;y=Math.sin(a)*r;} // spiral
+    else if(mode===14){const a=t*6.283,r=sc*.35/(Math.abs(Math.cos(a))+Math.abs(Math.sin(a))+.01)+val*sc*.15+my*.03;x=Math.cos(a)*r;y=Math.sin(a)*r;} // diamond
+    else{const bx=(t-.5)*2*sc,by=val*sc*.6+my*.04;x=bx;y=by;} // spectrum (same as mode 6 fallback)
     v[i*2]=cx+x*2/aspect; v[i*2+1]=cy+y*2;
   }
   return v;
@@ -1008,6 +1043,7 @@ let frameCount=0, lastFpsTime=performance.now(), fps=0, startTime=performance.no
 function render() {
   if(paused){requestAnimationFrame(render);return;}
   stepTransition();
+  stepChaos();
   const now=performance.now(), t=(now-startTime)/1000;
   const w=canvas.width, h=canvas.height, aspect=w/h;
   const audio=getAudio(t), wave=getWave(t);
@@ -1030,15 +1066,44 @@ function render() {
   gl.uniform1f(wU.u_decay,dD);
   gl.bindVertexArray(warpVAO); gl.drawElements(gl.TRIANGLES, warpMeshCount, gl.UNSIGNED_SHORT, 0);
 
-  // Pass 2: Waves
+  // Pass 2: Waves (with crossfade during transitions)
   gl.useProgram(waveP); gl.enable(gl.BLEND);
   gl.blendFunc(state.wave_additive?gl.SRC_ALPHA:gl.SRC_ALPHA, state.wave_additive?gl.ONE:gl.ONE_MINUS_SRC_ALPHA);
-  const wv=buildWaveVerts(wave,aspect);
   gl.bindVertexArray(waveVAO);
-  gl.bindBuffer(gl.ARRAY_BUFFER,wBuf); gl.bufferSubData(gl.ARRAY_BUFFER,0,wv);
-  gl.uniform4f(vU.u_col, state.wave_r, state.wave_g, state.wave_b, state.wave_a);
-  gl.drawArrays(state.wave_dots?gl.POINTS:gl.LINE_STRIP, 0, WAVE_N);
+
+  // If transitioning between different wave modes, draw both with alpha crossfade
+  const xfading = transitionTarget && transitionFrom &&
+    transitionFrom.wave_mode !== undefined && transitionTarget.wave_mode !== undefined &&
+    transitionFrom.wave_mode !== transitionTarget.wave_mode;
+
+  if (xfading) {
+    const ease = transitionProgress < 0.5 ? 2*transitionProgress*transitionProgress : 1-Math.pow(-2*transitionProgress+2,2)/2;
+    const fadeOut = 1 - ease, fadeIn = ease;
+    // Draw old wave (fading out)
+    const oldMode = state.wave_mode;
+    state.wave_mode = transitionFrom.wave_mode;
+    const wvOld = buildWaveVerts(wave, aspect);
+    state.wave_mode = oldMode;
+    gl.bindBuffer(gl.ARRAY_BUFFER,wBuf); gl.bufferSubData(gl.ARRAY_BUFFER,0,wvOld);
+    const oldR = transitionFrom.wave_r ?? state.wave_r, oldG = transitionFrom.wave_g ?? state.wave_g, oldB = transitionFrom.wave_b ?? state.wave_b;
+    gl.uniform4f(vU.u_col, oldR, oldG, oldB, state.wave_a * fadeOut);
+    gl.drawArrays(state.wave_dots?gl.POINTS:gl.LINE_STRIP, 0, WAVE_N);
+    // Draw new wave (fading in)
+    state.wave_mode = transitionTarget.wave_mode;
+    const wvNew = buildWaveVerts(wave, aspect);
+    state.wave_mode = oldMode;
+    gl.bindBuffer(gl.ARRAY_BUFFER,wBuf); gl.bufferSubData(gl.ARRAY_BUFFER,0,wvNew);
+    gl.uniform4f(vU.u_col, state.wave_r, state.wave_g, state.wave_b, state.wave_a * fadeIn);
+    gl.drawArrays(state.wave_dots?gl.POINTS:gl.LINE_STRIP, 0, WAVE_N);
+  } else {
+    const wv=buildWaveVerts(wave,aspect);
+    gl.bindBuffer(gl.ARRAY_BUFFER,wBuf); gl.bufferSubData(gl.ARRAY_BUFFER,0,wv);
+    gl.uniform4f(vU.u_col, state.wave_r, state.wave_g, state.wave_b, state.wave_a);
+    gl.drawArrays(state.wave_dots?gl.POINTS:gl.LINE_STRIP, 0, WAVE_N);
+  }
   if(state.wave_thick||state.wave_brighten){
+    const wvT=buildWaveVerts(wave,aspect);
+    gl.bindBuffer(gl.ARRAY_BUFFER,wBuf); gl.bufferSubData(gl.ARRAY_BUFFER,0,wvT);
     gl.uniform4f(vU.u_col, state.wave_r*1.2, state.wave_g*1.2, state.wave_b*1.2, state.wave_a*0.4);
     gl.drawArrays(state.wave_dots?gl.POINTS:gl.LINE_STRIP, 0, WAVE_N);
   }
@@ -1103,8 +1168,9 @@ function render() {
   if(now-lastFpsTime>500){fps=Math.round(frameCount/((now-lastFpsTime)/1000));frameCount=0;lastFpsTime=now;}
   const trans = transitionTarget ? ' <span class="d">|</span> ~' : '';
   const autoTag = autoRandomInterval ? ' <span class="d">|</span> AUTO' : '';
+  const chaosTag = chaosEnabled ? ' <span class="d">|</span> CHAOS' : '';
   const libTag = configLibrary.length ? ` <span class="d">|</span> LIB:${configLibrary.length}` : '';
-  document.getElementById('hud').innerHTML=`${fps} <span class="d">fps</span> ${useMic?'<span class="d">|</span> MIC':''}${trans}${autoTag}${libTag}`;
+  document.getElementById('hud').innerHTML=`${fps} <span class="d">fps</span> ${useMic?'<span class="d">|</span> MIC':''}${trans}${autoTag}${chaosTag}${libTag}`;
 
   requestAnimationFrame(render);
 }
@@ -1309,7 +1375,7 @@ function randomize() {
   } else {
     // Generate random config
     target = { ...DEFAULTS };
-    target.wave_mode = Math.floor(Math.random() * 8);
+    target.wave_mode = Math.floor(Math.random() * 16);
     target.wave_a = 0.6 + Math.random() * 0.4;
     target.wave_x = 0.3 + Math.random() * 0.4;
     target.wave_y = 0.3 + Math.random() * 0.4;
@@ -1418,6 +1484,84 @@ function restartAutoIfRunning() {
 }
 
 // =====================================================
+// CHAOS MODE — slow Brownian drift on parameters
+// =====================================================
+let chaosEnabled = false;
+const CHAOS_SPEED = 0.0008; // base drift per frame
+
+const CHAOS_PARAMS = {
+  zoom:  { min: 0.92, max: 1.1, drift: 1 },
+  rot:   { min: -0.08, max: 0.08, drift: 1 },
+  warp:  { min: 0, max: 2, drift: 0.8 },
+  cx:    { min: 0.3, max: 0.7, drift: 0.5 },
+  cy:    { min: 0.3, max: 0.7, drift: 0.5 },
+  dx:    { min: -0.015, max: 0.015, drift: 0.3 },
+  dy:    { min: -0.015, max: 0.015, drift: 0.3 },
+  sx:    { min: 0.95, max: 1.05, drift: 0.3 },
+  sy:    { min: 0.95, max: 1.05, drift: 0.3 },
+  decay: { min: 0.91, max: 0.985, drift: 0.4 },
+  gamma: { min: 0.5, max: 2, drift: 0.3 },
+  wave_r: { min: 0, max: 1, drift: 0.5 },
+  wave_g: { min: 0, max: 1, drift: 0.5 },
+  wave_b: { min: 0, max: 1, drift: 0.5 },
+  wave_a: { min: 0.3, max: 1, drift: 0.2 },
+  wave_x: { min: 0.2, max: 0.8, drift: 0.3 },
+  wave_y: { min: 0.2, max: 0.8, drift: 0.3 },
+  wave_mystery: { min: -2, max: 2, drift: 0.4 },
+  wave_scale: { min: 0.5, max: 4, drift: 0.3 },
+  bloom_strength: { min: 0, max: 0.8, drift: 0.2 },
+  bloom_threshold: { min: 0.1, max: 0.8, drift: 0.2 },
+};
+
+// Each param has its own random walk velocity
+const chaosVelocity = {};
+for (const k of Object.keys(CHAOS_PARAMS)) chaosVelocity[k] = (Math.random() - 0.5) * 2;
+
+let chaosFrameCount = 0;
+
+function stepChaos() {
+  if (!chaosEnabled) return;
+  chaosFrameCount++;
+
+  for (const [k, cfg] of Object.entries(CHAOS_PARAMS)) {
+    // Brownian: nudge velocity randomly, then apply
+    chaosVelocity[k] += (Math.random() - 0.5) * 0.3;
+    chaosVelocity[k] *= 0.98; // dampen to prevent runaway
+    chaosVelocity[k] = Math.max(-1, Math.min(1, chaosVelocity[k]));
+
+    const range = cfg.max - cfg.min;
+    const nudge = chaosVelocity[k] * CHAOS_SPEED * cfg.drift * range;
+    state[k] = Math.max(cfg.min, Math.min(cfg.max, (state[k] ?? DEFAULTS[k]) + nudge));
+  }
+
+  // Occasionally flip a boolean (~every 10 seconds at 60fps)
+  if (chaosFrameCount % 600 === 0) {
+    const bools = ['wave_dots','wave_thick','wave_additive','darken','solarize'];
+    const pick = bools[Math.floor(Math.random() * bools.length)];
+    state[pick] = state[pick] ? 0 : 1;
+  }
+
+  // Occasionally change wave_mode (~every 15 seconds)
+  if (chaosFrameCount % 900 === 0 && Math.random() < 0.5) {
+    state.wave_mode = Math.floor(Math.random() * 16);
+  }
+
+  // Keep wave color visible
+  if ((state.wave_r||0)+(state.wave_g||0)+(state.wave_b||0) < 0.2) {
+    state.wave_r = Math.max(state.wave_r, 0.3);
+  }
+
+  // Sync UI every ~30 frames to avoid performance hit
+  if (chaosFrameCount % 30 === 0) syncUI();
+}
+
+function toggleChaos() {
+  chaosEnabled = !chaosEnabled;
+  document.getElementById('btn-chaos').textContent = chaosEnabled ? 'chaos: ON' : 'chaos: off';
+  document.getElementById('btn-chaos').classList.toggle('active', chaosEnabled);
+}
+
+// =====================================================
 // KEYBOARD
 // =====================================================
 document.addEventListener('keydown', e => {
@@ -1440,6 +1584,7 @@ document.addEventListener('keydown', e => {
     case '6': loadPreset('fire'); break;
     case 'r': randomize(); break;
     case 'a': toggleAutoRandom(); break;
+    case 'c': toggleChaos(); break;
     case 'f': goFullscreen(); break;
     case 'm': toggleMic(); break;
     case ' ': paused=!paused; e.preventDefault(); break;
