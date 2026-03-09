@@ -682,7 +682,7 @@ function copyMilk() {
 // =====================================================
 const canvas = document.getElementById('c');
 const gl = canvas.getContext('webgl2', { alpha: false, antialias: false, powerPreference: 'high-performance' });
-if (!gl) { document.body.innerHTML = '<p style="color:#f0a500;font:20px monospace;padding:40px">WebGL2 required</p>'; throw 'no gl'; }
+if (!gl) { document.body.innerHTML = '<div style="color:#f0a500;font:16px monospace;padding:40px;max-width:500px"><p style="font-size:20px;margin-bottom:20px">WebGL2 not available</p><p style="color:#c8c0b0;font-size:13px">This browser doesn\'t support WebGL2. Try:<br>• Chrome or Edge on a phone/laptop<br>• Cast/mirror to TV instead of using the TV browser<br>• Update your browser to the latest version</p></div>'; throw 'no gl'; }
 const useFloat = !!gl.getExtension('EXT_color_buffer_float');
 
 function mkShader(t,s) { const sh=gl.createShader(t); gl.shaderSource(sh,s); gl.compileShader(sh); if(!gl.getShaderParameter(sh,gl.COMPILE_STATUS)){console.error(gl.getShaderInfoLog(sh));} return sh; }
@@ -905,8 +905,11 @@ function cleanupFBs() {
 function initFBs() {
   const wrap = document.getElementById('preview-wrap');
   const dpr = Math.min(window.devicePixelRatio||1, 2);
-  canvas.width = wrap.clientWidth * dpr;
-  canvas.height = wrap.clientHeight * dpr;
+  const w = wrap.clientWidth * dpr, h = wrap.clientHeight * dpr;
+  // Retry if dimensions are zero (fullscreen transition not complete)
+  if (w < 1 || h < 1) { setTimeout(initFBs, 200); return; }
+  canvas.width = w;
+  canvas.height = h;
   fbW=canvas.width; fbH=canvas.height;
   cleanupFBs();
   // Main ping-pong
