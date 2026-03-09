@@ -215,7 +215,7 @@ const DEFAULTS = {
   brighten: 0, darken: 0, solarize: 0, invert: 0,
   wave_scale: 1, wave_smoothing: 0.75,
   bloom_strength: 0.3, bloom_threshold: 0.4,
-  audio_bass_gain: 1, audio_mid_gain: 1, audio_treb_gain: 1, audio_trigger: 0,
+  audio_bass_gain: 3, audio_mid_gain: 1.5, audio_treb_gain: 0.25, audio_trigger: 0,
   transition_speed: 0.03, auto_interval: 20,
 };
 
@@ -1268,6 +1268,11 @@ function randomize() {
   if (configLibrary.length > 0) {
     const pick = configLibrary[Math.floor(Math.random() * configLibrary.length)];
     target = { ...DEFAULTS, ...pick.state };
+    // Clamp values that cause white-out
+    if (target.decay > 0.985) target.decay = 0.985;
+    if (target.gamma > 2.2) target.gamma = 2.2;
+    if (target.zoom > 1.15) target.zoom = 1.15;
+    if (target.brighten && target.decay > 0.97) target.brighten = 0;
     showAttribution(pick.name || 'Untitled', pick.author || 'Community');
   } else {
     // Generate random config
@@ -1290,12 +1295,12 @@ function randomize() {
     target.dy = (Math.random() - 0.5) * 0.02;
     target.sx = 0.95 + Math.random() * 0.1;
     target.sy = 0.95 + Math.random() * 0.1;
-    target.decay = 0.92 + Math.random() * 0.07;
-    target.gamma = 0.8 + Math.random() * 1.5;
+    target.decay = 0.92 + Math.random() * 0.06; // cap at 0.98 to prevent white-out
+    target.gamma = 0.8 + Math.random() * 1.2; // cap at 2.0
     target.wave_scale = 0.3 + Math.random() * 3;
     target.wave_smoothing = Math.random();
-    target.brighten = Math.random() > 0.8 ? 1 : 0;
-    target.darken = Math.random() > 0.7 ? 1 : 0;
+    target.brighten = 0; // avoid white-out — brighten compounds with high decay
+    target.darken = Math.random() > 0.6 ? 1 : 0;
     target.solarize = Math.random() > 0.9 ? 1 : 0;
     target.invert = Math.random() > 0.85 ? 1 : 0;
     target.bloom_strength = Math.random() * 0.6;
