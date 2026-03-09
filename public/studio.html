@@ -1239,10 +1239,9 @@ function loadLibrary(event) {
       try {
         const data = JSON.parse(e.target.result);
         if (Array.isArray(data)) {
-          // Bulk library file
           configLibrary = configLibrary.concat(data);
-        } else if (data.state) {
-          configLibrary.push({ name: data.name || file.name.replace('.json',''), author: data.author || '', state: data.state });
+        } else if (data.state || data.s) {
+          configLibrary.push({ name: data.name || data.n || file.name.replace('.json',''), author: data.author || data.a || '', state: data.state || data.s });
         }
       } catch(err) {}
       loaded++;
@@ -1267,16 +1266,19 @@ function randomize() {
   // If library has configs, pull from there
   if (configLibrary.length > 0) {
     const pick = configLibrary[Math.floor(Math.random() * configLibrary.length)];
-    target = { ...DEFAULTS, ...pick.state };
-    // Safety clamps (library should be clean, but just in case)
+    const pState = pick.state || pick.s; // support both full and compact format
+    const pName = pick.name || pick.n || 'Untitled';
+    const pAuthor = pick.author || pick.a || 'Community';
+    target = { ...DEFAULTS, ...pState };
+    // Safety clamps
     if (target.decay > 0.99) target.decay = 0.985;
     if (target.gamma > 2.5) target.gamma = 2.0;
     if (target.zoom > 1.15) target.zoom = 1.1;
     if (target.wave_a < 0.2) target.wave_a = 0.8;
     if ((target.wave_r||0)+(target.wave_g||0)+(target.wave_b||0) < 0.15) {
-      target.wave_r = 0.8; target.wave_g = 0.6; target.wave_b = 0.3; // fallback amber
+      target.wave_r = 0.8; target.wave_g = 0.6; target.wave_b = 0.3;
     }
-    showAttribution(pick.name || 'Untitled', pick.author || 'Community');
+    showAttribution(pName, pAuthor);
   } else {
     // Generate random config
     target = { ...DEFAULTS };
