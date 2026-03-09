@@ -1320,6 +1320,10 @@ function render() {
 // Preset loading
 function loadPreset(name) {
   const p=PRESETS[name]; if(!p) return;
+  // Kill chaos and auto when manually selecting a preset
+  if (chaosEnabled) toggleChaos();
+  if (autoRandomInterval) toggleAutoRandom();
+  transitionTarget = null; transitionFrom = null; // cancel any in-flight transition
   currentPresetName=name;
   Object.assign(state, DEFAULTS, {...p}); delete state._name;
   syncUI(); updateMilk();
@@ -1646,18 +1650,18 @@ const CHAOS_PARAMS = {
   dy:    { min: -0.015, max: 0.015, drift: 0.3 },
   sx:    { min: 0.95, max: 1.05, drift: 0.3 },
   sy:    { min: 0.95, max: 1.05, drift: 0.3 },
-  decay: { min: 0.91, max: 0.985, drift: 0.4 },
-  gamma: { min: 0.5, max: 2, drift: 0.3 },
-  wave_r: { min: 0, max: 1, drift: 0.5 },
-  wave_g: { min: 0, max: 1, drift: 0.5 },
-  wave_b: { min: 0, max: 1, drift: 0.5 },
-  wave_a: { min: 0.3, max: 1, drift: 0.2 },
+  decay: { min: 0.93, max: 0.985, drift: 0.3 },
+  gamma: { min: 0.7, max: 1.6, drift: 0.2 },
+  wave_r: { min: 0.1, max: 1, drift: 0.4 },
+  wave_g: { min: 0.05, max: 1, drift: 0.4 },
+  wave_b: { min: 0.05, max: 1, drift: 0.4 },
+  wave_a: { min: 0.5, max: 1, drift: 0.15 },
   wave_x: { min: 0.2, max: 0.8, drift: 0.3 },
   wave_y: { min: 0.2, max: 0.8, drift: 0.3 },
   wave_mystery: { min: -2, max: 2, drift: 0.4 },
   wave_scale: { min: 0.5, max: 4, drift: 0.3 },
-  bloom_strength: { min: 0, max: 0.8, drift: 0.2 },
-  bloom_threshold: { min: 0.1, max: 0.8, drift: 0.2 },
+  bloom_strength: { min: 0.05, max: 0.5, drift: 0.15 },
+  bloom_threshold: { min: 0.2, max: 0.6, drift: 0.1 },
 };
 
 // Each param has its own random walk velocity
@@ -1693,9 +1697,13 @@ function stepChaos() {
     state.wave_mode = Math.floor(Math.random() * 24);
   }
 
-  // Keep wave color visible
-  if ((state.wave_r||0)+(state.wave_g||0)+(state.wave_b||0) < 0.2) {
-    state.wave_r = Math.max(state.wave_r, 0.3);
+  // Keep wave color saturated — at least one channel must be bright
+  const maxC = Math.max(state.wave_r||0, state.wave_g||0, state.wave_b||0);
+  if (maxC < 0.5) {
+    // Boost the strongest channel to keep color vivid
+    const channels = ['wave_r','wave_g','wave_b'];
+    const strongest = channels.reduce((a,b) => (state[a]||0) > (state[b]||0) ? a : b);
+    state[strongest] = Math.max(state[strongest], 0.7);
   }
 
   // Sync UI every ~30 frames to avoid performance hit
