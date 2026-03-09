@@ -219,8 +219,8 @@ const DEFAULTS = {
   brighten: 0, darken: 0, solarize: 0, invert: 0,
   wave_scale: 1, wave_smoothing: 0.75,
   bloom_strength: 0.3, bloom_threshold: 0.4,
-  audio_bass_gain: 3, audio_mid_gain: 1.5, audio_treb_gain: 0.25, audio_trigger: 0,
-  transition_speed: 0.03, auto_interval: 20,
+  audio_bass_gain: 3, audio_mid_gain: 1.5, audio_treb_gain: 0.25, audio_trigger: 0.5,
+  transition_speed: 0.005, auto_interval: 5,
 };
 
 const PRESETS = {
@@ -1701,6 +1701,8 @@ buildUI();
 buildFavBar();
 initFBs();
 loadPreset('metheus');
+toggleAutoRandom(); // auto-random on by default
+toggleChaos();      // chaos on by default
 render();
 </script>
 </body>
