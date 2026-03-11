@@ -1571,11 +1571,16 @@ function randomize() {
     if (target.zoom < 0.95) target.zoom = 0.95;
     if (target.wave_a < 0.2) target.wave_a = 0.8;
     if (target.wave_scale < 0.7) target.wave_scale = 0.7;
-    // White-out prevention: brighten compounds with high decay into retina death
-    if (target.brighten && target.decay > 0.96) target.brighten = 0;
-    if (target.brighten && target.gamma > 1.5) target.brighten = 0;
-    // Tighten decay when brighten or wave_brighten are on
-    if ((target.brighten || target.wave_brighten) && target.decay > 0.975) target.decay = 0.97;
+    // Strip post-processing from library presets — without per-frame equations
+    // these just cause retina death and visual noise
+    target.brighten = 0;
+    target.darken = 0;
+    target.solarize = 0;
+    target.invert = 0;
+    target.gamma = Math.max(0.8, Math.min(1.5, target.gamma || 1));
+    // Kill harsh borders from Milkdrop presets
+    target.ob_a = 0;
+    target.ib_a = 0;
     // Motion injection: many Milkdrop presets have near-default static params
     // because their real motion came from per-frame equations we can't run.
     // Inject gentle variety so they don't all look identical.
