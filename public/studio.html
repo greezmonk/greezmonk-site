@@ -207,6 +207,14 @@
 // SYNTHESTASIA — WebGL Audio-Reactive Visual Engine
 // =====================================================
 
+const DUAL_MODES = [
+  { name: 'SINGLE', count: 1 },
+  { name: 'DUAL',   count: 2 },
+  { name: 'SPLIT',  count: 2 },
+];
+let dualIdx = 0;
+let wave_mode2 = -1; // -1 = auto-pick
+
 const DEFAULTS = {
   wave_mode: 0,
   wave_r: 1, wave_g: 1, wave_b: 1, wave_a: 1,
@@ -1112,6 +1120,18 @@ function buildWaveVerts(samples, aspect) {
   return v;
 }
 
+// Dual wave toggle
+function cycleDual() {
+  dualIdx = (dualIdx + 1) % DUAL_MODES.length;
+  wave_mode2 = -1; // reset to auto-pick
+}
+function getSecondMode() {
+  if (wave_mode2 >= 0) return wave_mode2;
+  // Auto-pick a complementary shape: offset by ~half the range
+  const total = 24;
+  return (state.wave_mode + Math.floor(total / 2) + 3) % total;
+}
+
 // Quality toggle
 function cycleQuality() {
   qualityIdx = (qualityIdx + 1) % QUALITY_MODES.length;
@@ -1219,6 +1239,30 @@ function render() {
     gl.uniform4f(vU.u_col, state.wave_r, state.wave_g, state.wave_b, state.wave_a);
     gl.drawArrays(state.wave_dots?gl.POINTS:gl.LINE_STRIP, 0, WAVE_N);
   }
+  // Dual wave: draw second shape
+  if (DUAL_MODES[dualIdx].count > 1 && !xfading) {
+    const origMode = state.wave_mode;
+    const origMy = state.wave_mystery;
+    const origSc = state.wave_scale;
+    state.wave_mode = getSecondMode();
+    if (DUAL_MODES[dualIdx].name === 'SPLIT') {
+      state.wave_mystery = origMy * -0.7 + 0.5;
+      state.wave_scale = origSc * 0.85;
+    }
+    const wv2 = buildWaveVerts(wave, aspect);
+    state.wave_mode = origMode;
+    state.wave_mystery = origMy;
+    state.wave_scale = origSc;
+    gl.bindBuffer(gl.ARRAY_BUFFER, wBuf); gl.bufferSubData(gl.ARRAY_BUFFER, 0, wv2);
+    if (DUAL_MODES[dualIdx].name === 'SPLIT') {
+      // Hue-shift: rotate RGB channels
+      gl.uniform4f(vU.u_col, state.wave_b, state.wave_r, state.wave_g, state.wave_a * 0.8);
+    } else {
+      gl.uniform4f(vU.u_col, state.wave_r, state.wave_g, state.wave_b, state.wave_a * 0.7);
+    }
+    gl.drawArrays(state.wave_dots ? gl.POINTS : gl.LINE_STRIP, 0, WAVE_N);
+  }
+
   if(state.wave_thick||state.wave_brighten){
     const wvT=buildWaveVerts(wave,aspect);
     gl.bindBuffer(gl.ARRAY_BUFFER,wBuf); gl.bufferSubData(gl.ARRAY_BUFFER,0,wvT);
@@ -1288,8 +1332,9 @@ function render() {
   const autoTag = autoRandomInterval ? ' <span class="d">|</span> AUTO' : '';
   const chaosTag = chaosEnabled ? ' <span class="d">|</span> CHAOS' : '';
   const libTag = configLibrary.length ? ` <span class="d">|</span> LIB:${configLibrary.length}` : '';
+  const dualTag = dualIdx > 0 ? ` <span class="d">|</span> ${DUAL_MODES[dualIdx].name}` : '';
   const qTag = ` <span class="d">|</span> ${QUALITY_MODES[qualityIdx].name}`;
-  document.getElementById('hud').innerHTML=`${fps} <span class="d">fps</span> ${useMic?'<span class="d">|</span> MIC':''}${trans}${autoTag}${chaosTag}${libTag}${qTag}`;
+  document.getElementById('hud').innerHTML=`${fps} <span class="d">fps</span> ${useMic?'<span class="d">|</span> MIC':''}${trans}${autoTag}${chaosTag}${libTag}${dualTag}${qTag}`;
 
   requestAnimationFrame(render);
 }
@@ -1704,6 +1749,7 @@ function stepChaos() {
   // Occasionally change wave_mode (~every 15 seconds)
   if (chaosFrameCount % 900 === 0 && Math.random() < 0.5) {
     state.wave_mode = Math.floor(Math.random() * 24);
+    wave_mode2 = -1; // auto-pick new complement
   }
 
   // White-out guard: if brighten is on, keep decay in check
@@ -1753,6 +1799,7 @@ document.addEventListener('keydown', e => {
     case 'c': toggleChaos(); break;
     case 'f': goFullscreen(); break;
     case 'm': toggleMic(); break;
+    case 'd': cycleDual(); break;
     case 'q': cycleQuality(); break;
     case 'h': document.getElementById('hud').style.display = document.getElementById('hud').style.display === 'none' ? '' : 'none'; break;
     case 't': toggleAttribution(); break;
