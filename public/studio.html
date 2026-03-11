@@ -1380,12 +1380,20 @@ let configLibrary = []; // array of {name, author, state} objects
 let currentAttribution = null;
 let attrTimeout = null;
 
+let attributionEnabled = false; // off by default
+
 function showAttribution(name, author) {
+  if (!attributionEnabled) return;
   const el = document.getElementById('attribution');
   el.innerHTML = `<span class="attr-title">${name}</span> <span class="attr-author">— ${author || 'Unknown'}</span>`;
   el.classList.add('show');
   if (attrTimeout) clearTimeout(attrTimeout);
   attrTimeout = setTimeout(() => el.classList.remove('show'), 4000);
+}
+
+function toggleAttribution() {
+  attributionEnabled = !attributionEnabled;
+  if (!attributionEnabled) document.getElementById('attribution').classList.remove('show');
 }
 
 // Load built-in library from server
@@ -1737,6 +1745,8 @@ document.addEventListener('keydown', e => {
     case 'c': toggleChaos(); break;
     case 'f': goFullscreen(); break;
     case 'm': toggleMic(); break;
+    case 'h': document.getElementById('hud').style.display = document.getElementById('hud').style.display === 'none' ? '' : 'none'; break;
+    case 't': toggleAttribution(); break;
     case ' ': paused=!paused; e.preventDefault(); break;
   }
 });
