@@ -1564,15 +1564,8 @@ function randomize() {
     target.sx = 0.95 + Math.random() * 0.1;
     target.sy = 0.95 + Math.random() * 0.1;
     target.decay = 0.92 + Math.random() * 0.06; // cap at 0.98 to prevent white-out
-    target.gamma = 0.8 + Math.random() * 1.2; // cap at 2.0
     target.wave_scale = 0.5 + Math.random() * 2.5;
     target.wave_smoothing = Math.random();
-    target.brighten = 0; // avoid white-out — brighten compounds with high decay
-    target.darken = Math.random() > 0.6 ? 1 : 0;
-    target.solarize = Math.random() > 0.9 ? 1 : 0;
-    target.invert = Math.random() > 0.85 ? 1 : 0;
-    target.bloom_strength = Math.random() * 0.6;
-    target.bloom_threshold = 0.2 + Math.random() * 0.5;
 
     // Apply palette colors if active
     const palColor = getRandomPaletteColor();
@@ -1670,7 +1663,6 @@ const CHAOS_PARAMS = {
   sx:    { min: 0.95, max: 1.05, drift: 0.3 },
   sy:    { min: 0.95, max: 1.05, drift: 0.3 },
   decay: { min: 0.93, max: 0.985, drift: 0.3 },
-  gamma: { min: 0.7, max: 1.6, drift: 0.2 },
   wave_r: { min: 0.1, max: 1, drift: 0.4 },
   wave_g: { min: 0.05, max: 1, drift: 0.4 },
   wave_b: { min: 0.05, max: 1, drift: 0.4 },
@@ -1679,8 +1671,6 @@ const CHAOS_PARAMS = {
   wave_y: { min: 0.2, max: 0.8, drift: 0.3 },
   wave_mystery: { min: -2, max: 2, drift: 0.4 },
   wave_scale: { min: 0.5, max: 4, drift: 0.3 },
-  bloom_strength: { min: 0.05, max: 0.5, drift: 0.15 },
-  bloom_threshold: { min: 0.2, max: 0.6, drift: 0.1 },
 };
 
 // Each param has its own random walk velocity
@@ -1706,7 +1696,7 @@ function stepChaos() {
 
   // Occasionally flip a boolean (~every 10 seconds at 60fps)
   if (chaosFrameCount % 600 === 0) {
-    const bools = ['wave_dots','wave_thick','wave_additive','darken','solarize'];
+    const bools = ['wave_dots','wave_thick','wave_additive'];
     const pick = bools[Math.floor(Math.random() * bools.length)];
     state[pick] = state[pick] ? 0 : 1;
   }
