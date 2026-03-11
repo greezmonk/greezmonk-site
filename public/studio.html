@@ -215,6 +215,24 @@ const DUAL_MODES = [
 let dualIdx = 0;
 let wave_mode2 = -1; // -1 = auto-pick
 
+// Split wave: fully independent second wave state
+const wave2 = {
+  mode: 8, r: 0.4, g: 0.8, b: 1.0, a: 0.8,
+  x: 0.5, y: 0.5, mystery: 0.5, scale: 1.2, dots: 0
+};
+function randomizeWave2() {
+  wave2.mode = Math.floor(Math.random() * 24);
+  wave2.r = 0.2 + Math.random() * 0.8;
+  wave2.g = 0.2 + Math.random() * 0.8;
+  wave2.b = 0.2 + Math.random() * 0.8;
+  wave2.a = 0.5 + Math.random() * 0.5;
+  wave2.x = 0.25 + Math.random() * 0.5;
+  wave2.y = 0.25 + Math.random() * 0.5;
+  wave2.mystery = (Math.random() - 0.5) * 3;
+  wave2.scale = 0.5 + Math.random() * 2.5;
+  wave2.dots = Math.random() > 0.8 ? 1 : 0;
+}
+
 const DEFAULTS = {
   wave_mode: 0,
   wave_r: 1, wave_g: 1, wave_b: 1, wave_a: 1,
@@ -1124,6 +1142,7 @@ function buildWaveVerts(samples, aspect) {
 function cycleDual() {
   dualIdx = (dualIdx + 1) % DUAL_MODES.length;
   wave_mode2 = -1; // reset to auto-pick
+  if (DUAL_MODES[dualIdx].name === 'SPLIT') randomizeWave2();
 }
 function getSecondMode() {
   if (wave_mode2 >= 0) return wave_mode2;
@@ -1239,28 +1258,30 @@ function render() {
     gl.uniform4f(vU.u_col, state.wave_r, state.wave_g, state.wave_b, state.wave_a);
     gl.drawArrays(state.wave_dots?gl.POINTS:gl.LINE_STRIP, 0, WAVE_N);
   }
-  // Dual wave: draw second shape
+  // Dual/Split wave: draw second shape
   if (DUAL_MODES[dualIdx].count > 1 && !xfading) {
-    const origMode = state.wave_mode;
-    const origMy = state.wave_mystery;
-    const origSc = state.wave_scale;
-    state.wave_mode = getSecondMode();
-    if (DUAL_MODES[dualIdx].name === 'SPLIT') {
-      state.wave_mystery = origMy * -0.7 + 0.5;
-      state.wave_scale = origSc * 0.85;
+    const origMode = state.wave_mode, origMy = state.wave_mystery;
+    const origSc = state.wave_scale, origX = state.wave_x, origY = state.wave_y;
+    const isSplit = DUAL_MODES[dualIdx].name === 'SPLIT';
+    if (isSplit) {
+      state.wave_mode = wave2.mode;
+      state.wave_mystery = wave2.mystery;
+      state.wave_scale = wave2.scale;
+      state.wave_x = wave2.x;
+      state.wave_y = wave2.y;
+    } else {
+      state.wave_mode = getSecondMode();
     }
     const wv2 = buildWaveVerts(wave, aspect);
-    state.wave_mode = origMode;
-    state.wave_mystery = origMy;
-    state.wave_scale = origSc;
+    state.wave_mode = origMode; state.wave_mystery = origMy;
+    state.wave_scale = origSc; state.wave_x = origX; state.wave_y = origY;
     gl.bindBuffer(gl.ARRAY_BUFFER, wBuf); gl.bufferSubData(gl.ARRAY_BUFFER, 0, wv2);
-    if (DUAL_MODES[dualIdx].name === 'SPLIT') {
-      // Hue-shift: rotate RGB channels
-      gl.uniform4f(vU.u_col, state.wave_b, state.wave_r, state.wave_g, state.wave_a * 0.8);
+    if (isSplit) {
+      gl.uniform4f(vU.u_col, wave2.r, wave2.g, wave2.b, wave2.a);
     } else {
       gl.uniform4f(vU.u_col, state.wave_r, state.wave_g, state.wave_b, state.wave_a * 0.7);
     }
-    gl.drawArrays(state.wave_dots ? gl.POINTS : gl.LINE_STRIP, 0, WAVE_N);
+    gl.drawArrays((isSplit ? wave2.dots : state.wave_dots) ? gl.POINTS : gl.LINE_STRIP, 0, WAVE_N);
   }
 
   if(state.wave_thick||state.wave_brighten){
@@ -1632,6 +1653,7 @@ function randomize() {
   transitionFrom = { ...state };
   transitionTarget = target;
   transitionProgress = 0;
+  if (DUAL_MODES[dualIdx].name === 'SPLIT') randomizeWave2();
   currentPresetName = '';
   document.querySelectorAll('.presets button').forEach(b => b.classList.remove('active'));
 }
@@ -1750,6 +1772,30 @@ function stepChaos() {
   if (chaosFrameCount % 900 === 0 && Math.random() < 0.5) {
     state.wave_mode = Math.floor(Math.random() * 24);
     wave_mode2 = -1; // auto-pick new complement
+  }
+
+  // Drift wave2 independently in SPLIT mode
+  if (DUAL_MODES[dualIdx].name === 'SPLIT') {
+    wave2.x += (Math.random() - 0.5) * 0.003;
+    wave2.y += (Math.random() - 0.5) * 0.003;
+    wave2.mystery += (Math.random() - 0.5) * 0.02;
+    wave2.scale += (Math.random() - 0.5) * 0.005;
+    wave2.x = Math.max(0.15, Math.min(0.85, wave2.x));
+    wave2.y = Math.max(0.15, Math.min(0.85, wave2.y));
+    wave2.mystery = Math.max(-3, Math.min(3, wave2.mystery));
+    wave2.scale = Math.max(0.3, Math.min(4, wave2.scale));
+    // Drift color slowly
+    wave2.r += (Math.random() - 0.5) * 0.008;
+    wave2.g += (Math.random() - 0.5) * 0.008;
+    wave2.b += (Math.random() - 0.5) * 0.008;
+    wave2.r = Math.max(0.1, Math.min(1, wave2.r));
+    wave2.g = Math.max(0.1, Math.min(1, wave2.g));
+    wave2.b = Math.max(0.1, Math.min(1, wave2.b));
+    // Occasionally change wave2 mode (~every 12 seconds)
+    if (chaosFrameCount % 720 === 0 && Math.random() < 0.5) {
+      wave2.mode = Math.floor(Math.random() * 24);
+      wave2.dots = Math.random() > 0.8 ? 1 : 0;
+    }
   }
 
   // White-out guard: if brighten is on, keep decay in check
