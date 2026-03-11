@@ -826,11 +826,18 @@ const bloomExtVAO = mkQuadVAO(bloomExtP);
 const bloomBlurVAO = mkQuadVAO(bloomBlurP);
 const bloomBlendVAO = mkQuadVAO(bloomBlendP);
 
-// Warp mesh — 48x36 grid like projectM
-const MESH_W = 48, MESH_H = 36;
+// Warp mesh — variable resolution grid like projectM
+let MESH_W = 48, MESH_H = 36;
+const QUALITY_MODES = [
+  { name: 'PERF',  dprMax: 1, meshW: 48, meshH: 36 },
+  { name: 'BAL',   dprMax: 2, meshW: 48, meshH: 36 },
+  { name: 'ULTRA', dprMax: 0, meshW: 64, meshH: 48 },  // 0 = uncapped
+];
+let qualityIdx = 1; // start on Balanced
 let warpMeshVerts, warpMeshIdx, warpMeshBuf, warpMeshIdxBuf, warpVAO, warpMeshCount;
 
 function buildWarpMesh() {
+  if(warpVAO){gl.deleteVertexArray(warpVAO);gl.deleteBuffer(warpMeshBuf);gl.deleteBuffer(warpMeshIdxBuf);}
   const verts = new Float32Array((MESH_W+1)*(MESH_H+1)*2);
   let vi = 0;
   for (let j = 0; j <= MESH_H; j++) {
@@ -903,7 +910,8 @@ function cleanupFBs() {
 
 function initFBs() {
   const wrap = document.getElementById('preview-wrap');
-  const dpr = Math.min(window.devicePixelRatio||1, 2);
+  const qm = QUALITY_MODES[qualityIdx];
+  const dpr = qm.dprMax ? Math.min(window.devicePixelRatio||1, qm.dprMax) : (window.devicePixelRatio||1);
   canvas.width = wrap.clientWidth * dpr;
   canvas.height = wrap.clientHeight * dpr;
   fbW=canvas.width; fbH=canvas.height;
@@ -1104,6 +1112,15 @@ function buildWaveVerts(samples, aspect) {
   return v;
 }
 
+// Quality toggle
+function cycleQuality() {
+  qualityIdx = (qualityIdx + 1) % QUALITY_MODES.length;
+  const qm = QUALITY_MODES[qualityIdx];
+  MESH_W = qm.meshW; MESH_H = qm.meshH;
+  buildWarpMesh();
+  initFBs();
+}
+
 // Resize
 function resize() { initFBs(); }
 window.addEventListener('resize', resize);
@@ -1271,7 +1288,8 @@ function render() {
   const autoTag = autoRandomInterval ? ' <span class="d">|</span> AUTO' : '';
   const chaosTag = chaosEnabled ? ' <span class="d">|</span> CHAOS' : '';
   const libTag = configLibrary.length ? ` <span class="d">|</span> LIB:${configLibrary.length}` : '';
-  document.getElementById('hud').innerHTML=`${fps} <span class="d">fps</span> ${useMic?'<span class="d">|</span> MIC':''}${trans}${autoTag}${chaosTag}${libTag}`;
+  const qTag = ` <span class="d">|</span> ${QUALITY_MODES[qualityIdx].name}`;
+  document.getElementById('hud').innerHTML=`${fps} <span class="d">fps</span> ${useMic?'<span class="d">|</span> MIC':''}${trans}${autoTag}${chaosTag}${libTag}${qTag}`;
 
   requestAnimationFrame(render);
 }
@@ -1745,6 +1763,7 @@ document.addEventListener('keydown', e => {
     case 'c': toggleChaos(); break;
     case 'f': goFullscreen(); break;
     case 'm': toggleMic(); break;
+    case 'q': cycleQuality(); break;
     case 'h': document.getElementById('hud').style.display = document.getElementById('hud').style.display === 'none' ? '' : 'none'; break;
     case 't': toggleAttribution(); break;
     case ' ': paused=!paused; e.preventDefault(); break;
