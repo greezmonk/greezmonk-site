@@ -1484,6 +1484,23 @@ function randomize() {
     if (target.brighten && target.gamma > 1.5) target.brighten = 0;
     // Tighten decay when brighten or wave_brighten are on
     if ((target.brighten || target.wave_brighten) && target.decay > 0.975) target.decay = 0.97;
+    // Motion injection: many Milkdrop presets have near-default static params
+    // because their real motion came from per-frame equations we can't run.
+    // Inject gentle variety so they don't all look identical.
+    const motionScore = Math.abs(target.zoom - 1) + Math.abs(target.rot) * 10 +
+      Math.abs(target.cx - 0.5) + Math.abs(target.cy - 0.5) +
+      Math.abs(target.dx) * 50 + Math.abs(target.dy) * 50 +
+      Math.abs(target.warp - 0.01);
+    if (motionScore < 0.1) {
+      // Preset has boring motion — inject some life
+      target.zoom = 0.995 + Math.random() * 0.02;
+      target.rot = (Math.random() - 0.5) * 0.04;
+      target.warp = 0.1 + Math.random() * 0.8;
+      target.cx = 0.42 + Math.random() * 0.16;
+      target.cy = 0.42 + Math.random() * 0.16;
+      target.dx = (Math.random() - 0.5) * 0.008;
+      target.dy = (Math.random() - 0.5) * 0.008;
+    }
     // Colorize: if too dark OR too white (milkdrop presets often use 1,1,1 with wavecodes we don't have)
     const cSum = (target.wave_r||0)+(target.wave_g||0)+(target.wave_b||0);
     const cMin = Math.min(target.wave_r||0, target.wave_g||0, target.wave_b||0);
