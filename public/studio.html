@@ -1779,6 +1779,13 @@ function stepChaos() {
     wave_mode2 = -1; // auto-pick new complement
   }
 
+  // Cycle dual mode (~every 20 seconds)
+  if (chaosFrameCount % 1200 === 0) {
+    dualIdx = (dualIdx + 1) % DUAL_MODES.length;
+    wave_mode2 = -1;
+    if (DUAL_MODES[dualIdx].name === 'SPLIT') randomizeWave2();
+  }
+
   // Drift wave2 independently in SPLIT mode
   if (DUAL_MODES[dualIdx].name === 'SPLIT') {
     wave2.x += (Math.random() - 0.5) * 0.003;
