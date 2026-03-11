@@ -20,10 +20,11 @@
     grid-template-rows: auto 1fr auto;
     height: 100vh;
   }
-  body.fullscreen-mode { grid-template-columns: 1fr; }
+  body.fullscreen-mode { grid-template-columns: 1fr; grid-template-rows: 1fr; }
   body.fullscreen-mode #sidebar,
   body.fullscreen-mode #output-panel,
   body.fullscreen-mode header { display: none; }
+  body.fullscreen-mode #preview-wrap { grid-column: 1; grid-row: 1; width: 100vw; height: 100vh; }
 
   header {
     grid-column: 1 / -1; grid-row: 1; padding: 8px 16px;
@@ -1106,16 +1107,34 @@ function buildWaveVerts(samples, aspect) {
 // Resize
 function resize() { initFBs(); }
 window.addEventListener('resize', resize);
-document.addEventListener('fullscreenchange', () => setTimeout(resize, 100));
+document.addEventListener('fullscreenchange', onFsChange);
+document.addEventListener('webkitfullscreenchange', onFsChange);
+
+function onFsChange() {
+  const isFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
+  document.body.classList.toggle('fullscreen-mode', isFs);
+  // Multiple delayed resizes to catch mobile layout reflow
+  setTimeout(resize, 50);
+  setTimeout(resize, 200);
+  setTimeout(resize, 500);
+}
 
 // Fullscreen
 function goFullscreen() {
-  if (document.fullscreenElement) {
-    document.exitFullscreen();
-    document.body.classList.remove('fullscreen-mode');
+  const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
+  if (fsEl) {
+    (document.exitFullscreen || document.webkitExitFullscreen).call(document);
   } else {
-    document.body.requestFullscreen();
-    document.body.classList.add('fullscreen-mode');
+    const el = document.body;
+    const rfs = el.requestFullscreen || el.webkitRequestFullscreen;
+    if (rfs) {
+      rfs.call(el);
+    } else {
+      // iOS Safari fallback: no real fullscreen API, just toggle UI
+      document.body.classList.toggle('fullscreen-mode');
+      setTimeout(resize, 50);
+      setTimeout(resize, 200);
+    }
   }
 }
 
@@ -1457,6 +1476,7 @@ function randomize() {
     if (target.decay > 0.99) target.decay = 0.985;
     if (target.gamma > 2.5) target.gamma = 2.0;
     if (target.zoom > 1.15) target.zoom = 1.1;
+    if (target.zoom < 0.95) target.zoom = 0.95;
     if (target.wave_a < 0.2) target.wave_a = 0.8;
     if (target.wave_scale < 0.7) target.wave_scale = 0.7;
     // Colorize: if too dark OR too white (milkdrop presets often use 1,1,1 with wavecodes we don't have)
@@ -1592,7 +1612,7 @@ let chaosEnabled = false;
 const CHAOS_SPEED = 0.0008; // base drift per frame
 
 const CHAOS_PARAMS = {
-  zoom:  { min: 0.92, max: 1.1, drift: 1 },
+  zoom:  { min: 0.95, max: 1.1, drift: 1 },
   rot:   { min: -0.08, max: 0.08, drift: 1 },
   warp:  { min: 0, max: 2, drift: 0.8 },
   cx:    { min: 0.3, max: 0.7, drift: 0.5 },
