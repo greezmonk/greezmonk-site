@@ -1479,6 +1479,11 @@ function randomize() {
     if (target.zoom < 0.95) target.zoom = 0.95;
     if (target.wave_a < 0.2) target.wave_a = 0.8;
     if (target.wave_scale < 0.7) target.wave_scale = 0.7;
+    // White-out prevention: brighten compounds with high decay into retina death
+    if (target.brighten && target.decay > 0.96) target.brighten = 0;
+    if (target.brighten && target.gamma > 1.5) target.brighten = 0;
+    // Tighten decay when brighten or wave_brighten are on
+    if ((target.brighten || target.wave_brighten) && target.decay > 0.975) target.decay = 0.97;
     // Colorize: if too dark OR too white (milkdrop presets often use 1,1,1 with wavecodes we don't have)
     const cSum = (target.wave_r||0)+(target.wave_g||0)+(target.wave_b||0);
     const cMin = Math.min(target.wave_r||0, target.wave_g||0, target.wave_b||0);
@@ -1667,6 +1672,9 @@ function stepChaos() {
   if (chaosFrameCount % 900 === 0 && Math.random() < 0.5) {
     state.wave_mode = Math.floor(Math.random() * 24);
   }
+
+  // White-out guard: if brighten is on, keep decay in check
+  if ((state.brighten || state.wave_brighten) && state.decay > 0.975) state.decay = 0.97;
 
   // Keep wave color saturated — at least one channel stays bright
   const maxC = Math.max(state.wave_r||0, state.wave_g||0, state.wave_b||0);
