@@ -314,6 +314,15 @@ const PRESETS = {
     wave_scale: 1.074, wave_smoothing: 0, brighten: 0, darken: 0, solarize: 0, invert: 0,
     bloom_strength: 0.3, bloom_threshold: 0.4,
   },
+  accelerator: {
+    _name: 'Accelerator', wave_mode: 16, wave_r: 0, wave_g: 0.93, wave_b: 1, wave_a: 0.8,
+    wave_x: 0.5, wave_y: 0.5, wave_mystery: -0.8, wave_dots: 0, wave_thick: 0, wave_additive: 0, wave_brighten: 0,
+    zoom: 1.0065, rot: 0, warp: 6.166, cx: 0.53, cy: 0.5, dx: 1.0, dy: 0, sx: 100, sy: 79.69,
+    decay: 0.985, gamma: 1.5, ob_size: 0, ob_r: 0, ob_g: 0, ob_b: 0, ob_a: 0,
+    ib_size: 0, ib_r: 0, ib_g: 0, ib_b: 0, ib_a: 0,
+    wave_scale: 3.41, wave_smoothing: 0.63, brighten: 0, darken: 0, solarize: 0, invert: 0,
+    bloom_strength: 0.3, bloom_threshold: 0.4,
+  },
 };
 
 const state = { ...DEFAULTS };
@@ -1284,7 +1293,38 @@ let dualFade = 0; // 0 = second wave invisible, 1 = fully visible
 let dualFadeTarget = 0;
 const DUAL_FADE_SPEED = 0.008; // ~125 frames to full fade = ~2s at 60fps
 
+// Wave2 editing — swap UI controls between shape 1 and shape 2
+let editingWave2 = false;
+const WAVE2_KEYS = ['wave_mode','wave_r','wave_g','wave_b','wave_a','wave_x','wave_y','wave_mystery','wave_dots','wave_thick','wave_additive','wave_brighten','wave_scale','wave_smoothing'];
+let wave1Stash = {}; // stash wave1 params while editing wave2
+
+function toggleWave2Edit() {
+  if (DUAL_MODES[dualIdx].name !== 'SPLIT') return; // only works in SPLIT
+  editingWave2 = !editingWave2;
+  if (editingWave2) {
+    // Stash wave1 params, load wave2 into UI
+    for (const k of WAVE2_KEYS) wave1Stash[k] = state[k];
+    state.wave_mode = wave2.mode;
+    state.wave_r = wave2.r; state.wave_g = wave2.g; state.wave_b = wave2.b; state.wave_a = wave2.a;
+    state.wave_x = wave2.x; state.wave_y = wave2.y;
+    state.wave_mystery = wave2.mystery;
+    state.wave_dots = wave2.dots;
+    state.wave_scale = wave2.scale;
+  } else {
+    // Save UI back to wave2, restore wave1
+    wave2.mode = state.wave_mode;
+    wave2.r = state.wave_r; wave2.g = state.wave_g; wave2.b = state.wave_b; wave2.a = state.wave_a;
+    wave2.x = state.wave_x; wave2.y = state.wave_y;
+    wave2.mystery = state.wave_mystery;
+    wave2.dots = state.wave_dots;
+    wave2.scale = state.wave_scale;
+    for (const k of WAVE2_KEYS) state[k] = wave1Stash[k];
+  }
+  syncUI();
+}
+
 function cycleDual() {
+  if (editingWave2) toggleWave2Edit(); // exit wave2 edit if switching modes
   dualIdx = (dualIdx + 1) % DUAL_MODES.length;
   wave_mode2 = -1;
   dualFadeTarget = DUAL_MODES[dualIdx].count > 1 ? 1 : 0;
@@ -1402,6 +1442,17 @@ function render() {
   gl.bindVertexArray(warpVAO); gl.drawElements(gl.TRIANGLES, warpMeshCount, gl.UNSIGNED_SHORT, 0);
 
   // Pass 2: Waves
+  // If editing wave2, state has wave2's values — swap to wave1 for drawing
+  let editSwapped = false;
+  if (editingWave2) {
+    // Save current wave2 edits from state, load wave1 for rendering
+    wave2.mode = state.wave_mode; wave2.r = state.wave_r; wave2.g = state.wave_g;
+    wave2.b = state.wave_b; wave2.a = state.wave_a; wave2.x = state.wave_x;
+    wave2.y = state.wave_y; wave2.mystery = state.wave_mystery;
+    wave2.dots = state.wave_dots; wave2.scale = state.wave_scale;
+    for (const k of WAVE2_KEYS) state[k] = wave1Stash[k];
+    editSwapped = true;
+  }
   gl.enable(gl.BLEND);
   gl.blendFunc(state.wave_additive?gl.SRC_ALPHA:gl.SRC_ALPHA, state.wave_additive?gl.ONE:gl.ONE_MINUS_SRC_ALPHA);
 
@@ -1487,6 +1538,14 @@ function render() {
   }
   gl.disable(gl.BLEND);
 
+  // Restore wave2 values to state if we swapped for rendering
+  if (editSwapped) {
+    state.wave_mode = wave2.mode; state.wave_r = wave2.r; state.wave_g = wave2.g;
+    state.wave_b = wave2.b; state.wave_a = wave2.a; state.wave_x = wave2.x;
+    state.wave_y = wave2.y; state.wave_mystery = wave2.mystery;
+    state.wave_dots = wave2.dots; state.wave_scale = wave2.scale;
+  }
+
   // Pass 3: Composite → intermediate FB (for bloom source)
   gl.bindFramebuffer(gl.FRAMEBUFFER, compFB); gl.viewport(0,0,w,h);
   gl.useProgram(compP);
@@ -1548,7 +1607,8 @@ function render() {
   const autoTag = autoRandomInterval ? ' <span class="d">|</span> AUTO' : '';
   const chaosTag = chaosEnabled ? ' <span class="d">|</span> CHAOS' : '';
   const libTag = configLibrary.length ? ` <span class="d">|</span> LIB:${configLibrary.length}` : '';
-  const dualTag = dualIdx > 0 ? ` <span class="d">|</span> ${DUAL_MODES[dualIdx].name}` : '';
+  const editTag = editingWave2 ? ' <span style="color:#ff0">EDIT:W2</span>' : '';
+  const dualTag = dualIdx > 0 ? ` <span class="d">|</span> ${DUAL_MODES[dualIdx].name}${editTag}` : '';
   const warpTag = ` <span class="d">|</span> ${WARP_MODE_NAMES[Math.floor(warpMode) % 5]}`;
   const qTag = ` <span class="d">|</span> ${QUALITY_MODES[qualityIdx].name}`;
   document.getElementById('hud').innerHTML=`${fps} <span class="d">fps</span> ${useMic?'<span class="d">|</span> MIC':''}${trans}${autoTag}${chaosTag}${libTag}${dualTag}${warpTag}${qTag}`;
@@ -2073,12 +2133,14 @@ document.addEventListener('keydown', e => {
     case '5': loadPreset('water'); break;
     case '6': loadPreset('fire'); break;
     case '7': loadPreset('fractal_spiral'); break;
+    case '8': loadPreset('accelerator'); break;
     case 'r': randomize(); break;
     case 'a': toggleAutoRandom(); break;
     case 'c': toggleChaos(); break;
     case 'f': goFullscreen(); break;
     case 'm': toggleMic(); break;
     case 'd': cycleDual(); break;
+    case 'e': toggleWave2Edit(); break;
     case 'w': cycleWarpMode(); break;
     case 'q': cycleQuality(); break;
     case 'h': document.getElementById('hud').style.display = document.getElementById('hud').style.display === 'none' ? '' : 'none'; break;
