@@ -731,6 +731,55 @@ const WARP_MESH_VS = `#version 300 es
 in vec2 a_pos;
 out vec2 v_uv;
 uniform float u_time, u_zoom, u_rot, u_warp, u_cx, u_cy, u_dx, u_dy, u_sx, u_sy;
+uniform float u_warp_mode, u_warp_blend; // mode A = floor(u_warp_mode), mode B = A+1, blend between
+
+// Warp displacement for a given mode
+vec2 warpDisplace(float mode, vec2 rel, float r, float a, float w, float t) {
+  int m = int(mode);
+  vec2 d = vec2(0.0);
+
+  if (m == 0) {
+    // Ripple — radial sine waves (original)
+    float w1 = sin(r*12.0 + t*0.8 + a*2.0) * w;
+    float w2 = sin(r*8.0 - t*0.5 + a*3.0) * w * 0.6;
+    float w3 = sin(a*5.0 + t*0.3 + r*15.0) * w * 0.4;
+    d = vec2((w1+w3)*cos(a) - w2*sin(a), (w1+w3)*sin(a) + w2*cos(a));
+
+  } else if (m == 1) {
+    // Vortex — rotation increases toward center, spiral drain
+    float vortex = w * 2.0 / (r + 0.1);
+    float va = a + vortex * sin(t * 0.3) + t * 0.15;
+    d = vec2(cos(va) - cos(a), sin(va) - sin(a)) * r * 0.15;
+    // Add subtle radial pull
+    d += normalize(rel + 0.001) * sin(r * 6.0 + t) * w * 0.3;
+
+  } else if (m == 2) {
+    // Turbulence — layered pseudo-noise, organic chaos
+    float n1 = sin(rel.x*8.0 + t*0.7) * cos(rel.y*6.0 - t*0.5);
+    float n2 = sin(rel.y*10.0 + t*0.4 + rel.x*4.0) * cos(rel.x*7.0 + t*0.6);
+    float n3 = sin((rel.x+rel.y)*12.0 - t*0.8) * 0.5;
+    float n4 = cos(r*9.0 + a*3.0 + t*0.35) * 0.4;
+    d = vec2(n1 + n3, n2 + n4) * w * 0.8;
+
+  } else if (m == 3) {
+    // Kaleidoscope — angular folding, mirror reflections
+    float segments = 6.0;
+    float sa = mod(a + 3.14159, 6.28318 / segments);
+    sa = abs(sa - 3.14159 / segments);
+    float ka = sa - a;
+    d = vec2(cos(a + ka * w * 8.0) - cos(a), sin(a + ka * w * 8.0) - sin(a)) * r * 0.2;
+    d += vec2(sin(r * 10.0 + t * 0.5) * w * 0.3, cos(r * 8.0 - t * 0.4) * w * 0.3);
+
+  } else {
+    // Pulse — radial breathing, expansion/contraction waves
+    float pulse = sin(r * 4.0 - t * 1.5) * w;
+    float pulse2 = sin(r * 7.0 + t * 0.8 + a) * w * 0.4;
+    float breathe = sin(t * 0.4) * w * 0.5;
+    d = normalize(rel + 0.001) * (pulse + pulse2 + breathe) * 0.5;
+  }
+  return d;
+}
+
 void main() {
   vec2 uv = a_pos;
   vec2 c = vec2(u_cx, u_cy);
@@ -740,12 +789,14 @@ void main() {
   // Rotation
   float cs = cos(u_rot), sn = sin(u_rot);
   rel = vec2(rel.x*cs - rel.y*sn, rel.x*sn + rel.y*cs);
-  // Warp displacement per-vertex
+  // Warp displacement — blend between two modes
   float r = length(rel), a = atan(rel.y, rel.x), w = u_warp * 0.04;
-  float w1 = sin(r*12.0 + u_time*0.8 + a*2.0) * w;
-  float w2 = sin(r*8.0 - u_time*0.5 + a*3.0) * w * 0.6;
-  float w3 = sin(a*5.0 + u_time*0.3 + r*15.0) * w * 0.4;
-  rel += vec2((w1+w3)*cos(a) - w2*sin(a), (w1+w3)*sin(a) + w2*cos(a));
+  float modeA = floor(u_warp_mode);
+  float modeB = mod(modeA + 1.0, 5.0);
+  float blend = fract(u_warp_mode);
+  vec2 dA = warpDisplace(modeA, rel, r, a, w, u_time);
+  vec2 dB = warpDisplace(modeB, rel, r, a, w, u_time);
+  rel += mix(dA, dB, blend);
   // Pan
   rel -= vec2(u_dx, u_dy);
   v_uv = rel + c;
@@ -869,7 +920,7 @@ const bloomBlurP = mkProg(QUAD_VS, BLOOM_BLUR_FS);
 const bloomBlendP = mkProg(QUAD_VS, BLOOM_BLEND_FS);
 
 function uL(p,n) { return gl.getUniformLocation(p,n); }
-const wU={}; ['u_prev','u_time','u_zoom','u_rot','u_warp','u_cx','u_cy','u_dx','u_dy','u_sx','u_sy','u_decay'].forEach(n=>wU[n]=uL(warpP,n));
+const wU={}; ['u_prev','u_time','u_zoom','u_rot','u_warp','u_cx','u_cy','u_dx','u_dy','u_sx','u_sy','u_decay','u_warp_mode','u_warp_blend'].forEach(n=>wU[n]=uL(warpP,n));
 const cU={}; ['u_tex','u_gamma','u_darken','u_brighten','u_solarize','u_invert','u_obSize','u_obCol'].forEach(n=>cU[n]=uL(compP,n));
 const vU={}; ['u_col','u_width','u_glow'].forEach(n=>vU[n]=uL(waveP,n));
 const vUL={}; ['u_col'].forEach(n=>vUL[n]=uL(waveLegacyP,n));
@@ -1251,6 +1302,30 @@ function getSecondMode() {
   return (state.wave_mode + Math.floor(total / 2) + 3) % total;
 }
 
+// Warp mode — smooth float, floor = current mode, fract = blend to next
+const WARP_MODE_NAMES = ['RIPPLE', 'VORTEX', 'TURB', 'KALEID', 'PULSE'];
+let warpMode = 0.0; // 0-4, fractional = blending
+let warpModeTarget = 0;
+const WARP_MORPH_SPEED = 0.008; // ~2s to crossfade between modes
+
+function cycleWarpMode() {
+  warpModeTarget = (Math.floor(warpModeTarget) + 1) % 5;
+}
+
+function stepWarpMode() {
+  // Drift warpMode toward target with wrapping
+  if (Math.abs(warpMode - warpModeTarget) > 0.01) {
+    // Determine shortest direction (with wrapping at 5)
+    let diff = warpModeTarget - Math.floor(warpMode);
+    if (diff < 0) diff += 5;
+    warpMode += WARP_MORPH_SPEED;
+    if (warpMode >= 5.0) warpMode -= 5.0;
+    if (Math.abs(warpMode - warpModeTarget) < WARP_MORPH_SPEED * 2) {
+      warpMode = warpModeTarget;
+    }
+  }
+}
+
 // Quality toggle
 function cycleQuality() {
   qualityIdx = (qualityIdx + 1) % QUALITY_MODES.length;
@@ -1313,6 +1388,7 @@ function render() {
   else if(currentPresetName==='metheus'){const p1=t*.0617,p2=t*.0431,p3=t*.0829,p4=t*.0173;dZ=.996+.005*Math.sin(p1)+.004*audio.bass;dR=.015*Math.sin(p2)+.01*audio.mid*Math.sin(p3);dCx=.5+.06*Math.sin(p1)+.04*audio.bass*Math.cos(p3);dCy=.5+.06*Math.cos(p2)+.04*audio.bass*Math.sin(p4);dW=.4+.3*Math.sin(p3)+.25*audio.mid;dD=.96+.025*(1-audio.bass*.5);}
 
   // Pass 1: Warp (mesh)
+  stepWarpMode();
   gl.bindFramebuffer(gl.FRAMEBUFFER,writeFB); gl.viewport(0,0,w,h);
   gl.useProgram(warpP);
   gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D,readTex);
@@ -1322,6 +1398,7 @@ function render() {
   gl.uniform1f(wU.u_dx,state.dx); gl.uniform1f(wU.u_dy,state.dy);
   gl.uniform1f(wU.u_sx,state.sx); gl.uniform1f(wU.u_sy,state.sy);
   gl.uniform1f(wU.u_decay,dD);
+  gl.uniform1f(wU.u_warp_mode, warpMode);
   gl.bindVertexArray(warpVAO); gl.drawElements(gl.TRIANGLES, warpMeshCount, gl.UNSIGNED_SHORT, 0);
 
   // Pass 2: Waves
@@ -1472,8 +1549,9 @@ function render() {
   const chaosTag = chaosEnabled ? ' <span class="d">|</span> CHAOS' : '';
   const libTag = configLibrary.length ? ` <span class="d">|</span> LIB:${configLibrary.length}` : '';
   const dualTag = dualIdx > 0 ? ` <span class="d">|</span> ${DUAL_MODES[dualIdx].name}` : '';
+  const warpTag = ` <span class="d">|</span> ${WARP_MODE_NAMES[Math.floor(warpMode) % 5]}`;
   const qTag = ` <span class="d">|</span> ${QUALITY_MODES[qualityIdx].name}`;
-  document.getElementById('hud').innerHTML=`${fps} <span class="d">fps</span> ${useMic?'<span class="d">|</span> MIC':''}${trans}${autoTag}${chaosTag}${libTag}${dualTag}${qTag}`;
+  document.getElementById('hud').innerHTML=`${fps} <span class="d">fps</span> ${useMic?'<span class="d">|</span> MIC':''}${trans}${autoTag}${chaosTag}${libTag}${dualTag}${warpTag}${qTag}`;
 
   requestAnimationFrame(render);
 }
@@ -1921,6 +1999,12 @@ function stepChaos(audio) {
     wave_mode2 = -1;
   }
 
+  // Drift warp mode (~every 25 seconds, audio-influenced)
+  const warpChance = energy > 0.5 ? 1200 : 1500;
+  if (chaosFrameCount % warpChance === 0 && Math.random() < 0.4) {
+    warpModeTarget = Math.floor(Math.random() * 5);
+  }
+
   // Drift wave2 independently in SPLIT mode — audio reactive
   if (DUAL_MODES[dualIdx].name === 'SPLIT') {
     const w2drift = 0.5 + energy * 2;
@@ -1995,6 +2079,7 @@ document.addEventListener('keydown', e => {
     case 'f': goFullscreen(); break;
     case 'm': toggleMic(); break;
     case 'd': cycleDual(); break;
+    case 'w': cycleWarpMode(); break;
     case 'q': cycleQuality(); break;
     case 'h': document.getElementById('hud').style.display = document.getElementById('hud').style.display === 'none' ? '' : 'none'; break;
     case 't': toggleAttribution(); break;
