@@ -305,6 +305,15 @@ const PRESETS = {
     wave_scale: 4, wave_smoothing: 1, brighten: 0, darken: 0, solarize: 0, invert: 0,
     bloom_strength: 0.45, bloom_threshold: 0.3,
   },
+  fractal_spiral: {
+    _name: 'Fractal Spiral', wave_mode: 21, wave_r: 0.65, wave_g: 0.65, wave_b: 0.65, wave_a: 1,
+    wave_x: 0.5, wave_y: 0.5, wave_mystery: 0, wave_dots: 0, wave_thick: 1, wave_additive: 0, wave_brighten: 0,
+    zoom: 1.003, rot: 0.0145, warp: 0.234, cx: 0.497, cy: 0.458, dx: 0.0006, dy: -0.0035, sx: 2.548, sy: 2.007,
+    decay: 0.947, gamma: 1, ob_size: 0.01, ob_r: 0, ob_g: 0, ob_b: 0, ob_a: 0,
+    ib_size: 0.26, ib_r: 0.25, ib_g: 0.25, ib_b: 0.25, ib_a: 0,
+    wave_scale: 1.074, wave_smoothing: 0, brighten: 0, darken: 0, solarize: 0, invert: 0,
+    bloom_strength: 0.3, bloom_threshold: 0.4,
+  },
 };
 
 const state = { ...DEFAULTS };
@@ -1693,10 +1702,12 @@ function randomize() {
       target.zoom = 0.995 + Math.random() * 0.02;
       target.rot = (Math.random() - 0.5) * 0.04;
       target.warp = 0.1 + Math.random() * 0.8;
-      target.cx = 0.42 + Math.random() * 0.16;
-      target.cy = 0.42 + Math.random() * 0.16;
-      target.dx = (Math.random() - 0.5) * 0.008;
-      target.dy = (Math.random() - 0.5) * 0.008;
+      target.cx = 0.25 + Math.random() * 0.5;
+      target.cy = 0.25 + Math.random() * 0.5;
+      target.dx = (Math.random() - 0.5) * 0.02;
+      target.dy = (Math.random() - 0.5) * 0.02;
+      // 15% chance to inject fractal stretch
+      if (Math.random() < 0.15) { target.sx = 1.3 + Math.random() * 1.2; target.sy = 1.3 + Math.random() * 1.2; target.decay = Math.min(target.decay, 0.955); }
     }
     // Colorize: if too dark OR too white (milkdrop presets often use 1,1,1 with wavecodes we don't have)
     const cSum = (target.wave_r||0)+(target.wave_g||0)+(target.wave_b||0);
@@ -1728,12 +1739,19 @@ function randomize() {
     target.zoom = 0.95 + Math.random() * 0.15;
     target.rot = (Math.random() - 0.5) * 0.08;
     target.warp = Math.random() * 1.5;
-    target.cx = 0.4 + Math.random() * 0.2;
-    target.cy = 0.4 + Math.random() * 0.2;
-    target.dx = (Math.random() - 0.5) * 0.02;
-    target.dy = (Math.random() - 0.5) * 0.02;
-    target.sx = 0.95 + Math.random() * 0.1;
-    target.sy = 0.95 + Math.random() * 0.1;
+    target.cx = 0.2 + Math.random() * 0.6;
+    target.cy = 0.2 + Math.random() * 0.6;
+    target.dx = (Math.random() - 0.5) * 0.04;
+    target.dy = (Math.random() - 0.5) * 0.04;
+    // ~20% chance of fractal stretch (sx/sy > 1.5), otherwise normal range
+    if (Math.random() < 0.2) {
+      target.sx = 1.2 + Math.random() * 1.6;
+      target.sy = 1.2 + Math.random() * 1.6;
+      target.decay = 0.92 + Math.random() * 0.04; // lower decay for fractal to prevent smear
+    } else {
+      target.sx = 0.9 + Math.random() * 0.2;
+      target.sy = 0.9 + Math.random() * 0.2;
+    }
     target.decay = 0.92 + Math.random() * 0.06; // cap at 0.98 to prevent white-out
     target.wave_scale = 0.5 + Math.random() * 2.5;
     target.wave_smoothing = Math.random();
@@ -1828,12 +1846,12 @@ const CHAOS_PARAMS = {
   zoom:  { min: 0.95, max: 1.1, drift: 1 },
   rot:   { min: -0.08, max: 0.08, drift: 1 },
   warp:  { min: 0, max: 2, drift: 0.8 },
-  cx:    { min: 0.3, max: 0.7, drift: 0.5 },
-  cy:    { min: 0.3, max: 0.7, drift: 0.5 },
-  dx:    { min: -0.015, max: 0.015, drift: 0.3 },
-  dy:    { min: -0.015, max: 0.015, drift: 0.3 },
-  sx:    { min: 0.95, max: 1.05, drift: 0.3 },
-  sy:    { min: 0.95, max: 1.05, drift: 0.3 },
+  cx:    { min: 0.15, max: 0.85, drift: 0.7 },
+  cy:    { min: 0.15, max: 0.85, drift: 0.7 },
+  dx:    { min: -0.04, max: 0.04, drift: 0.5 },
+  dy:    { min: -0.04, max: 0.04, drift: 0.5 },
+  sx:    { min: 0.8, max: 2.8, drift: 0.4 },
+  sy:    { min: 0.8, max: 2.8, drift: 0.4 },
   decay: { min: 0.93, max: 0.985, drift: 0.3 },
   wave_r: { min: 0.1, max: 1, drift: 0.4 },
   wave_g: { min: 0.05, max: 1, drift: 0.4 },
@@ -1961,6 +1979,7 @@ document.addEventListener('keydown', e => {
     case '4': loadPreset('metheus'); break;
     case '5': loadPreset('water'); break;
     case '6': loadPreset('fire'); break;
+    case '7': loadPreset('fractal_spiral'); break;
     case 'r': randomize(); break;
     case 'a': toggleAutoRandom(); break;
     case 'c': toggleChaos(); break;
