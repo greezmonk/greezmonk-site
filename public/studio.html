@@ -274,6 +274,7 @@ const DEFAULTS = {
   ib_size: 0.01, ib_r: 0.25, ib_g: 0.25, ib_b: 0.25, ib_a: 0,
   brighten: 0, darken: 0, solarize: 0, invert: 0,
   wave_scale: 1, wave_smoothing: 0.75,
+  wave_r2: 1, wave_g2: 0, wave_b2: 0, wave_gradient: 0,
   bloom_strength: 0.3, bloom_threshold: 0.4,
   audio_bass_gain: 3, audio_mid_gain: 1.5, audio_treb_gain: 0.25, audio_trigger: 0.5,
   transition_speed: 0.003, auto_interval: 5,
@@ -385,6 +386,11 @@ const GROUPS = [
     { type: 'slider', key: 'wave_b', min: 0, max: 1, step: 0.01, label: 'blue' },
     { type: 'slider', key: 'wave_a', min: 0, max: 1, step: 0.01, label: 'alpha' },
     { type: 'color', keys: ['wave_r','wave_g','wave_b','wave_a'] },
+    { type: 'slider', key: 'wave_gradient', min: 0, max: 1, step: 0.01, label: 'gradient' },
+    { type: 'slider', key: 'wave_r2', min: 0, max: 1, step: 0.01, label: 'end red' },
+    { type: 'slider', key: 'wave_g2', min: 0, max: 1, step: 0.01, label: 'end green' },
+    { type: 'slider', key: 'wave_b2', min: 0, max: 1, step: 0.01, label: 'end blue' },
+    { type: 'color', keys: ['wave_r2','wave_g2','wave_b2'] },
     { type: 'slider', key: 'wave_x', min: 0, max: 1, step: 0.01, label: 'x pos' },
     { type: 'slider', key: 'wave_y', min: 0, max: 1, step: 0.01, label: 'y pos' },
   ]},
@@ -866,32 +872,40 @@ const WAVE_FS_LEGACY = `#version 300 es
 precision highp float; out vec4 o; uniform vec4 u_col;
 void main() { o = u_col; }`;
 
-// Thick glow wave shader — triangle strip with distance-based falloff
+// Thick glow wave shader — triangle strip with per-vertex color gradient
 const WAVE_VS = `#version 300 es
 in vec2 a_pos;    // center line position
 in vec2 a_normal; // perpendicular offset direction
 in float a_side;  // -1 or +1 (which side of the line)
+in float a_t;     // 0-1 position along the line (for color gradient)
 uniform float u_width; // half-width in clip space
 out float v_edge; // 0 at center, 1 at edge
+out float v_t;    // position along line
 void main() {
   vec2 offset = a_normal * a_side * u_width;
   gl_Position = vec4(a_pos + offset, 0.0, 1.0);
-  v_edge = a_side; // interpolates -1 to +1 across strip, abs() in FS
+  v_edge = a_side;
+  v_t = a_t;
 }`;
 const WAVE_FS = `#version 300 es
 precision highp float; out vec4 o;
 uniform vec4 u_col;
-uniform float u_glow; // 0 = hard edge, 1 = full glow
+uniform vec3 u_col2;      // gradient end color (u_col.rgb = start)
+uniform float u_gradient;  // 0 = flat color, 1 = full gradient
+uniform float u_glow;
 in float v_edge;
+in float v_t;
 void main() {
-  float d = abs(v_edge); // 0 at center, 1 at edges
-  // Core: bright center, soft glow at edges
+  float d = abs(v_edge);
   float core = 1.0 - smoothstep(0.0, 0.25, d);
   float glow = 1.0 - smoothstep(0.1, 1.0, d);
   float alpha = core + glow * u_glow * 0.6;
   alpha = clamp(alpha, 0.0, 1.0);
-  float brightness = core * 0.5 + 0.5;
-  o = vec4(u_col.rgb * brightness, u_col.a * alpha);
+  // Per-vertex color: lerp between start and end color along the line
+  vec3 baseCol = mix(u_col.rgb, u_col2, v_t * u_gradient);
+  // Full color at core, slightly dimmed at glow edges (preserves vibrancy)
+  float brightness = mix(1.0, 0.6, d * d);
+  o = vec4(baseCol * brightness, u_col.a * alpha);
 }`;
 
 const COMP_FS = `#version 300 es
@@ -969,7 +983,7 @@ const bloomBlendP = mkProg(QUAD_VS, BLOOM_BLEND_FS);
 function uL(p,n) { return gl.getUniformLocation(p,n); }
 const wU={}; ['u_prev','u_time','u_zoom','u_rot','u_warp','u_cx','u_cy','u_dx','u_dy','u_sx','u_sy','u_decay','u_warp_mode','u_warp_blend'].forEach(n=>wU[n]=uL(warpP,n));
 const cU={}; ['u_tex','u_gamma','u_darken','u_brighten','u_solarize','u_invert','u_obSize','u_obCol'].forEach(n=>cU[n]=uL(compP,n));
-const vU={}; ['u_col','u_width','u_glow'].forEach(n=>vU[n]=uL(waveP,n));
+const vU={}; ['u_col','u_col2','u_gradient','u_width','u_glow'].forEach(n=>vU[n]=uL(waveP,n));
 const vUL={}; ['u_col'].forEach(n=>vUL[n]=uL(waveLegacyP,n));
 const beU={}; ['u_tex','u_threshold'].forEach(n=>beU[n]=uL(bloomExtP,n));
 const bbU={}; ['u_tex','u_dir'].forEach(n=>bbU[n]=uL(bloomBlurP,n));
@@ -1047,38 +1061,38 @@ gl.enableVertexAttribArray(wPosLL);
 gl.vertexAttribPointer(wPosLL, 2, gl.FLOAT, false, 0, 0);
 gl.bindVertexArray(null);
 
-// Thick line VAO — triangle strip: pos(2) + normal(2) + side(1) = 5 floats per vert, 2 verts per point
-const THICK_STRIDE = 5 * 4; // 5 floats * 4 bytes
+// Thick line VAO — triangle strip: pos(2) + normal(2) + side(1) + t(1) = 6 floats per vert, 2 verts per point
+const THICK_STRIDE = 6 * 4; // 6 floats * 4 bytes
 const wBuf = gl.createBuffer();
 const waveVAO = gl.createVertexArray();
 gl.bindVertexArray(waveVAO);
 gl.bindBuffer(gl.ARRAY_BUFFER, wBuf);
-gl.bufferData(gl.ARRAY_BUFFER, (WAVE_N + 4) * 2 * THICK_STRIDE, gl.DYNAMIC_DRAW); // +4 for closed stroke overlap
+gl.bufferData(gl.ARRAY_BUFFER, (WAVE_N + 4) * 2 * THICK_STRIDE, gl.DYNAMIC_DRAW);
 const tPosL = gl.getAttribLocation(waveP, 'a_pos');
 const tNormL = gl.getAttribLocation(waveP, 'a_normal');
 const tSideL = gl.getAttribLocation(waveP, 'a_side');
+const tTL = gl.getAttribLocation(waveP, 'a_t');
 if (tPosL >= 0) { gl.enableVertexAttribArray(tPosL); gl.vertexAttribPointer(tPosL, 2, gl.FLOAT, false, THICK_STRIDE, 0); }
 if (tNormL >= 0) { gl.enableVertexAttribArray(tNormL); gl.vertexAttribPointer(tNormL, 2, gl.FLOAT, false, THICK_STRIDE, 8); }
 if (tSideL >= 0) { gl.enableVertexAttribArray(tSideL); gl.vertexAttribPointer(tSideL, 1, gl.FLOAT, false, THICK_STRIDE, 16); }
+if (tTL >= 0) { gl.enableVertexAttribArray(tTL); gl.vertexAttribPointer(tTL, 1, gl.FLOAT, false, THICK_STRIDE, 20); }
 gl.bindVertexArray(null);
 
-// Expand centerline points into triangle strip with normals
+// Expand centerline points into triangle strip with normals + t position
 function buildThickLine(centerVerts) {
-  // Build thick line for a segment of centerVerts
-  // start/count define the range within the full WAVE_N array
-  // output: writes into 'out' at the appropriate offset
-  const out = new Float32Array(WAVE_N * 2 * 5);
+  const out = new Float32Array(WAVE_N * 2 * 6);
   for (let i = 0; i < WAVE_N; i++) {
     const x = centerVerts[i*2], y = centerVerts[i*2+1];
+    const t = i / (WAVE_N - 1); // 0-1 along line
     let dx, dy;
     if (i === 0) { dx = centerVerts[2] - x; dy = centerVerts[3] - y; }
     else if (i === WAVE_N-1) { dx = x - centerVerts[(i-1)*2]; dy = y - centerVerts[(i-1)*2+1]; }
     else { dx = centerVerts[(i+1)*2] - centerVerts[(i-1)*2]; dy = centerVerts[(i+1)*2+1] - centerVerts[(i-1)*2+1]; }
     const len = Math.sqrt(dx*dx + dy*dy) || 0.001;
     const nx = -dy/len, ny = dx/len;
-    const base = i * 10;
-    out[base]   = x; out[base+1] = y; out[base+2] = nx; out[base+3] = ny; out[base+4] = -1;
-    out[base+5] = x; out[base+6] = y; out[base+7] = nx; out[base+8] = ny; out[base+9] = 1;
+    const base = i * 12; // 6 floats * 2 verts
+    out[base]   = x; out[base+1] = y; out[base+2] = nx; out[base+3] = ny; out[base+4] = -1; out[base+5] = t;
+    out[base+6] = x; out[base+7] = y; out[base+8] = nx; out[base+9] = ny; out[base+10] = 1; out[base+11] = t;
   }
   return out;
 }
@@ -1086,17 +1100,15 @@ function buildThickLine(centerVerts) {
 // Build thick line for a single stroke segment
 // closed=true: wrap tangent at endpoints + add overlap verts to close the loop
 function buildThickLineSegment(centerVerts, start, count, closed) {
-  // For closed loops, add 2 overlap points to seamlessly close the circle
   const totalPts = closed ? count + 2 : count;
-  const out = new Float32Array(totalPts * 2 * 5);
+  const out = new Float32Array(totalPts * 2 * 6);
   for (let j = 0; j < totalPts; j++) {
-    // Map j back to source index, wrapping for closed loops
     const srcJ = closed ? (j % count) : j;
     const i = start + srcJ;
     const x = centerVerts[i*2], y = centerVerts[i*2+1];
+    const t = srcJ / (count - 1 || 1); // 0-1 along this stroke
     let dx, dy;
     if (closed) {
-      // Wrap neighbors around the loop
       const prevJ = (srcJ - 1 + count) % count;
       const nextJ = (srcJ + 1) % count;
       const pi = start + prevJ, ni = start + nextJ;
@@ -1110,9 +1122,9 @@ function buildThickLineSegment(centerVerts, start, count, closed) {
     }
     const len = Math.sqrt(dx*dx + dy*dy) || 0.001;
     const nx = -dy/len, ny = dx/len;
-    const base = j * 10;
-    out[base]   = x; out[base+1] = y; out[base+2] = nx; out[base+3] = ny; out[base+4] = -1;
-    out[base+5] = x; out[base+6] = y; out[base+7] = nx; out[base+8] = ny; out[base+9] = 1;
+    const base = j * 12; // 6 floats * 2 verts
+    out[base]   = x; out[base+1] = y; out[base+2] = nx; out[base+3] = ny; out[base+4] = -1; out[base+5] = t;
+    out[base+6] = x; out[base+7] = y; out[base+8] = nx; out[base+9] = ny; out[base+10] = 1; out[base+11] = t;
   }
   return { data: out, vertCount: totalPts * 2 };
 }
@@ -1568,9 +1580,9 @@ function render() {
   // Base line width in clip space — audio reactive
   const baseWidth = 0.008 + audio.bass * 0.006;
 
-  // Helper: draw a wave shape (thick line or dots), with multi-stroke support
-  function drawWave(waveData, r, g, b, a, useDots, widthMul) {
-    const verts = waveData.verts || waveData; // backward compat
+  // Helper: draw a wave shape (thick line or dots), with multi-stroke + gradient support
+  function drawWave(waveData, r, g, b, a, useDots, widthMul, r2, g2, b2, gradient) {
+    const verts = waveData.verts || waveData;
     const strokes = waveData.strokes || null;
     if (useDots) {
       gl.useProgram(waveLegacyP);
@@ -1580,21 +1592,23 @@ function render() {
       gl.uniform4f(vUL.u_col, r, g, b, a);
       gl.drawArrays(gl.POINTS, 0, WAVE_N);
     } else if (!strokes) {
-      // Single continuous stroke (most shapes)
       gl.useProgram(waveP);
       gl.bindVertexArray(waveVAO);
       const thick = buildThickLine(verts);
       gl.bindBuffer(gl.ARRAY_BUFFER, wBuf);
       gl.bufferSubData(gl.ARRAY_BUFFER, 0, thick);
       gl.uniform4f(vU.u_col, r, g, b, a);
+      gl.uniform3f(vU.u_col2, r2||r, g2||g, b2||b);
+      gl.uniform1f(vU.u_gradient, gradient||0);
       gl.uniform1f(vU.u_width, baseWidth * (widthMul || 1));
       gl.uniform1f(vU.u_glow, 0.8);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, WAVE_N * 2);
     } else {
-      // Multi-stroke: draw each segment separately (pen lifts between)
       gl.useProgram(waveP);
       gl.bindVertexArray(waveVAO);
       gl.uniform4f(vU.u_col, r, g, b, a);
+      gl.uniform3f(vU.u_col2, r2||r, g2||g, b2||b);
+      gl.uniform1f(vU.u_gradient, gradient||0);
       gl.uniform1f(vU.u_width, baseWidth * (widthMul || 1));
       gl.uniform1f(vU.u_glow, 0.8);
       for (const stroke of strokes) {
@@ -1622,14 +1636,14 @@ function render() {
     const wvOld = buildWaveVerts(wave, aspect);
     state.wave_mode = oldMode;
     const oldR = transitionFrom.wave_r ?? state.wave_r, oldG = transitionFrom.wave_g ?? state.wave_g, oldB = transitionFrom.wave_b ?? state.wave_b;
-    drawWave(wvOld, oldR, oldG, oldB, state.wave_a * fadeOut, state.wave_dots, 1);
+    drawWave(wvOld, oldR, oldG, oldB, state.wave_a * fadeOut, state.wave_dots, 1, state.wave_r2, state.wave_g2, state.wave_b2, state.wave_gradient);
     state.wave_mode = transitionTarget.wave_mode;
     const wvNew = buildWaveVerts(wave, aspect);
     state.wave_mode = oldMode;
-    drawWave(wvNew, state.wave_r, state.wave_g, state.wave_b, state.wave_a * fadeIn, state.wave_dots, 1);
+    drawWave(wvNew, state.wave_r, state.wave_g, state.wave_b, state.wave_a * fadeIn, state.wave_dots, 1, state.wave_r2, state.wave_g2, state.wave_b2, state.wave_gradient);
   } else {
     const wv = buildWaveVerts(wave, aspect);
-    drawWave(wv, state.wave_r, state.wave_g, state.wave_b, state.wave_a, state.wave_dots, 1);
+    drawWave(wv, state.wave_r, state.wave_g, state.wave_b, state.wave_a, state.wave_dots, 1, state.wave_r2, state.wave_g2, state.wave_b2, state.wave_gradient);
   }
 
   // Dual/Split wave: draw second shape (with fade)
@@ -1652,16 +1666,16 @@ function render() {
     state.wave_mode = origMode; state.wave_mystery = origMy;
     state.wave_scale = origSc; state.wave_x = origX; state.wave_y = origY;
     if (isSplit) {
-      drawWave(wv2, wave2.r, wave2.g, wave2.b, wave2.a * dualFade, wave2.dots, 0.8);
+      drawWave(wv2, wave2.r, wave2.g, wave2.b, wave2.a * dualFade, wave2.dots, 0.8, state.wave_r2, state.wave_g2, state.wave_b2, state.wave_gradient);
     } else {
-      drawWave(wv2, state.wave_r, state.wave_g, state.wave_b, state.wave_a * 0.7 * dualFade, state.wave_dots, 0.8);
+      drawWave(wv2, state.wave_r, state.wave_g, state.wave_b, state.wave_a * 0.7 * dualFade, state.wave_dots, 0.8, state.wave_r2, state.wave_g2, state.wave_b2, state.wave_gradient);
     }
   }
 
   // Thick/brighten glow pass
   if (state.wave_thick || state.wave_brighten) {
     const wvT = buildWaveVerts(wave, aspect);
-    drawWave(wvT, state.wave_r*1.2, state.wave_g*1.2, state.wave_b*1.2, state.wave_a*0.4, state.wave_dots, 1.8);
+    drawWave(wvT, state.wave_r*1.2, state.wave_g*1.2, state.wave_b*1.2, state.wave_a*0.4, state.wave_dots, 1.8, state.wave_r2*1.2, state.wave_g2*1.2, state.wave_b2*1.2, state.wave_gradient);
   }
   gl.disable(gl.BLEND);
 
@@ -2037,6 +2051,15 @@ function randomize() {
     } else {
       target.wave_r = Math.random(); target.wave_g = Math.random(); target.wave_b = Math.random();
     }
+    // ~40% chance of gradient, picking a contrasting end color
+    if (Math.random() < 0.4) {
+      target.wave_gradient = 0.5 + Math.random() * 0.5;
+      const pal2 = getRandomPaletteColor();
+      if (pal2) { target.wave_r2 = pal2[0]; target.wave_g2 = pal2[1]; target.wave_b2 = pal2[2]; }
+      else { target.wave_r2 = Math.random(); target.wave_g2 = Math.random(); target.wave_b2 = Math.random(); }
+    } else {
+      target.wave_gradient = 0;
+    }
   }
 
   // Preserve audio settings and randomizer settings
@@ -2131,6 +2154,10 @@ const CHAOS_PARAMS = {
   wave_g: { min: 0.05, max: 1, drift: 0.4 },
   wave_b: { min: 0.05, max: 1, drift: 0.4 },
   wave_a: { min: 0.5, max: 1, drift: 0.15 },
+  wave_r2: { min: 0.05, max: 1, drift: 0.4 },
+  wave_g2: { min: 0.05, max: 1, drift: 0.4 },
+  wave_b2: { min: 0.05, max: 1, drift: 0.4 },
+  wave_gradient: { min: 0, max: 1, drift: 0.2 },
   wave_x: { min: 0.2, max: 0.8, drift: 0.3 },
   wave_y: { min: 0.2, max: 0.8, drift: 0.3 },
   wave_mystery: { min: -2, max: 2, drift: 0.4 },
