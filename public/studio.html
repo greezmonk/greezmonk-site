@@ -769,7 +769,7 @@ out float v_edge; // 0 at center, 1 at edge
 void main() {
   vec2 offset = a_normal * a_side * u_width;
   gl_Position = vec4(a_pos + offset, 0.0, 1.0);
-  v_edge = abs(a_side);
+  v_edge = a_side; // interpolates -1 to +1 across strip, abs() in FS
 }`;
 const WAVE_FS = `#version 300 es
 precision highp float; out vec4 o;
@@ -777,7 +777,7 @@ uniform vec4 u_col;
 uniform float u_glow; // 0 = hard edge, 1 = full glow
 in float v_edge;
 void main() {
-  float d = v_edge;
+  float d = abs(v_edge); // 0 at center, 1 at edges
   // Core: bright center, soft glow at edges
   float core = 1.0 - smoothstep(0.0, 0.25, d);
   float glow = 1.0 - smoothstep(0.1, 1.0, d);
