@@ -101,6 +101,15 @@
     border-radius: 2px; cursor: pointer;
   }
   .tog.on { background: rgba(240,165,0,0.1); border-color: var(--accent); border-style: solid; color: var(--accent); }
+  .wave-toggle { display: flex; gap: 4px; margin-bottom: 6px; }
+  .wt-btn {
+    flex: 1; padding: 5px 0; text-align: center;
+    font: 10px 'Courier New', monospace; text-transform: uppercase; letter-spacing: 1px;
+    background: var(--input-bg); border: 1px dashed var(--border); color: var(--dim);
+    border-radius: 2px; cursor: pointer; transition: all 0.2s;
+  }
+  .wt-btn.active { border-color: var(--accent); border-style: solid; color: var(--accent); background: rgba(240,165,0,0.08); }
+  .wt-btn:hover { border-color: var(--accent-dim); color: var(--text); }
   .wm-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 3px; margin-top: 3px; }
   .wm-btn {
     aspect-ratio: 1.4; background: var(--input-bg); border: 1px dashed var(--border); border-radius: 2px;
@@ -224,8 +233,9 @@
     <div class="help-row"><span class="help-key">A</span><span class="help-desc">auto-random cycle</span></div>
     <div class="help-row"><span class="help-key">C</span><span class="help-desc">chaos drift mode</span></div>
     <h3>Wave</h3>
+    <div class="help-row"><span class="help-key">Wave 1 / Wave 2</span><span class="help-desc">toggle in sidebar — edits shape, color, all wave params</span></div>
     <div class="help-row"><span class="help-key">D</span><span class="help-desc">cycle dual mode (single / dual / split)</span></div>
-    <div class="help-row"><span class="help-key">E</span><span class="help-desc">edit wave 2 params</span></div>
+    <div class="help-row"><span class="help-key">E</span><span class="help-desc">toggle wave 2 editing (keyboard shortcut)</span></div>
     <div class="help-row"><span class="help-key">W</span><span class="help-desc">cycle warp mode (9 modes)</span></div>
     <div class="help-row"><span class="help-key">Q</span><span class="help-desc">cycle quality (perf / bal / ultra)</span></div>
     <h3>Presets</h3>
@@ -288,15 +298,18 @@ function getPooledShapeInRange(min, max) {
 // Split wave: fully independent second wave state
 const wave2 = {
   mode: 8, r: 0.4, g: 0.8, b: 1.0, a: 0.8,
-  x: 0.5, y: 0.5, mystery: 0.5, scale: 1.2, dots: 0
+  x: 0.5, y: 0.5, mystery: 0.5, scale: 1.2, dots: 0,
+  thick: 1, additive: 1, brighten: 0, smoothing: 0.75,
+  r2: 1, g2: 0, b2: 0, gradient: 0,
 };
 // Wave2 transition system — smooth morph like wave1
-const wave2Target = { mode: 8, r: 0.4, g: 0.8, b: 1.0, a: 0.8, x: 0.5, y: 0.5, mystery: 0.5, scale: 1.2, dots: 0 };
+const wave2Target = { mode: 8, r: 0.4, g: 0.8, b: 1.0, a: 0.8, x: 0.5, y: 0.5, mystery: 0.5, scale: 1.2, dots: 0,
+  thick: 1, additive: 1, brighten: 0, smoothing: 0.75, r2: 1, g2: 0, b2: 0, gradient: 0 };
 let wave2Transitioning = false;
 let wave2TransProgress = 0;
 let wave2From = {};
-const WAVE2_LERP_KEYS = ['r','g','b','a','x','y','mystery','scale'];
-const WAVE2_SNAP_KEYS = ['mode','dots'];
+const WAVE2_LERP_KEYS = ['r','g','b','a','x','y','mystery','scale','smoothing','r2','g2','b2','gradient'];
+const WAVE2_SNAP_KEYS = ['mode','dots','thick','additive','brighten'];
 
 function randomizeWave2() {
   // Stash current as "from" for lerp
@@ -313,6 +326,15 @@ function randomizeWave2() {
   wave2Target.mystery = (Math.random() - 0.5) * 3;
   wave2Target.scale = 0.5 + Math.random() * 2.5;
   wave2Target.dots = Math.random() > 0.8 ? 1 : 0;
+  wave2Target.thick = Math.random() > 0.4 ? 1 : 0;
+  wave2Target.additive = Math.random() > 0.4 ? 1 : 0;
+  wave2Target.brighten = 0;
+  wave2Target.smoothing = Math.random();
+  // Gradient for wave2
+  if (Math.random() < 0.5) {
+    wave2Target.gradient = 0.4 + Math.random() * 0.6;
+    wave2Target.r2 = Math.random(); wave2Target.g2 = Math.random(); wave2Target.b2 = Math.random();
+  } else { wave2Target.gradient = 0; }
   wave2Transitioning = true;
   wave2TransProgress = 0;
 }
@@ -444,6 +466,7 @@ let useMic = false;
 // =====================================================
 const GROUPS = [
   { name: 'Wave Shape', controls: [
+    { type: 'wavetoggle' },
     { type: 'wavemode' },
     { type: 'slider', key: 'wave_mystery', min: -1, max: 1, step: 0.01, label: 'mystery' },
     { type: 'slider', key: 'wave_scale', min: 0.1, max: 4, step: 0.01, label: 'scale' },
@@ -527,6 +550,7 @@ function buildUI() {
     body.className = 'group-body';
     for (const c of g.controls) {
       if (c.type === 'slider') body.appendChild(mkSlider(c));
+      else if (c.type === 'wavetoggle') body.appendChild(mkWaveToggle());
       else if (c.type === 'wavemode') body.appendChild(mkWaveMode());
       else if (c.type === 'toggles') body.appendChild(mkToggles(c.keys));
       else if (c.type === 'color') body.appendChild(mkColor(c.keys));
@@ -553,6 +577,15 @@ function mkSlider(c) {
 const WAVE_NAMES = ['circle','x-cross','cross','blob','rings','v-line','sine','organic',
   'star','lissajous','helix','infinity','pulse','spiral','diamond','spectrum',
   'flower','seed','metatron','sri yantra','vesica','golden','merkaba','torus knot'];
+
+function mkWaveToggle() {
+  const d = document.createElement('div'); d.className = 'wave-toggle';
+  const btn1 = document.createElement('button'); btn1.className = 'wt-btn active'; btn1.id = 'wt-1';
+  btn1.textContent = 'wave 1'; btn1.onclick = () => setEditingWave(1);
+  const btn2 = document.createElement('button'); btn2.className = 'wt-btn'; btn2.id = 'wt-2';
+  btn2.textContent = 'wave 2'; btn2.onclick = () => setEditingWave(2);
+  d.appendChild(btn1); d.appendChild(btn2); return d;
+}
 
 function mkWaveMode() {
   const d = document.createElement('div'); d.className = 'ctl';
@@ -1563,32 +1596,39 @@ const DUAL_FADE_SPEED = 0.008; // ~125 frames to full fade = ~2s at 60fps
 
 // Wave2 editing — swap UI controls between shape 1 and shape 2
 let editingWave2 = false;
-const WAVE2_KEYS = ['wave_mode','wave_r','wave_g','wave_b','wave_a','wave_x','wave_y','wave_mystery','wave_dots','wave_thick','wave_additive','wave_brighten','wave_scale','wave_smoothing'];
+const WAVE2_KEYS = ['wave_mode','wave_r','wave_g','wave_b','wave_a','wave_x','wave_y','wave_mystery','wave_dots','wave_thick','wave_additive','wave_brighten','wave_scale','wave_smoothing','wave_r2','wave_g2','wave_b2','wave_gradient'];
+// Map: wave2 property name → state key name
+const WAVE2_MAP = {
+  mode:'wave_mode', r:'wave_r', g:'wave_g', b:'wave_b', a:'wave_a',
+  x:'wave_x', y:'wave_y', mystery:'wave_mystery', dots:'wave_dots',
+  thick:'wave_thick', additive:'wave_additive', brighten:'wave_brighten',
+  scale:'wave_scale', smoothing:'wave_smoothing',
+  r2:'wave_r2', g2:'wave_g2', b2:'wave_b2', gradient:'wave_gradient',
+};
 let wave1Stash = {}; // stash wave1 params while editing wave2
 
-function toggleWave2Edit() {
-  if (DUAL_MODES[dualIdx].name !== 'SPLIT') return; // only works in SPLIT
-  editingWave2 = !editingWave2;
+function setEditingWave(num) {
+  const goingTo2 = (num === 2);
+  if (goingTo2 === editingWave2) return;
+  editingWave2 = goingTo2;
   if (editingWave2) {
     // Stash wave1 params, load wave2 into UI
     for (const k of WAVE2_KEYS) wave1Stash[k] = state[k];
-    state.wave_mode = wave2.mode;
-    state.wave_r = wave2.r; state.wave_g = wave2.g; state.wave_b = wave2.b; state.wave_a = wave2.a;
-    state.wave_x = wave2.x; state.wave_y = wave2.y;
-    state.wave_mystery = wave2.mystery;
-    state.wave_dots = wave2.dots;
-    state.wave_scale = wave2.scale;
+    for (const [w2k, sk] of Object.entries(WAVE2_MAP)) state[sk] = wave2[w2k];
   } else {
     // Save UI back to wave2, restore wave1
-    wave2.mode = state.wave_mode;
-    wave2.r = state.wave_r; wave2.g = state.wave_g; wave2.b = state.wave_b; wave2.a = state.wave_a;
-    wave2.x = state.wave_x; wave2.y = state.wave_y;
-    wave2.mystery = state.wave_mystery;
-    wave2.dots = state.wave_dots;
-    wave2.scale = state.wave_scale;
+    for (const [w2k, sk] of Object.entries(WAVE2_MAP)) wave2[w2k] = state[sk];
     for (const k of WAVE2_KEYS) state[k] = wave1Stash[k];
   }
   syncUI();
+  // Update toggle buttons
+  document.querySelectorAll('.wt-btn').forEach(b => b.classList.remove('active'));
+  const activeBtn = document.getElementById(editingWave2 ? 'wt-2' : 'wt-1');
+  if (activeBtn) activeBtn.classList.add('active');
+}
+
+function toggleWave2Edit() {
+  setEditingWave(editingWave2 ? 1 : 2);
 }
 
 function cycleDual() {
@@ -1712,10 +1752,7 @@ function render() {
   let editSwapped = false;
   if (editingWave2) {
     // Save current wave2 edits from state, load wave1 for rendering
-    wave2.mode = state.wave_mode; wave2.r = state.wave_r; wave2.g = state.wave_g;
-    wave2.b = state.wave_b; wave2.a = state.wave_a; wave2.x = state.wave_x;
-    wave2.y = state.wave_y; wave2.mystery = state.wave_mystery;
-    wave2.dots = state.wave_dots; wave2.scale = state.wave_scale;
+    for (const [w2k, sk] of Object.entries(WAVE2_MAP)) wave2[w2k] = state[sk];
     for (const k of WAVE2_KEYS) state[k] = wave1Stash[k];
     editSwapped = true;
   }
@@ -1814,7 +1851,7 @@ function render() {
     state.wave_mode = origMode; state.wave_mystery = origMy;
     state.wave_scale = origSc; state.wave_x = origX; state.wave_y = origY;
     if (isSplit) {
-      drawWave(wv2, wave2.r, wave2.g, wave2.b, wave2.a * dualFade, wave2.dots, 0.8, state.wave_r2, state.wave_g2, state.wave_b2, state.wave_gradient);
+      drawWave(wv2, wave2.r, wave2.g, wave2.b, wave2.a * dualFade, wave2.dots, 0.8, wave2.r2, wave2.g2, wave2.b2, wave2.gradient);
     } else {
       drawWave(wv2, state.wave_r, state.wave_g, state.wave_b, state.wave_a * 0.7 * dualFade, state.wave_dots, 0.8, state.wave_r2, state.wave_g2, state.wave_b2, state.wave_gradient);
     }
@@ -1829,10 +1866,7 @@ function render() {
 
   // Restore wave2 values to state if we swapped for rendering
   if (editSwapped) {
-    state.wave_mode = wave2.mode; state.wave_r = wave2.r; state.wave_g = wave2.g;
-    state.wave_b = wave2.b; state.wave_a = wave2.a; state.wave_x = wave2.x;
-    state.wave_y = wave2.y; state.wave_mystery = wave2.mystery;
-    state.wave_dots = wave2.dots; state.wave_scale = wave2.scale;
+    for (const [w2k, sk] of Object.entries(WAVE2_MAP)) state[sk] = wave2[w2k];
   }
 
   // Pass 3: Composite → intermediate FB (for bloom source)
