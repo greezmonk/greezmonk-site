@@ -1053,7 +1053,7 @@ const wBuf = gl.createBuffer();
 const waveVAO = gl.createVertexArray();
 gl.bindVertexArray(waveVAO);
 gl.bindBuffer(gl.ARRAY_BUFFER, wBuf);
-gl.bufferData(gl.ARRAY_BUFFER, WAVE_N * 2 * THICK_STRIDE, gl.DYNAMIC_DRAW);
+gl.bufferData(gl.ARRAY_BUFFER, (WAVE_N + 4) * 2 * THICK_STRIDE, gl.DYNAMIC_DRAW); // +4 for closed stroke overlap
 const tPosL = gl.getAttribLocation(waveP, 'a_pos');
 const tNormL = gl.getAttribLocation(waveP, 'a_normal');
 const tSideL = gl.getAttribLocation(waveP, 'a_side');
@@ -1084,24 +1084,37 @@ function buildThickLine(centerVerts) {
 }
 
 // Build thick line for a single stroke segment
-function buildThickLineSegment(centerVerts, start, count) {
-  const out = new Float32Array(count * 2 * 5);
-  for (let j = 0; j < count; j++) {
-    const i = start + j;
+// closed=true: wrap tangent at endpoints + add overlap verts to close the loop
+function buildThickLineSegment(centerVerts, start, count, closed) {
+  // For closed loops, add 2 overlap points to seamlessly close the circle
+  const totalPts = closed ? count + 2 : count;
+  const out = new Float32Array(totalPts * 2 * 5);
+  for (let j = 0; j < totalPts; j++) {
+    // Map j back to source index, wrapping for closed loops
+    const srcJ = closed ? (j % count) : j;
+    const i = start + srcJ;
     const x = centerVerts[i*2], y = centerVerts[i*2+1];
     let dx, dy;
-    // Clamp neighbor lookups within segment bounds
-    const prev = Math.max(start, i-1), next = Math.min(start+count-1, i+1);
-    if (i === start) { dx = centerVerts[next*2] - x; dy = centerVerts[next*2+1] - y; }
-    else if (i === start+count-1) { dx = x - centerVerts[prev*2]; dy = y - centerVerts[prev*2+1]; }
-    else { dx = centerVerts[next*2] - centerVerts[prev*2]; dy = centerVerts[next*2+1] - centerVerts[prev*2+1]; }
+    if (closed) {
+      // Wrap neighbors around the loop
+      const prevJ = (srcJ - 1 + count) % count;
+      const nextJ = (srcJ + 1) % count;
+      const pi = start + prevJ, ni = start + nextJ;
+      dx = centerVerts[ni*2] - centerVerts[pi*2];
+      dy = centerVerts[ni*2+1] - centerVerts[pi*2+1];
+    } else {
+      const prev = Math.max(start, i-1), next = Math.min(start+count-1, i+1);
+      if (i === start) { dx = centerVerts[next*2] - x; dy = centerVerts[next*2+1] - y; }
+      else if (i === start+count-1) { dx = x - centerVerts[prev*2]; dy = y - centerVerts[prev*2+1]; }
+      else { dx = centerVerts[next*2] - centerVerts[prev*2]; dy = centerVerts[next*2+1] - centerVerts[prev*2+1]; }
+    }
     const len = Math.sqrt(dx*dx + dy*dy) || 0.001;
     const nx = -dy/len, ny = dx/len;
     const base = j * 10;
     out[base]   = x; out[base+1] = y; out[base+2] = nx; out[base+3] = ny; out[base+4] = -1;
     out[base+5] = x; out[base+6] = y; out[base+7] = nx; out[base+8] = ny; out[base+9] = 1;
   }
-  return out;
+  return { data: out, vertCount: totalPts * 2 };
 }
 
 // Framebuffers
@@ -1266,39 +1279,37 @@ function buildWaveVerts(samples, aspect) {
   let strokes = null; // null = single continuous stroke (default for most shapes)
 
   // Pre-compute stroke boundaries for multi-stroke shapes
-  if (mode===4) { // pulse rings: 2 rings
+  // Format: [start, count, closed] — closed=true for circles that should loop seamlessly
+  if (mode===4) { // rings: 2 rings (closed circles)
     const ppRing = Math.floor(WAVE_N/2);
-    strokes = [[0, ppRing], [ppRing, WAVE_N - ppRing]];
-  } else if (mode===12) { // pulse rings: 3 rings
+    strokes = [[0, ppRing, true], [ppRing, WAVE_N - ppRing, true]];
+  } else if (mode===12) { // pulse rings: 3 rings (closed circles)
     const ppRing = Math.floor(WAVE_N/3);
-    strokes = [[0, ppRing], [ppRing, ppRing], [ppRing*2, WAVE_N - ppRing*2]];
+    strokes = [[0, ppRing, true], [ppRing, ppRing, true], [ppRing*2, WAVE_N - ppRing*2, true]];
   } else if (mode===16 || mode===17) { // Flower/Seed of Life: 7 circles
     const ppCirc = Math.floor(WAVE_N/7);
     strokes = [];
-    for (let c=0;c<7;c++) strokes.push([c*ppCirc, c<6 ? ppCirc : WAVE_N - c*ppCirc]);
-  } else if (mode===18) { // Metatron's Cube: 7 inner circles + 6 outer circles + 12 lines
+    for (let c=0;c<7;c++) strokes.push([c*ppCirc, c<6 ? ppCirc : WAVE_N - c*ppCirc, true]);
+  } else if (mode===18) { // Metatron's Cube: 7 inner + 6 outer circles + 12 lines
     const third = Math.floor(WAVE_N/3);
     const innerPP = Math.floor(third/7);
     const outerPP = Math.floor(third/6);
     const linePP = Math.floor((WAVE_N - third*2)/12);
     strokes = [];
-    // 7 inner circles
-    for (let c=0;c<7;c++) strokes.push([c*innerPP, innerPP]);
-    // 6 outer circles
-    for (let c=0;c<6;c++) strokes.push([third + c*outerPP, outerPP]);
-    // 12 connecting lines
-    const lineStart = third*2;
-    for (let l=0;l<12;l++) strokes.push([lineStart + l*linePP, l<11 ? linePP : WAVE_N - lineStart - l*linePP]);
-  } else if (mode===19) { // Sri Yantra: 8 triangles
+    for (let c=0;c<7;c++) strokes.push([c*innerPP, innerPP, true]); // inner circles
+    for (let c=0;c<6;c++) strokes.push([third + c*outerPP, outerPP, true]); // outer circles
+    const lineStart = third*2; // connecting lines (open)
+    for (let l=0;l<12;l++) strokes.push([lineStart + l*linePP, l<11 ? linePP : WAVE_N - lineStart - l*linePP, false]);
+  } else if (mode===19) { // Sri Yantra: 8 triangles (closed)
     const ppTri = Math.floor(WAVE_N/8);
     strokes = [];
-    for (let t2=0;t2<8;t2++) strokes.push([t2*ppTri, t2<7 ? ppTri : WAVE_N - t2*ppTri]);
+    for (let t2=0;t2<8;t2++) strokes.push([t2*ppTri, t2<7 ? ppTri : WAVE_N - t2*ppTri, true]);
   } else if (mode===20) { // Vesica Piscis: 2 circles
     const half = Math.floor(WAVE_N/2);
-    strokes = [[0, half], [half, WAVE_N - half]];
-  } else if (mode===22) { // Merkaba: 2 triangles
+    strokes = [[0, half, true], [half, WAVE_N - half, true]];
+  } else if (mode===22) { // Merkaba: 2 triangles (closed)
     const half = Math.floor(WAVE_N/2);
-    strokes = [[0, half], [half, WAVE_N - half]];
+    strokes = [[0, half, true], [half, WAVE_N - half, true]];
   }
 
   for(let i=0;i<WAVE_N;i++){
@@ -1599,12 +1610,13 @@ function render() {
       gl.uniform4f(vU.u_col, r, g, b, a);
       gl.uniform1f(vU.u_width, baseWidth * (widthMul || 1));
       gl.uniform1f(vU.u_glow, 0.8);
-      for (const [start, count] of strokes) {
-        if (count < 2) continue; // need at least 2 points for a line
-        const thick = buildThickLineSegment(verts, start, count);
+      for (const stroke of strokes) {
+        const [start, count, closed] = stroke;
+        if (count < 2) continue;
+        const seg = buildThickLineSegment(verts, start, count, closed);
         gl.bindBuffer(gl.ARRAY_BUFFER, wBuf);
-        gl.bufferSubData(gl.ARRAY_BUFFER, 0, thick);
-        gl.drawArrays(gl.TRIANGLE_STRIP, 0, count * 2);
+        gl.bufferSubData(gl.ARRAY_BUFFER, 0, seg.data);
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, seg.vertCount);
       }
     }
     gl.bindFramebuffer(gl.FRAMEBUFFER, writeFB);
