@@ -815,20 +815,75 @@ vec2 warpDisplace(float mode, vec2 rel, float r, float a, float w, float t) {
     d = vec2(n1 + n3, n2 + n4) * w * 0.8;
 
   } else if (m == 3) {
-    // Kaleidoscope — angular folding, mirror reflections
-    float segments = 6.0;
-    float sa = mod(a + 3.14159, 6.28318 / segments);
-    sa = abs(sa - 3.14159 / segments);
-    float ka = sa - a;
-    d = vec2(cos(a + ka * w * 8.0) - cos(a), sin(a + ka * w * 8.0) - sin(a)) * r * 0.2;
-    d += vec2(sin(r * 10.0 + t * 0.5) * w * 0.3, cos(r * 8.0 - t * 0.4) * w * 0.3);
+    // Gravity Wells — 3 orbiting attractor points pull the field
+    float w3 = w * 3.0;
+    for (int g = 0; g < 3; g++) {
+      float ga = float(g) * 2.094 + t * (0.15 + float(g) * 0.05);
+      float gr = 0.25 + 0.1 * sin(t * 0.2 + float(g));
+      vec2 well = vec2(cos(ga) * gr, sin(ga) * gr);
+      vec2 toWell = well - rel;
+      float dist = length(toWell) + 0.05;
+      d += normalize(toWell) * w3 / (dist * dist + 0.1) * 0.02;
+    }
+    // Add slow orbital rotation
+    d += vec2(-rel.y, rel.x) * w * 0.3 * sin(t * 0.2);
 
-  } else {
+  } else if (m == 4) {
     // Pulse — radial breathing, expansion/contraction waves
     float pulse = sin(r * 4.0 - t * 1.5) * w;
     float pulse2 = sin(r * 7.0 + t * 0.8 + a) * w * 0.4;
     float breathe = sin(t * 0.4) * w * 0.5;
     d = normalize(rel + 0.001) * (pulse + pulse2 + breathe) * 0.5;
+
+  } else if (m == 5) {
+    // Shatter/Crystal — angular faceted displacement, prismatic
+    float facets = 8.0;
+    float fa = floor(a / 6.28318 * facets) / facets * 6.28318;
+    float fr = floor(r * 6.0) / 6.0;
+    float shatter = sin(fa * 13.0 + fr * 7.0 + t * 0.4) * w;
+    float crack = sin(fa * 7.0 - t * 0.3) * cos(fr * 11.0 + t * 0.5) * w * 0.6;
+    d = vec2(cos(fa) * shatter + sin(fa) * crack, sin(fa) * shatter - cos(fa) * crack) * 0.8;
+    // Subtle jitter along crack lines
+    d += vec2(sin(a * facets * 3.14) * w * 0.15, cos(a * facets * 3.14) * w * 0.15);
+
+  } else if (m == 6) {
+    // Magnetic Field — dipole field lines between two drifting poles
+    float poleSpread = 0.2 + 0.05 * sin(t * 0.15);
+    vec2 pole1 = vec2(-poleSpread * cos(t * 0.1), -poleSpread * sin(t * 0.12));
+    vec2 pole2 = vec2(poleSpread * cos(t * 0.1), poleSpread * sin(t * 0.12));
+    vec2 r1 = rel - pole1, r2 = rel - pole2;
+    float d1 = length(r1) + 0.05, d2 = length(r2) + 0.05;
+    // Field = sum of two dipole fields (perpendicular to radius)
+    vec2 f1 = vec2(-r1.y, r1.x) / (d1 * d1);
+    vec2 f2 = vec2(r2.y, -r2.x) / (d2 * d2);
+    d = (f1 + f2) * w * 0.15;
+    // Add radial pull between poles
+    d += (r1 / (d1 * d1) - r2 / (d2 * d2)) * w * 0.03;
+
+  } else if (m == 7) {
+    // Wave Interference — multiple circular wave sources, moiré patterns
+    vec2 src1 = vec2(-0.2 + 0.1*sin(t*0.2), 0.1*cos(t*0.15));
+    vec2 src2 = vec2(0.2 + 0.1*cos(t*0.18), -0.1*sin(t*0.22));
+    vec2 src3 = vec2(0.05*sin(t*0.25), 0.2 + 0.08*cos(t*0.2));
+    float d1b = length(rel - src1), d2b = length(rel - src2), d3b = length(rel - src3);
+    float wave1 = sin(d1b * 20.0 - t * 1.2) * w;
+    float wave2b = sin(d2b * 18.0 - t * 1.0 + 1.0) * w;
+    float wave3b = sin(d3b * 22.0 - t * 0.8 + 2.0) * w * 0.7;
+    float combined = wave1 + wave2b + wave3b;
+    d = normalize(rel + 0.001) * combined * 0.3;
+    // Tangential component for swirl
+    d += vec2(-rel.y, rel.x) * (wave1 - wave2b) * 0.15;
+
+  } else {
+    // DNA Twist — S-curve twist, double helix warp
+    float twist = sin(rel.y * 8.0 + t * 0.6) * w * 2.0;
+    float twist2 = sin(rel.y * 8.0 + t * 0.6 + 3.14159) * w * 2.0; // opposite helix
+    float strand = sin(rel.x * 15.0 + t * 0.3);
+    // X displacement depends on Y position (creates the twist)
+    d.x = twist * (0.3 + 0.2 * sin(rel.y * 4.0 - t * 0.4));
+    d.y = cos(rel.y * 8.0 + t * 0.6) * w * 0.5; // vertical compression/stretch
+    // Cross-linking between strands
+    d += vec2(sin(rel.y * 16.0 + t) * w * 0.2 * strand, 0.0);
   }
   return d;
 }
@@ -845,7 +900,7 @@ void main() {
   // Warp displacement — blend between two modes
   float r = length(rel), a = atan(rel.y, rel.x), w = u_warp * 0.04;
   float modeA = floor(u_warp_mode);
-  float modeB = mod(modeA + 1.0, 5.0);
+  float modeB = mod(modeA + 1.0, 9.0);
   float blend = fract(u_warp_mode);
   vec2 dA = warpDisplace(modeA, rel, r, a, w, u_time);
   vec2 dB = warpDisplace(modeB, rel, r, a, w, u_time);
@@ -1471,23 +1526,21 @@ function getSecondMode() {
 }
 
 // Warp mode — smooth float, floor = current mode, fract = blend to next
-const WARP_MODE_NAMES = ['RIPPLE', 'VORTEX', 'TURB', 'KALEID', 'PULSE'];
+const WARP_MODE_NAMES = ['RIPPLE', 'VORTEX', 'TURB', 'GRAVITY', 'PULSE', 'SHATTER', 'MAGNETIC', 'INTERF', 'DNA'];
 let warpMode = 0.0; // 0-4, fractional = blending
 let warpModeTarget = 0;
 const WARP_MORPH_SPEED = 0.008; // ~2s to crossfade between modes
 
 function cycleWarpMode() {
-  warpModeTarget = (Math.floor(warpModeTarget) + 1) % 5;
+  warpModeTarget = (Math.floor(warpModeTarget) + 1) % 9;
 }
 
 function stepWarpMode() {
-  // Drift warpMode toward target with wrapping
   if (Math.abs(warpMode - warpModeTarget) > 0.01) {
-    // Determine shortest direction (with wrapping at 5)
     let diff = warpModeTarget - Math.floor(warpMode);
-    if (diff < 0) diff += 5;
+    if (diff < 0) diff += 9;
     warpMode += WARP_MORPH_SPEED;
-    if (warpMode >= 5.0) warpMode -= 5.0;
+    if (warpMode >= 9.0) warpMode -= 9.0;
     if (Math.abs(warpMode - warpModeTarget) < WARP_MORPH_SPEED * 2) {
       warpMode = warpModeTarget;
     }
@@ -1760,7 +1813,7 @@ function render() {
   const libTag = configLibrary.length ? ` <span class="d">|</span> LIB:${configLibrary.length}` : '';
   const editTag = editingWave2 ? ' <span style="color:#ff0">EDIT:W2</span>' : '';
   const dualTag = dualIdx > 0 ? ` <span class="d">|</span> ${DUAL_MODES[dualIdx].name}${editTag}` : '';
-  const warpTag = ` <span class="d">|</span> ${WARP_MODE_NAMES[Math.floor(warpMode) % 5]}`;
+  const warpTag = ` <span class="d">|</span> ${WARP_MODE_NAMES[Math.floor(warpMode) % 9]}`;
   const qTag = ` <span class="d">|</span> ${QUALITY_MODES[qualityIdx].name}`;
   document.getElementById('hud').innerHTML=`${fps} <span class="d">fps</span> ${useMic?'<span class="d">|</span> MIC':''}${trans}${autoTag}${chaosTag}${libTag}${dualTag}${warpTag}${qTag}`;
 
@@ -2235,7 +2288,7 @@ function stepChaos(audio) {
   // Drift warp mode (~every 25 seconds, audio-influenced)
   const warpChance = energy > 0.5 ? 1200 : 1500;
   if (chaosFrameCount % warpChance === 0 && Math.random() < 0.4) {
-    warpModeTarget = Math.floor(Math.random() * 5);
+    warpModeTarget = Math.floor(Math.random() * 9);
   }
 
   // Drift wave2 independently in SPLIT mode — audio reactive
