@@ -247,7 +247,7 @@ const DEFAULTS = {
   wave_scale: 1, wave_smoothing: 0.75,
   bloom_strength: 0.3, bloom_threshold: 0.4,
   audio_bass_gain: 3, audio_mid_gain: 1.5, audio_treb_gain: 0.25, audio_trigger: 0.5,
-  transition_speed: 0.005, auto_interval: 5,
+  transition_speed: 0.003, auto_interval: 5,
 };
 
 const PRESETS = {
@@ -371,7 +371,7 @@ const GROUPS = [
     { type: 'color', keys: ['ib_r','ib_g','ib_b','ib_a'] },
   ]},
   { name: 'Randomizer', controls: [
-    { type: 'slider', key: 'transition_speed', min: 0.005, max: 0.15, step: 0.005, label: 'morph speed' },
+    { type: 'slider', key: 'transition_speed', min: 0.001, max: 0.05, step: 0.001, label: 'morph speed' },
     { type: 'slider', key: 'auto_interval', min: 5, max: 120, step: 1, label: 'auto interval (s)' },
     { type: 'palette' },
   ]},
@@ -1231,7 +1231,7 @@ function buildWaveVerts(samples, aspect) {
 // Dual wave toggle with fade
 let dualFade = 0; // 0 = second wave invisible, 1 = fully visible
 let dualFadeTarget = 0;
-const DUAL_FADE_SPEED = 0.03; // ~30 frames to full fade = ~0.5s at 60fps
+const DUAL_FADE_SPEED = 0.008; // ~125 frames to full fade = ~2s at 60fps
 
 function cycleDual() {
   dualIdx = (dualIdx + 1) % DUAL_MODES.length;
