@@ -1048,7 +1048,7 @@ function buildWarpMesh() {
 buildWarpMesh();
 
 // Wave setup
-const WAVE_N = 512;
+const WAVE_N = 1024; // doubled for smooth multi-stroke circles
 
 // Legacy VAO (for dots mode — just positions)
 const wBufLegacy = gl.createBuffer();
@@ -1208,7 +1208,7 @@ async function switchMic(deviceId) {
 async function startMic(deviceId) {
   if (!audioCtx) {
     audioCtx = new AudioContext(); analyser = audioCtx.createAnalyser();
-    analyser.fftSize = 512; analyser.smoothingTimeConstant = 0.8;
+    analyser.fftSize = 1024; analyser.smoothingTimeConstant = 0.8;
     audioTime = new Uint8Array(analyser.fftSize);
     audioFreq = new Uint8Array(analyser.frequencyBinCount);
   }
