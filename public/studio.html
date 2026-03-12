@@ -220,17 +220,46 @@ const wave2 = {
   mode: 8, r: 0.4, g: 0.8, b: 1.0, a: 0.8,
   x: 0.5, y: 0.5, mystery: 0.5, scale: 1.2, dots: 0
 };
+// Wave2 transition system — smooth morph like wave1
+const wave2Target = { mode: 8, r: 0.4, g: 0.8, b: 1.0, a: 0.8, x: 0.5, y: 0.5, mystery: 0.5, scale: 1.2, dots: 0 };
+let wave2Transitioning = false;
+let wave2TransProgress = 0;
+let wave2From = {};
+const WAVE2_LERP_KEYS = ['r','g','b','a','x','y','mystery','scale'];
+const WAVE2_SNAP_KEYS = ['mode','dots'];
+
 function randomizeWave2() {
-  wave2.mode = Math.floor(Math.random() * 24);
-  wave2.r = 0.2 + Math.random() * 0.8;
-  wave2.g = 0.2 + Math.random() * 0.8;
-  wave2.b = 0.2 + Math.random() * 0.8;
-  wave2.a = 0.5 + Math.random() * 0.5;
-  wave2.x = 0.25 + Math.random() * 0.5;
-  wave2.y = 0.25 + Math.random() * 0.5;
-  wave2.mystery = (Math.random() - 0.5) * 3;
-  wave2.scale = 0.5 + Math.random() * 2.5;
-  wave2.dots = Math.random() > 0.8 ? 1 : 0;
+  // Stash current as "from" for lerp
+  for (const k of WAVE2_LERP_KEYS) wave2From[k] = wave2[k];
+  for (const k of WAVE2_SNAP_KEYS) wave2From[k] = wave2[k];
+  // Generate new target
+  wave2Target.mode = Math.floor(Math.random() * 24);
+  wave2Target.r = 0.2 + Math.random() * 0.8;
+  wave2Target.g = 0.2 + Math.random() * 0.8;
+  wave2Target.b = 0.2 + Math.random() * 0.8;
+  wave2Target.a = 0.5 + Math.random() * 0.5;
+  wave2Target.x = 0.25 + Math.random() * 0.5;
+  wave2Target.y = 0.25 + Math.random() * 0.5;
+  wave2Target.mystery = (Math.random() - 0.5) * 3;
+  wave2Target.scale = 0.5 + Math.random() * 2.5;
+  wave2Target.dots = Math.random() > 0.8 ? 1 : 0;
+  wave2Transitioning = true;
+  wave2TransProgress = 0;
+}
+
+function stepWave2Transition() {
+  if (!wave2Transitioning) return;
+  wave2TransProgress += 0.006; // ~2.8s at 60fps — slightly slower than wave1
+  if (wave2TransProgress >= 1) {
+    wave2TransProgress = 1;
+    wave2Transitioning = false;
+  }
+  const t = wave2TransProgress * wave2TransProgress * (3 - 2 * wave2TransProgress); // smoothstep
+  for (const k of WAVE2_LERP_KEYS) wave2[k] = wave2From[k] + (wave2Target[k] - wave2From[k]) * t;
+  // Snap booleans/mode at halfway
+  if (wave2TransProgress > 0.5) {
+    for (const k of WAVE2_SNAP_KEYS) wave2[k] = wave2Target[k];
+  }
 }
 
 const DEFAULTS = {
@@ -1035,21 +1064,40 @@ gl.bindVertexArray(null);
 
 // Expand centerline points into triangle strip with normals
 function buildThickLine(centerVerts) {
-  // centerVerts: Float32Array of WAVE_N*2 (x,y pairs)
-  // output: Float32Array of WAVE_N*2*5 (pos + normal + side for each edge vert)
+  // Build thick line for a segment of centerVerts
+  // start/count define the range within the full WAVE_N array
+  // output: writes into 'out' at the appropriate offset
   const out = new Float32Array(WAVE_N * 2 * 5);
   for (let i = 0; i < WAVE_N; i++) {
     const x = centerVerts[i*2], y = centerVerts[i*2+1];
-    // Compute tangent from neighbors
     let dx, dy;
     if (i === 0) { dx = centerVerts[2] - x; dy = centerVerts[3] - y; }
     else if (i === WAVE_N-1) { dx = x - centerVerts[(i-1)*2]; dy = y - centerVerts[(i-1)*2+1]; }
     else { dx = centerVerts[(i+1)*2] - centerVerts[(i-1)*2]; dy = centerVerts[(i+1)*2+1] - centerVerts[(i-1)*2+1]; }
-    // Perpendicular normal (normalized)
     const len = Math.sqrt(dx*dx + dy*dy) || 0.001;
     const nx = -dy/len, ny = dx/len;
-    // Two verts: side=-1 and side=+1
     const base = i * 10;
+    out[base]   = x; out[base+1] = y; out[base+2] = nx; out[base+3] = ny; out[base+4] = -1;
+    out[base+5] = x; out[base+6] = y; out[base+7] = nx; out[base+8] = ny; out[base+9] = 1;
+  }
+  return out;
+}
+
+// Build thick line for a single stroke segment
+function buildThickLineSegment(centerVerts, start, count) {
+  const out = new Float32Array(count * 2 * 5);
+  for (let j = 0; j < count; j++) {
+    const i = start + j;
+    const x = centerVerts[i*2], y = centerVerts[i*2+1];
+    let dx, dy;
+    // Clamp neighbor lookups within segment bounds
+    const prev = Math.max(start, i-1), next = Math.min(start+count-1, i+1);
+    if (i === start) { dx = centerVerts[next*2] - x; dy = centerVerts[next*2+1] - y; }
+    else if (i === start+count-1) { dx = x - centerVerts[prev*2]; dy = y - centerVerts[prev*2+1]; }
+    else { dx = centerVerts[next*2] - centerVerts[prev*2]; dy = centerVerts[next*2+1] - centerVerts[prev*2+1]; }
+    const len = Math.sqrt(dx*dx + dy*dy) || 0.001;
+    const nx = -dy/len, ny = dx/len;
+    const base = j * 10;
     out[base]   = x; out[base+1] = y; out[base+2] = nx; out[base+3] = ny; out[base+4] = -1;
     out[base+5] = x; out[base+6] = y; out[base+7] = nx; out[base+8] = ny; out[base+9] = 1;
   }
@@ -1210,17 +1258,70 @@ function getWave(t) {
   return s;
 }
 
+// Multi-stroke: shapes return {verts, strokes} where strokes is [[start,count],...]
+// Shapes with distinct elements (sacred geometry) get pen lifts between circles/lines
 function buildWaveVerts(samples, aspect) {
   const v=new Float32Array(WAVE_N*2);
   const sc=state.wave_scale*0.3, cx=state.wave_x*2-1, cy=1-state.wave_y*2, my=state.wave_mystery, mode=state.wave_mode;
+  let strokes = null; // null = single continuous stroke (default for most shapes)
+
+  // Pre-compute stroke boundaries for multi-stroke shapes
+  if (mode===4) { // pulse rings: 2 rings
+    const ppRing = Math.floor(WAVE_N/2);
+    strokes = [[0, ppRing], [ppRing, WAVE_N - ppRing]];
+  } else if (mode===12) { // pulse rings: 3 rings
+    const ppRing = Math.floor(WAVE_N/3);
+    strokes = [[0, ppRing], [ppRing, ppRing], [ppRing*2, WAVE_N - ppRing*2]];
+  } else if (mode===16 || mode===17) { // Flower/Seed of Life: 7 circles
+    const ppCirc = Math.floor(WAVE_N/7);
+    strokes = [];
+    for (let c=0;c<7;c++) strokes.push([c*ppCirc, c<6 ? ppCirc : WAVE_N - c*ppCirc]);
+  } else if (mode===18) { // Metatron's Cube: 7 inner circles + 6 outer circles + 12 lines
+    const third = Math.floor(WAVE_N/3);
+    const innerPP = Math.floor(third/7);
+    const outerPP = Math.floor(third/6);
+    const linePP = Math.floor((WAVE_N - third*2)/12);
+    strokes = [];
+    // 7 inner circles
+    for (let c=0;c<7;c++) strokes.push([c*innerPP, innerPP]);
+    // 6 outer circles
+    for (let c=0;c<6;c++) strokes.push([third + c*outerPP, outerPP]);
+    // 12 connecting lines
+    const lineStart = third*2;
+    for (let l=0;l<12;l++) strokes.push([lineStart + l*linePP, l<11 ? linePP : WAVE_N - lineStart - l*linePP]);
+  } else if (mode===19) { // Sri Yantra: 8 triangles
+    const ppTri = Math.floor(WAVE_N/8);
+    strokes = [];
+    for (let t2=0;t2<8;t2++) strokes.push([t2*ppTri, t2<7 ? ppTri : WAVE_N - t2*ppTri]);
+  } else if (mode===20) { // Vesica Piscis: 2 circles
+    const half = Math.floor(WAVE_N/2);
+    strokes = [[0, half], [half, WAVE_N - half]];
+  } else if (mode===22) { // Merkaba: 2 triangles
+    const half = Math.floor(WAVE_N/2);
+    strokes = [[0, half], [half, WAVE_N - half]];
+  }
+
   for(let i=0;i<WAVE_N;i++){
-    const t=i/WAVE_N, val=samples[i];
+    // For multi-stroke shapes, compute local t within stroke
+    let t, val=samples[i];
+    if (strokes) {
+      // Find which stroke this point belongs to
+      let strokeIdx = 0, localI = i;
+      for (let s=0; s<strokes.length; s++) {
+        if (i >= strokes[s][0] && i < strokes[s][0] + strokes[s][1]) { strokeIdx = s; localI = i - strokes[s][0]; break; }
+      }
+      t = i / WAVE_N; // global t still used for audio sampling
+    } else {
+      t = i / WAVE_N;
+    }
     let x=0,y=0;
     if(mode===0){const a=t*6.283,r=sc*.5+val*sc*.5+my*.05;x=Math.cos(a)*r;y=Math.sin(a)*r;}
     else if(mode===1){const p=(t-.5)*2;x=p*sc+val*sc*.3*my;y=p*sc*(my>0?1:-1)+val*sc*.5;}
     else if(mode===2){const p=(t-.5)*2;x=p*sc;y=val*sc*.5+my*.04;}
     else if(mode===3){const a=t*6.283,r=sc*.4*(1+val*.7+my*.5);x=Math.cos(a)*r;y=Math.sin(a)*r*(1+my*.3);}
-    else if(mode===4){const a=t*6.283,ring=t<.5?0:1,t2=(t*2)%1,a2=t2*6.283,rB=sc*(.3+ring*.2),r=rB+val*sc*.3*(ring+1)+my*.03;x=Math.cos(a2)*r;y=Math.sin(a2)*r;}
+    else if(mode===4){ // rings — now with pen lift
+      const ring=t<.5?0:1,t2=(t*2)%1,a2=t2*6.283,rB=sc*(.3+ring*.2),r=rB+val*sc*.3*(ring+1)+my*.03;x=Math.cos(a2)*r;y=Math.sin(a2)*r;
+    }
     else if(mode===5){const p=(t-.5)*2;x=val*sc*.5+my*.05;y=p*sc;}
     else if(mode===6){const p=(t-.5)*2;x=p*sc;y=val*sc*.6+my*.04;}
     else if(mode===7){const a=t*6.283,r=sc*.35*(1+val*.5+.3*Math.sin(a*3+my*4));x=Math.cos(a)*r;y=Math.sin(a)*r;}
@@ -1229,12 +1330,14 @@ function buildWaveVerts(samples, aspect) {
     else if(mode===9){const a=t*6.283;x=sc*.4*Math.sin(a+my)+val*sc*.2;y=sc*.3*Math.sin(a*2)+val*sc*.15;} // lissajous
     else if(mode===10){const p=(t-.5)*2,strand=i%2===0?1:-1;x=p*sc;y=strand*Math.sin(p*3.14+my)*sc*.25+val*sc*.3;} // helix
     else if(mode===11){const a=t*6.283,r=sc*.35/(1+Math.pow(Math.cos(a),2)+my*.1);x=r*Math.cos(a)+val*sc*.1;y=r*Math.sin(a)*Math.cos(a)+val*sc*.1;} // infinity
-    else if(mode===12){const rings=3,ri=Math.floor(t*rings),tf=(t*rings)%1,a=tf*6.283,r=sc*(.15+ri*.12)+val*sc*.15+my*.03;x=Math.cos(a)*r;y=Math.sin(a)*r;} // pulse rings
+    else if(mode===12){ // pulse rings — 3 rings with pen lift
+      const rings=3,ri=Math.floor(t*rings),tf=(t*rings)%1,a=tf*6.283,r=sc*(.15+ri*.12)+val*sc*.15+my*.03;x=Math.cos(a)*r;y=Math.sin(a)*r;
+    }
     else if(mode===13){const a=t*12.56+my*2,r=sc*(.05+t*.35)+val*sc*.15;x=Math.cos(a)*r;y=Math.sin(a)*r;} // spiral
     else if(mode===14){const a=t*6.283,r=sc*.35/(Math.abs(Math.cos(a))+Math.abs(Math.sin(a))+.01)+val*sc*.15+my*.03;x=Math.cos(a)*r;y=Math.sin(a)*r;} // diamond
     else if(mode===15){const bx=(t-.5)*2*sc,by=val*sc*.6+my*.04;x=bx;y=by;} // spectrum
-    // Sacred geometry 16-23
-    else if(mode===16){ // Flower of Life — 7 circles traced sequentially
+    // Sacred geometry 16-23 — with multi-stroke pen lifts
+    else if(mode===16){ // Flower of Life — 7 circles
       const circ=7,ci=Math.floor(t*circ),tf=(t*circ)%1,a=tf*6.283;
       let ox=0,oy=0; if(ci>0){const ca=(ci-1)/6*6.283;ox=Math.cos(ca)*sc*.2;oy=Math.sin(ca)*sc*.2;}
       const r=sc*.2+val*sc*.08+my*.02; x=ox+Math.cos(a)*r; y=oy+Math.sin(a)*r;
@@ -1245,26 +1348,26 @@ function buildWaveVerts(samples, aspect) {
       const r=sc*.15+val*sc*.06+my*.02; x=ox+Math.cos(a)*r; y=oy+Math.sin(a)*r;
     }
     else if(mode===18){ // Metatron's Cube — circles + connecting lines
-      const phase=t*3; // 3 phases: inner ring, outer ring, connections
-      if(phase<1){ // Inner 6 circles + center
+      const phase=t*3;
+      if(phase<1){
         const circ=7,ci=Math.floor(phase*circ),tf=(phase*circ)%1,a=tf*6.283;
         let ox=0,oy=0; if(ci>0){const ca=(ci-1)/6*6.283;ox=Math.cos(ca)*sc*.12;oy=Math.sin(ca)*sc*.12;}
         const r=sc*.06+val*sc*.03; x=ox+Math.cos(a)*r; y=oy+Math.sin(a)*r;
-      } else if(phase<2){ // Outer 6 circles
+      } else if(phase<2){
         const ci=Math.floor((phase-1)*6),tf=((phase-1)*6)%1,a=tf*6.283;
         const ca=ci/6*6.283,d=sc*.24; const ox=Math.cos(ca)*d,oy=Math.sin(ca)*d;
         const r=sc*.06+val*sc*.03; x=ox+Math.cos(a)*r; y=oy+Math.sin(a)*r;
-      } else { // Connecting lines — radiate from center through all 12 points
+      } else {
         const li=Math.floor((phase-2)*12),lf=((phase-2)*12)%1;
         const ca=li/12*6.283,d=li<6?sc*.12:sc*.24;
         x=lf*Math.cos(ca)*d+val*sc*.02; y=lf*Math.sin(ca)*d+val*sc*.02;
       }
     }
     else if(mode===19){ // Sri Yantra — nested opposing triangles
-      const tri=8,ti=Math.floor(t*tri),tf=(t*tri)%1; // 4 up + 4 down triangles
+      const tri=8,ti=Math.floor(t*tri),tf=(t*tri)%1;
       const layer=Math.floor(ti/2), up=ti%2===0;
       const s=sc*(.1+layer*.08)+val*sc*.05+my*.02;
-      const base=up?-Math.PI/2:Math.PI/2, a=base+tf*6.283;
+      const base=up?-Math.PI/2:Math.PI/2;
       const side=Math.floor(tf*3), sf=(tf*3)%1;
       const a1=base+side*2.094, a2=base+(side+1)*2.094;
       x=Math.cos(a1)*s+(Math.cos(a2)*s-Math.cos(a1)*s)*sf; y=Math.sin(a1)*s+(Math.sin(a2)*s-Math.sin(a1)*s)*sf;
@@ -1293,7 +1396,7 @@ function buildWaveVerts(samples, aspect) {
     }
     v[i*2]=cx+x*2/aspect; v[i*2+1]=cy+y*2;
   }
-  return v;
+  return { verts: v, strokes: strokes };
 }
 
 // Dual wave toggle with fade
@@ -1467,8 +1570,10 @@ function render() {
   // Base line width in clip space — audio reactive
   const baseWidth = 0.008 + audio.bass * 0.006;
 
-  // Helper: draw a wave shape (thick line or dots)
-  function drawWave(verts, r, g, b, a, useDots, widthMul) {
+  // Helper: draw a wave shape (thick line or dots), with multi-stroke support
+  function drawWave(waveData, r, g, b, a, useDots, widthMul) {
+    const verts = waveData.verts || waveData; // backward compat
+    const strokes = waveData.strokes || null;
     if (useDots) {
       gl.useProgram(waveLegacyP);
       gl.bindVertexArray(waveLegacyVAO);
@@ -1476,7 +1581,8 @@ function render() {
       gl.bufferSubData(gl.ARRAY_BUFFER, 0, verts);
       gl.uniform4f(vUL.u_col, r, g, b, a);
       gl.drawArrays(gl.POINTS, 0, WAVE_N);
-    } else {
+    } else if (!strokes) {
+      // Single continuous stroke (most shapes)
       gl.useProgram(waveP);
       gl.bindVertexArray(waveVAO);
       const thick = buildThickLine(verts);
@@ -1486,8 +1592,21 @@ function render() {
       gl.uniform1f(vU.u_width, baseWidth * (widthMul || 1));
       gl.uniform1f(vU.u_glow, 0.8);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, WAVE_N * 2);
+    } else {
+      // Multi-stroke: draw each segment separately (pen lifts between)
+      gl.useProgram(waveP);
+      gl.bindVertexArray(waveVAO);
+      gl.uniform4f(vU.u_col, r, g, b, a);
+      gl.uniform1f(vU.u_width, baseWidth * (widthMul || 1));
+      gl.uniform1f(vU.u_glow, 0.8);
+      for (const [start, count] of strokes) {
+        if (count < 2) continue; // need at least 2 points for a line
+        const thick = buildThickLineSegment(verts, start, count);
+        gl.bindBuffer(gl.ARRAY_BUFFER, wBuf);
+        gl.bufferSubData(gl.ARRAY_BUFFER, 0, thick);
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, count * 2);
+      }
     }
-    // Restore framebuffer binding (wave draws into writeFB)
     gl.bindFramebuffer(gl.FRAMEBUFFER, writeFB);
   }
 
@@ -1516,6 +1635,7 @@ function render() {
 
   // Dual/Split wave: draw second shape (with fade)
   stepDualFade();
+  stepWave2Transition();
   if (dualFade > 0.01 && !xfading) {
     const origMode = state.wave_mode, origMy = state.wave_mystery;
     const origSc = state.wave_scale, origX = state.wave_x, origY = state.wave_y;
