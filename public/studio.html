@@ -1138,11 +1138,21 @@ function buildWaveVerts(samples, aspect) {
   return v;
 }
 
-// Dual wave toggle
+// Dual wave toggle with fade
+let dualFade = 0; // 0 = second wave invisible, 1 = fully visible
+let dualFadeTarget = 0;
+const DUAL_FADE_SPEED = 0.03; // ~30 frames to full fade = ~0.5s at 60fps
+
 function cycleDual() {
   dualIdx = (dualIdx + 1) % DUAL_MODES.length;
-  wave_mode2 = -1; // reset to auto-pick
+  wave_mode2 = -1;
+  dualFadeTarget = DUAL_MODES[dualIdx].count > 1 ? 1 : 0;
   if (DUAL_MODES[dualIdx].name === 'SPLIT') randomizeWave2();
+}
+
+function stepDualFade() {
+  if (dualFade < dualFadeTarget) dualFade = Math.min(dualFadeTarget, dualFade + DUAL_FADE_SPEED);
+  else if (dualFade > dualFadeTarget) dualFade = Math.max(dualFadeTarget, dualFade - DUAL_FADE_SPEED);
 }
 function getSecondMode() {
   if (wave_mode2 >= 0) return wave_mode2;
@@ -1258,8 +1268,9 @@ function render() {
     gl.uniform4f(vU.u_col, state.wave_r, state.wave_g, state.wave_b, state.wave_a);
     gl.drawArrays(state.wave_dots?gl.POINTS:gl.LINE_STRIP, 0, WAVE_N);
   }
-  // Dual/Split wave: draw second shape
-  if (DUAL_MODES[dualIdx].count > 1 && !xfading) {
+  // Dual/Split wave: draw second shape (with fade)
+  stepDualFade();
+  if (dualFade > 0.01 && !xfading) {
     const origMode = state.wave_mode, origMy = state.wave_mystery;
     const origSc = state.wave_scale, origX = state.wave_x, origY = state.wave_y;
     const isSplit = DUAL_MODES[dualIdx].name === 'SPLIT';
@@ -1277,9 +1288,9 @@ function render() {
     state.wave_scale = origSc; state.wave_x = origX; state.wave_y = origY;
     gl.bindBuffer(gl.ARRAY_BUFFER, wBuf); gl.bufferSubData(gl.ARRAY_BUFFER, 0, wv2);
     if (isSplit) {
-      gl.uniform4f(vU.u_col, wave2.r, wave2.g, wave2.b, wave2.a);
+      gl.uniform4f(vU.u_col, wave2.r, wave2.g, wave2.b, wave2.a * dualFade);
     } else {
-      gl.uniform4f(vU.u_col, state.wave_r, state.wave_g, state.wave_b, state.wave_a * 0.7);
+      gl.uniform4f(vU.u_col, state.wave_r, state.wave_g, state.wave_b, state.wave_a * 0.7 * dualFade);
     }
     gl.drawArrays((isSplit ? wave2.dots : state.wave_dots) ? gl.POINTS : gl.LINE_STRIP, 0, WAVE_N);
   }
@@ -1777,13 +1788,6 @@ function stepChaos() {
   if (chaosFrameCount % 900 === 0 && Math.random() < 0.5) {
     state.wave_mode = Math.floor(Math.random() * 24);
     wave_mode2 = -1; // auto-pick new complement
-  }
-
-  // Cycle dual mode (~every 20 seconds)
-  if (chaosFrameCount % 1200 === 0) {
-    dualIdx = (dualIdx + 1) % DUAL_MODES.length;
-    wave_mode2 = -1;
-    if (DUAL_MODES[dualIdx].name === 'SPLIT') randomizeWave2();
   }
 
   // Drift wave2 independently in SPLIT mode
