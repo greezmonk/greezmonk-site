@@ -2146,6 +2146,8 @@ function randomize() {
   transitionTarget = target;
   transitionProgress = 0;
   if (DUAL_MODES[dualIdx].name === 'SPLIT') randomizeWave2();
+  // Cycle warp mode on each auto-random (~60% chance of new mode)
+  if (Math.random() < 0.6) warpModeTarget = Math.floor(Math.random() * 9);
   currentPresetName = '';
   document.querySelectorAll('.presets button').forEach(b => b.classList.remove('active'));
 }
