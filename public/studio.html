@@ -2012,6 +2012,15 @@ function randomize() {
         target.wave_r = channels[0]; target.wave_g = channels[1]; target.wave_b = channels[2];
       }
     }
+    // Add gradient to library presets too (~50% chance)
+    if (Math.random() < 0.5) {
+      target.wave_gradient = 0.4 + Math.random() * 0.6;
+      const pal2 = getRandomPaletteColor();
+      if (pal2) { target.wave_r2 = pal2[0]; target.wave_g2 = pal2[1]; target.wave_b2 = pal2[2]; }
+      else { target.wave_r2 = Math.random(); target.wave_g2 = Math.random(); target.wave_b2 = Math.random(); }
+    } else {
+      target.wave_gradient = 0;
+    }
   } else {
     // Generate random config
     target = { ...DEFAULTS };
@@ -2051,8 +2060,8 @@ function randomize() {
     } else {
       target.wave_r = Math.random(); target.wave_g = Math.random(); target.wave_b = Math.random();
     }
-    // ~40% chance of gradient, picking a contrasting end color
-    if (Math.random() < 0.4) {
+    // ~70% chance of gradient, picking a contrasting end color
+    if (Math.random() < 0.7) {
       target.wave_gradient = 0.5 + Math.random() * 0.5;
       const pal2 = getRandomPaletteColor();
       if (pal2) { target.wave_r2 = pal2[0]; target.wave_g2 = pal2[1]; target.wave_b2 = pal2[2]; }
@@ -2154,10 +2163,10 @@ const CHAOS_PARAMS = {
   wave_g: { min: 0.05, max: 1, drift: 0.4 },
   wave_b: { min: 0.05, max: 1, drift: 0.4 },
   wave_a: { min: 0.5, max: 1, drift: 0.15 },
-  wave_r2: { min: 0.05, max: 1, drift: 0.4 },
-  wave_g2: { min: 0.05, max: 1, drift: 0.4 },
-  wave_b2: { min: 0.05, max: 1, drift: 0.4 },
-  wave_gradient: { min: 0, max: 1, drift: 0.2 },
+  wave_r2: { min: 0.05, max: 1, drift: 0.6 },
+  wave_g2: { min: 0.05, max: 1, drift: 0.6 },
+  wave_b2: { min: 0.05, max: 1, drift: 0.6 },
+  wave_gradient: { min: 0, max: 1, drift: 0.6 },
   wave_x: { min: 0.2, max: 0.8, drift: 0.3 },
   wave_y: { min: 0.2, max: 0.8, drift: 0.3 },
   wave_mystery: { min: -2, max: 2, drift: 0.4 },
