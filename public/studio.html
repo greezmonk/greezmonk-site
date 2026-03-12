@@ -155,13 +155,15 @@
 
   #help-overlay {
     display: none; position: fixed; inset: 0; z-index: 9999;
-    background: rgba(0,0,0,0.85); backdrop-filter: blur(4px);
+    background: rgba(0,0,0,0.35); backdrop-filter: blur(2px);
     overflow-y: auto; padding: 40px;
     font: 12px 'Courier New', monospace; color: var(--text);
   }
   #help-overlay.show { display: flex; justify-content: center; align-items: flex-start; }
   #help-content {
     max-width: 640px; width: 100%;
+    background: rgba(0,0,0,0.5); border: 1px dashed var(--border);
+    border-radius: 4px; padding: 24px 32px;
   }
   #help-content h2 { color: var(--accent); font-size: 14px; letter-spacing: 2px; text-transform: uppercase; margin: 0 0 16px 0; font-weight: 400; }
   #help-content h3 { color: var(--accent); font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; margin: 18px 0 8px 0; font-weight: 400; border-bottom: 1px dashed var(--border); padding-bottom: 4px; }
@@ -241,7 +243,7 @@
     <h3>Config</h3>
     <div class="help-row"><span class="help-key">Save Startup</span><span class="help-desc">save current state as default on load</span></div>
     <div class="help-row"><span class="help-key">Shift+Save Startup</span><span class="help-desc">clear saved startup</span></div>
-    <div class="help-row"><span class="help-key">?</span><span class="help-desc">this help screen</span></div>
+    <div class="help-row"><span class="help-key">/ or ?</span><span class="help-desc">this help screen</span></div>
     <div class="help-close">press any key or click to close</div>
   </div>
 </div>
@@ -301,7 +303,7 @@ function randomizeWave2() {
   for (const k of WAVE2_LERP_KEYS) wave2From[k] = wave2[k];
   for (const k of WAVE2_SNAP_KEYS) wave2From[k] = wave2[k];
   // Generate new target
-  wave2Target.mode = Math.floor(Math.random() * 24);
+  wave2Target.mode = getPooledShape();
   wave2Target.r = 0.2 + Math.random() * 0.8;
   wave2Target.g = 0.2 + Math.random() * 0.8;
   wave2Target.b = 0.2 + Math.random() * 0.8;
@@ -2102,10 +2104,9 @@ function randomize() {
       showAttribution(nameA, authorA);
     }
 
-    // 35% chance: swap in a new/sacred geometry wave shape
-    if (Math.random() < 0.35) {
-      target.wave_mode = getPooledShapeInRange(8, 23);
-    }
+    // Always pick shape from pool — library presets default to circle (mode 0)
+    // which makes every preset look the same without this override
+    target.wave_mode = getPooledShape();
 
     // Safety clamps
     if (target.decay > 0.99) target.decay = 0.985;
@@ -2399,7 +2400,7 @@ function stepChaos(audio) {
     wave2.b = Math.max(0.1, Math.min(1, wave2.b));
     // Occasionally change wave2 mode (~every 12 seconds)
     if (chaosFrameCount % 720 === 0 && Math.random() < 0.5) {
-      wave2.mode = Math.floor(Math.random() * 24);
+      wave2.mode = getPooledShape();
       wave2.dots = Math.random() > 0.8 ? 1 : 0;
     }
   }
@@ -2447,7 +2448,7 @@ document.addEventListener('keydown', e => {
   // Help overlay — ? to open, any key to close
   const helpEl = document.getElementById('help-overlay');
   if (helpEl.classList.contains('show')) { helpEl.classList.remove('show'); e.preventDefault(); return; }
-  if (e.key === '?') { helpEl.classList.add('show'); e.preventDefault(); return; }
+  if (e.key === '?' || e.key === '/') { helpEl.classList.add('show'); e.preventDefault(); return; }
 
   switch(e.key){
     case '1': loadPreset('cyan_vscope'); break;
@@ -2479,17 +2480,25 @@ document.addEventListener('keydown', e => {
 // =====================================================
 const STARTUP_KEY = 'synthestasia-startup';
 
+// Save only preferences (not visual state) — so the visualizer
+// remembers your setup but doesn't freeze on one preset
+const STARTUP_PREF_KEYS = [
+  'transition_speed', 'auto_interval',
+  'audio_bass_gain', 'audio_mid_gain', 'audio_treb_gain', 'audio_trigger',
+  'bloom_strength', 'bloom_threshold',
+];
+
 function saveStartup() {
+  const prefs = {};
+  for (const k of STARTUP_PREF_KEYS) prefs[k] = state[k];
   const config = {
-    state: { ...state },
+    prefs: prefs,
     shapePool: [...shapePool],
     dualIdx: dualIdx,
-    warpMode: warpModeTarget,
     autoOn: autoRandomInterval !== null,
     chaosOn: chaosEnabled,
   };
   localStorage.setItem(STARTUP_KEY, JSON.stringify(config));
-  // Flash the save button for feedback
   const btn = document.getElementById('btn-save-startup');
   if (btn) { btn.textContent = 'saved!'; btn.style.color = 'var(--accent)'; setTimeout(() => { btn.textContent = 'save startup'; btn.style.color = ''; }, 1500); }
 }
@@ -2499,10 +2508,11 @@ function loadStartup() {
     const saved = localStorage.getItem(STARTUP_KEY);
     if (!saved) return false;
     const config = JSON.parse(saved);
-    if (config.state) Object.assign(state, config.state);
+    // Restore only preferences, not visual state
+    if (config.prefs) Object.assign(state, config.prefs);
+    // Legacy: if old format had full state, ignore visual params
     if (config.shapePool) config.shapePool.forEach((v, i) => { if (i < shapePool.length) shapePool[i] = v; });
     if (config.dualIdx !== undefined) dualIdx = config.dualIdx;
-    if (config.warpMode !== undefined) warpModeTarget = config.warpMode;
     return config;
   } catch(e) { return false; }
 }
@@ -2518,15 +2528,15 @@ const startupConfig = loadStartup();
 buildUI();
 buildFavBar();
 initFBs();
-if (!startupConfig) {
-  loadPreset('metheus');
-  toggleAutoRandom(); // auto-random on by default
-  toggleChaos();      // chaos on by default
+loadPreset('metheus'); // always start with a visual preset
+syncUI();
+// Restore auto/chaos from startup prefs, or default both on
+if (startupConfig) {
+  if (startupConfig.autoOn) toggleAutoRandom();
+  if (startupConfig.chaosOn) toggleChaos();
 } else {
-  syncUI();
-  // Restore auto/chaos state
-  if (startupConfig.autoOn && !autoRandomInterval) toggleAutoRandom();
-  if (startupConfig.chaosOn && !chaosEnabled) toggleChaos();
+  toggleAutoRandom();
+  toggleChaos();
 }
 render();
 </script>
