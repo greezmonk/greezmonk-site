@@ -266,7 +266,7 @@ const DEFAULTS = {
   wave_mode: 0,
   wave_r: 1, wave_g: 1, wave_b: 1, wave_a: 1,
   wave_x: 0.5, wave_y: 0.5, wave_mystery: 0,
-  wave_dots: 0, wave_thick: 0, wave_additive: 1, wave_brighten: 1,
+  wave_dots: 0, wave_thick: 0, wave_additive: 1, wave_brighten: 0,
   zoom: 1, rot: 0, warp: 0,
   cx: 0.5, cy: 0.5, dx: 0, dy: 0, sx: 1, sy: 1,
   decay: 0.98, gamma: 1,
@@ -962,12 +962,13 @@ void main() {
   float bassShift = u_bass * u_bass * 0.6; // squared for punch feel
   float gradT = clamp(v_t + bassShift, 0.0, 1.0);
   vec3 baseCol = mix(u_col.rgb, u_col2, gradT * u_gradient);
-  // Bass also boosts glow width and brightness
-  float bassBright = 1.0 + u_bass * 0.4;
+  // Bass boosts brightness — kept subtle to prevent white-out accumulation
+  float bassBright = 1.0 + u_bass * 0.25;
   float brightness = mix(bassBright, 0.6, d * d);
-  // Bass alpha boost — lines get more opaque on hits
-  alpha = clamp(alpha * (1.0 + u_bass * 0.3), 0.0, 1.0);
-  o = vec4(baseCol * brightness, u_col.a * alpha);
+  // Bass alpha boost
+  alpha = clamp(alpha * (1.0 + u_bass * 0.2), 0.0, 1.0);
+  vec3 finalCol = min(baseCol * brightness, vec3(1.0)); // hard clamp prevents >1 accumulation
+  o = vec4(finalCol, u_col.a * alpha);
 }`;
 
 const COMP_FS = `#version 300 es
@@ -2094,8 +2095,11 @@ function randomize() {
     target.wave_mystery = (Math.random() - 0.5) * 2;
     target.wave_dots = Math.random() > 0.7 ? 1 : 0;
     target.wave_thick = Math.random() > 0.4 ? 1 : 0;
-    target.wave_additive = Math.random() > 0.3 ? 1 : 0;
-    target.wave_brighten = Math.random() > 0.6 ? 1 : 0;
+    target.wave_additive = Math.random() > 0.4 ? 1 : 0;
+    target.wave_brighten = 0; // brighten causes white-out with feedback loop
+    target.brighten = 0;
+    target.invert = 0;
+    target.solarize = 0;
     target.zoom = 0.85 + Math.random() * 0.25;
     target.rot = (Math.random() - 0.5) * 0.08;
     target.warp = Math.random() * 1.5;
@@ -2318,8 +2322,11 @@ function stepChaos(audio) {
     }
   }
 
-  // White-out guard: if brighten is on, keep decay in check
-  if ((state.brighten || state.wave_brighten) && state.decay > 0.975) state.decay = 0.97;
+  // White-out guard: aggressive decay cap when brightness can accumulate
+  if ((state.brighten || state.wave_brighten) && state.decay > 0.97) state.decay = 0.965;
+  if (state.wave_additive && state.decay > 0.985) state.decay = 0.98;
+  // Double danger: additive + brighten
+  if (state.wave_additive && (state.brighten || state.wave_brighten) && state.decay > 0.96) state.decay = 0.955;
 
   // Keep wave color saturated — at least one channel stays bright
   const maxC = Math.max(state.wave_r||0, state.wave_g||0, state.wave_b||0);
