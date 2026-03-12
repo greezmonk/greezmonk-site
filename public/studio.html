@@ -1282,10 +1282,11 @@ let frameCount=0, lastFpsTime=performance.now(), fps=0, startTime=performance.no
 function render() {
   if(paused){requestAnimationFrame(render);return;}
   stepTransition();
-  stepChaos();
   const now=performance.now(), t=(now-startTime)/1000;
   const w=canvas.width, h=canvas.height, aspect=w/h;
-  const audio=getAudio(t), wave=getWave(t);
+  const audio=getAudio(t);
+  stepChaos(audio);
+  const wave=getWave(t);
 
   // Per-frame equations
   let dZ=state.zoom,dR=state.rot,dCx=state.cx,dCy=state.cy,dW=state.warp,dD=state.decay;
@@ -1850,14 +1851,19 @@ for (const k of Object.keys(CHAOS_PARAMS)) chaosVelocity[k] = (Math.random() - 0
 
 let chaosFrameCount = 0;
 
-function stepChaos() {
+function stepChaos(audio) {
   if (!chaosEnabled) return;
   chaosFrameCount++;
+  const a = audio || { bass: 0.5, mid: 0.3, treb: 0.2 };
+
+  // Audio energy drives drift intensity — quiet = gentle, loud = wild
+  const energy = a.bass * 0.6 + a.mid * 0.3 + a.treb * 0.1;
+  const driftMul = 0.5 + energy * 2.5; // 0.5x when silent, ~3x on a big hit
 
   for (const [k, cfg] of Object.entries(CHAOS_PARAMS)) {
-    // Brownian: nudge velocity randomly, then apply
-    chaosVelocity[k] += (Math.random() - 0.5) * 0.3;
-    chaosVelocity[k] *= 0.98; // dampen to prevent runaway
+    // Brownian: nudge velocity randomly, scaled by audio energy
+    chaosVelocity[k] += (Math.random() - 0.5) * 0.3 * driftMul;
+    chaosVelocity[k] *= 0.98;
     chaosVelocity[k] = Math.max(-1, Math.min(1, chaosVelocity[k]));
 
     const range = cfg.max - cfg.min;
@@ -1865,25 +1871,36 @@ function stepChaos() {
     state[k] = Math.max(cfg.min, Math.min(cfg.max, (state[k] ?? DEFAULTS[k]) + nudge));
   }
 
-  // Occasionally flip a boolean (~every 10 seconds at 60fps)
-  if (chaosFrameCount % 600 === 0) {
+  // Bass punch: big bass hits kick zoom and warp harder
+  if (a.bass > 0.7) {
+    state.zoom += (Math.random() - 0.5) * 0.003 * a.bass;
+    state.warp += (Math.random() - 0.5) * 0.05 * a.bass;
+    state.zoom = Math.max(0.95, Math.min(1.1, state.zoom));
+    state.warp = Math.max(0, Math.min(2, state.warp));
+  }
+
+  // Treble triggers boolean flips — high treble = more frequent changes
+  const flipChance = a.treb > 0.5 ? 300 : 600; // frames between flips
+  if (chaosFrameCount % flipChance === 0) {
     const bools = ['wave_dots','wave_thick','wave_additive'];
     const pick = bools[Math.floor(Math.random() * bools.length)];
     state[pick] = state[pick] ? 0 : 1;
   }
 
-  // Occasionally change wave_mode (~every 15 seconds)
-  if (chaosFrameCount % 900 === 0 && Math.random() < 0.5) {
+  // Mid energy drives wave mode changes — sustained mids trigger shifts
+  const modeChance = a.mid > 0.6 ? 600 : 900;
+  if (chaosFrameCount % modeChance === 0 && Math.random() < 0.5) {
     state.wave_mode = Math.floor(Math.random() * 24);
-    wave_mode2 = -1; // auto-pick new complement
+    wave_mode2 = -1;
   }
 
-  // Drift wave2 independently in SPLIT mode
+  // Drift wave2 independently in SPLIT mode — audio reactive
   if (DUAL_MODES[dualIdx].name === 'SPLIT') {
-    wave2.x += (Math.random() - 0.5) * 0.003;
-    wave2.y += (Math.random() - 0.5) * 0.003;
-    wave2.mystery += (Math.random() - 0.5) * 0.02;
-    wave2.scale += (Math.random() - 0.5) * 0.005;
+    const w2drift = 0.5 + energy * 2;
+    wave2.x += (Math.random() - 0.5) * 0.003 * w2drift;
+    wave2.y += (Math.random() - 0.5) * 0.003 * w2drift;
+    wave2.mystery += (Math.random() - 0.5) * 0.02 * w2drift;
+    wave2.scale += (Math.random() - 0.5) * 0.005 * w2drift;
     wave2.x = Math.max(0.15, Math.min(0.85, wave2.x));
     wave2.y = Math.max(0.15, Math.min(0.85, wave2.y));
     wave2.mystery = Math.max(-3, Math.min(3, wave2.mystery));
