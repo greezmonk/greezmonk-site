@@ -752,11 +752,38 @@ void main() {
   o = vec4(texture(u_prev, fract(v_uv)).rgb * u_decay, 1.0);
 }`;
 
-const WAVE_VS = `#version 300 es
+// Legacy wave shader (for dots mode)
+const WAVE_VS_LEGACY = `#version 300 es
 in vec2 a_pos; void main() { gl_Position = vec4(a_pos, 0.0, 1.0); gl_PointSize = 3.0; }`;
-const WAVE_FS = `#version 300 es
+const WAVE_FS_LEGACY = `#version 300 es
 precision highp float; out vec4 o; uniform vec4 u_col;
 void main() { o = u_col; }`;
+
+// Thick glow wave shader — triangle strip with distance-based falloff
+const WAVE_VS = `#version 300 es
+in vec2 a_pos;    // center line position
+in vec2 a_normal; // perpendicular offset direction
+in float a_side;  // -1 or +1 (which side of the line)
+uniform float u_width; // half-width in clip space
+out float v_edge; // 0 at center, 1 at edge
+void main() {
+  vec2 offset = a_normal * a_side * u_width;
+  gl_Position = vec4(a_pos + offset, 0.0, 1.0);
+  v_edge = abs(a_side);
+}`;
+const WAVE_FS = `#version 300 es
+precision highp float; out vec4 o;
+uniform vec4 u_col;
+uniform float u_glow; // 0 = hard edge, 1 = full glow
+in float v_edge;
+void main() {
+  float d = v_edge;
+  // Core: bright center, soft falloff to edge
+  float core = 1.0 - smoothstep(0.0, 0.3, d);
+  float glow = 1.0 - smoothstep(0.0, 1.0, d);
+  float alpha = mix(step(0.95, 1.0 - d), mix(glow, core * 0.7 + glow * 0.5, 0.5), u_glow);
+  o = vec4(u_col.rgb * (core * 0.4 + 0.6), u_col.a * alpha);
+}`;
 
 const COMP_FS = `#version 300 es
 precision highp float;
@@ -823,6 +850,7 @@ void main() {
 
 const warpP = mkProg(WARP_MESH_VS, WARP_MESH_FS);
 const waveP = mkProg(WAVE_VS, WAVE_FS);
+const waveLegacyP = mkProg(WAVE_VS_LEGACY, WAVE_FS_LEGACY);
 const compP = mkProg(QUAD_VS, COMP_FS);
 
 const bloomExtP = mkProg(QUAD_VS, BLOOM_EXTRACT_FS);
@@ -832,7 +860,8 @@ const bloomBlendP = mkProg(QUAD_VS, BLOOM_BLEND_FS);
 function uL(p,n) { return gl.getUniformLocation(p,n); }
 const wU={}; ['u_prev','u_time','u_zoom','u_rot','u_warp','u_cx','u_cy','u_dx','u_dy','u_sx','u_sy','u_decay'].forEach(n=>wU[n]=uL(warpP,n));
 const cU={}; ['u_tex','u_gamma','u_darken','u_brighten','u_solarize','u_invert','u_obSize','u_obCol'].forEach(n=>cU[n]=uL(compP,n));
-const vU={}; ['u_col'].forEach(n=>vU[n]=uL(waveP,n));
+const vU={}; ['u_col','u_width','u_glow'].forEach(n=>vU[n]=uL(waveP,n));
+const vUL={}; ['u_col'].forEach(n=>vUL[n]=uL(waveLegacyP,n));
 const beU={}; ['u_tex','u_threshold'].forEach(n=>beU[n]=uL(bloomExtP,n));
 const bbU={}; ['u_tex','u_dir'].forEach(n=>bbU[n]=uL(bloomBlurP,n));
 const blU={}; ['u_scene','u_bloom','u_strength'].forEach(n=>blU[n]=uL(bloomBlendP,n));
@@ -895,17 +924,60 @@ function buildWarpMesh() {
 }
 buildWarpMesh();
 
-// Wave VAO
-const WAVE_N = 256;
+// Wave setup
+const WAVE_N = 512;
+
+// Legacy VAO (for dots mode — just positions)
+const wBufLegacy = gl.createBuffer();
+const waveLegacyVAO = gl.createVertexArray();
+gl.bindVertexArray(waveLegacyVAO);
+gl.bindBuffer(gl.ARRAY_BUFFER, wBufLegacy);
+gl.bufferData(gl.ARRAY_BUFFER, WAVE_N*2*4, gl.DYNAMIC_DRAW);
+const wPosLL = gl.getAttribLocation(waveLegacyP, 'a_pos');
+gl.enableVertexAttribArray(wPosLL);
+gl.vertexAttribPointer(wPosLL, 2, gl.FLOAT, false, 0, 0);
+gl.bindVertexArray(null);
+
+// Thick line VAO — triangle strip: pos(2) + normal(2) + side(1) = 5 floats per vert, 2 verts per point
+const THICK_STRIDE = 5 * 4; // 5 floats * 4 bytes
 const wBuf = gl.createBuffer();
 const waveVAO = gl.createVertexArray();
 gl.bindVertexArray(waveVAO);
 gl.bindBuffer(gl.ARRAY_BUFFER, wBuf);
-gl.bufferData(gl.ARRAY_BUFFER, WAVE_N*2*4, gl.DYNAMIC_DRAW);
-const wPosL = gl.getAttribLocation(waveP, 'a_pos');
-gl.enableVertexAttribArray(wPosL);
-gl.vertexAttribPointer(wPosL, 2, gl.FLOAT, false, 0, 0);
+gl.bufferData(gl.ARRAY_BUFFER, WAVE_N * 2 * THICK_STRIDE, gl.DYNAMIC_DRAW);
+const tPosL = gl.getAttribLocation(waveP, 'a_pos');
+const tNormL = gl.getAttribLocation(waveP, 'a_normal');
+const tSideL = gl.getAttribLocation(waveP, 'a_side');
+gl.enableVertexAttribArray(tPosL);
+gl.vertexAttribPointer(tPosL, 2, gl.FLOAT, false, THICK_STRIDE, 0);
+gl.enableVertexAttribArray(tNormL);
+gl.vertexAttribPointer(tNormL, 2, gl.FLOAT, false, THICK_STRIDE, 8);
+gl.enableVertexAttribArray(tSideL);
+gl.vertexAttribPointer(tSideL, 1, gl.FLOAT, false, THICK_STRIDE, 16);
 gl.bindVertexArray(null);
+
+// Expand centerline points into triangle strip with normals
+function buildThickLine(centerVerts) {
+  // centerVerts: Float32Array of WAVE_N*2 (x,y pairs)
+  // output: Float32Array of WAVE_N*2*5 (pos + normal + side for each edge vert)
+  const out = new Float32Array(WAVE_N * 2 * 5);
+  for (let i = 0; i < WAVE_N; i++) {
+    const x = centerVerts[i*2], y = centerVerts[i*2+1];
+    // Compute tangent from neighbors
+    let dx, dy;
+    if (i === 0) { dx = centerVerts[2] - x; dy = centerVerts[3] - y; }
+    else if (i === WAVE_N-1) { dx = x - centerVerts[(i-1)*2]; dy = y - centerVerts[(i-1)*2+1]; }
+    else { dx = centerVerts[(i+1)*2] - centerVerts[(i-1)*2]; dy = centerVerts[(i+1)*2+1] - centerVerts[(i-1)*2+1]; }
+    // Perpendicular normal (normalized)
+    const len = Math.sqrt(dx*dx + dy*dy) || 0.001;
+    const nx = -dy/len, ny = dx/len;
+    // Two verts: side=-1 and side=+1
+    const base = i * 10;
+    out[base]   = x; out[base+1] = y; out[base+2] = nx; out[base+3] = ny; out[base+4] = -1;
+    out[base+5] = x; out[base+6] = y; out[base+7] = nx; out[base+8] = ny; out[base+9] = 1;
+  }
+  return out;
+}
 
 // Framebuffers
 let fbW,fbH,fbA,fbB,texA,texB;
@@ -1233,10 +1305,34 @@ function render() {
   gl.uniform1f(wU.u_decay,dD);
   gl.bindVertexArray(warpVAO); gl.drawElements(gl.TRIANGLES, warpMeshCount, gl.UNSIGNED_SHORT, 0);
 
-  // Pass 2: Waves (with crossfade during transitions)
-  gl.useProgram(waveP); gl.enable(gl.BLEND);
+  // Pass 2: Waves
+  gl.enable(gl.BLEND);
   gl.blendFunc(state.wave_additive?gl.SRC_ALPHA:gl.SRC_ALPHA, state.wave_additive?gl.ONE:gl.ONE_MINUS_SRC_ALPHA);
-  gl.bindVertexArray(waveVAO);
+
+  // Base line width in clip space — audio reactive
+  const baseWidth = 0.008 + audio.bass * 0.006;
+
+  // Helper: draw a wave shape (thick line or dots)
+  function drawWave(verts, r, g, b, a, useDots, widthMul) {
+    if (useDots) {
+      gl.useProgram(waveLegacyP);
+      gl.bindVertexArray(waveLegacyVAO);
+      gl.bindBuffer(gl.ARRAY_BUFFER, wBufLegacy);
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, verts);
+      gl.uniform4f(vUL.u_col, r, g, b, a);
+      gl.drawArrays(gl.POINTS, 0, WAVE_N);
+    } else {
+      gl.useProgram(waveP);
+      gl.bindVertexArray(waveVAO);
+      const thick = buildThickLine(verts);
+      gl.bindBuffer(gl.ARRAY_BUFFER, wBuf);
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, thick);
+      gl.uniform4f(vU.u_col, r, g, b, a);
+      gl.uniform1f(vU.u_width, baseWidth * (widthMul || 1));
+      gl.uniform1f(vU.u_glow, 0.8);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, WAVE_N * 2);
+    }
+  }
 
   // If transitioning between different wave modes, draw both with alpha crossfade
   const xfading = transitionTarget && transitionFrom &&
@@ -1246,28 +1342,21 @@ function render() {
   if (xfading) {
     const ease = transitionProgress < 0.5 ? 2*transitionProgress*transitionProgress : 1-Math.pow(-2*transitionProgress+2,2)/2;
     const fadeOut = 1 - ease, fadeIn = ease;
-    // Draw old wave (fading out)
     const oldMode = state.wave_mode;
     state.wave_mode = transitionFrom.wave_mode;
     const wvOld = buildWaveVerts(wave, aspect);
     state.wave_mode = oldMode;
-    gl.bindBuffer(gl.ARRAY_BUFFER,wBuf); gl.bufferSubData(gl.ARRAY_BUFFER,0,wvOld);
     const oldR = transitionFrom.wave_r ?? state.wave_r, oldG = transitionFrom.wave_g ?? state.wave_g, oldB = transitionFrom.wave_b ?? state.wave_b;
-    gl.uniform4f(vU.u_col, oldR, oldG, oldB, state.wave_a * fadeOut);
-    gl.drawArrays(state.wave_dots?gl.POINTS:gl.LINE_STRIP, 0, WAVE_N);
-    // Draw new wave (fading in)
+    drawWave(wvOld, oldR, oldG, oldB, state.wave_a * fadeOut, state.wave_dots, 1);
     state.wave_mode = transitionTarget.wave_mode;
     const wvNew = buildWaveVerts(wave, aspect);
     state.wave_mode = oldMode;
-    gl.bindBuffer(gl.ARRAY_BUFFER,wBuf); gl.bufferSubData(gl.ARRAY_BUFFER,0,wvNew);
-    gl.uniform4f(vU.u_col, state.wave_r, state.wave_g, state.wave_b, state.wave_a * fadeIn);
-    gl.drawArrays(state.wave_dots?gl.POINTS:gl.LINE_STRIP, 0, WAVE_N);
+    drawWave(wvNew, state.wave_r, state.wave_g, state.wave_b, state.wave_a * fadeIn, state.wave_dots, 1);
   } else {
-    const wv=buildWaveVerts(wave,aspect);
-    gl.bindBuffer(gl.ARRAY_BUFFER,wBuf); gl.bufferSubData(gl.ARRAY_BUFFER,0,wv);
-    gl.uniform4f(vU.u_col, state.wave_r, state.wave_g, state.wave_b, state.wave_a);
-    gl.drawArrays(state.wave_dots?gl.POINTS:gl.LINE_STRIP, 0, WAVE_N);
+    const wv = buildWaveVerts(wave, aspect);
+    drawWave(wv, state.wave_r, state.wave_g, state.wave_b, state.wave_a, state.wave_dots, 1);
   }
+
   // Dual/Split wave: draw second shape (with fade)
   stepDualFade();
   if (dualFade > 0.01 && !xfading) {
@@ -1286,20 +1375,17 @@ function render() {
     const wv2 = buildWaveVerts(wave, aspect);
     state.wave_mode = origMode; state.wave_mystery = origMy;
     state.wave_scale = origSc; state.wave_x = origX; state.wave_y = origY;
-    gl.bindBuffer(gl.ARRAY_BUFFER, wBuf); gl.bufferSubData(gl.ARRAY_BUFFER, 0, wv2);
     if (isSplit) {
-      gl.uniform4f(vU.u_col, wave2.r, wave2.g, wave2.b, wave2.a * dualFade);
+      drawWave(wv2, wave2.r, wave2.g, wave2.b, wave2.a * dualFade, wave2.dots, 0.8);
     } else {
-      gl.uniform4f(vU.u_col, state.wave_r, state.wave_g, state.wave_b, state.wave_a * 0.7 * dualFade);
+      drawWave(wv2, state.wave_r, state.wave_g, state.wave_b, state.wave_a * 0.7 * dualFade, state.wave_dots, 0.8);
     }
-    gl.drawArrays((isSplit ? wave2.dots : state.wave_dots) ? gl.POINTS : gl.LINE_STRIP, 0, WAVE_N);
   }
 
-  if(state.wave_thick||state.wave_brighten){
-    const wvT=buildWaveVerts(wave,aspect);
-    gl.bindBuffer(gl.ARRAY_BUFFER,wBuf); gl.bufferSubData(gl.ARRAY_BUFFER,0,wvT);
-    gl.uniform4f(vU.u_col, state.wave_r*1.2, state.wave_g*1.2, state.wave_b*1.2, state.wave_a*0.4);
-    gl.drawArrays(state.wave_dots?gl.POINTS:gl.LINE_STRIP, 0, WAVE_N);
+  // Thick/brighten glow pass
+  if (state.wave_thick || state.wave_brighten) {
+    const wvT = buildWaveVerts(wave, aspect);
+    drawWave(wvT, state.wave_r*1.2, state.wave_g*1.2, state.wave_b*1.2, state.wave_a*0.4, state.wave_dots, 1.8);
   }
   gl.disable(gl.BLEND);
 
