@@ -329,7 +329,7 @@ const GROUPS = [
     { type: 'wavemode' },
     { type: 'slider', key: 'wave_mystery', min: -1, max: 1, step: 0.01, label: 'mystery' },
     { type: 'slider', key: 'wave_scale', min: 0.1, max: 4, step: 0.01, label: 'scale' },
-    { type: 'slider', key: 'wave_smoothing', min: 0, max: 1, step: 0.01, label: 'smoothing' },
+    { type: 'slider', key: 'wave_smoothing', min: 0, max: 1, step: 0.01, label: 'tension' },
     { type: 'toggles', keys: ['wave_dots','wave_thick','wave_additive','wave_brighten'] },
   ]},
   { name: 'Wave Color', controls: [
@@ -347,8 +347,8 @@ const GROUPS = [
     { type: 'slider', key: 'warp', min: 0, max: 2, step: 0.01, label: 'warp' },
     { type: 'slider', key: 'cx', min: 0, max: 1, step: 0.01, label: 'center x' },
     { type: 'slider', key: 'cy', min: 0, max: 1, step: 0.01, label: 'center y' },
-    { type: 'slider', key: 'dx', min: -0.05, max: 0.05, step: 0.001, label: 'pan x' },
-    { type: 'slider', key: 'dy', min: -0.05, max: 0.05, step: 0.001, label: 'pan y' },
+    { type: 'slider', key: 'dx', min: -0.02, max: 0.02, step: 0.001, label: 'pan x' },
+    { type: 'slider', key: 'dy', min: -0.02, max: 0.02, step: 0.001, label: 'pan y' },
     { type: 'slider', key: 'sx', min: 0.9, max: 1.1, step: 0.001, label: 'stretch x' },
     { type: 'slider', key: 'sy', min: 0.9, max: 1.1, step: 0.001, label: 'stretch y' },
   ]},
@@ -1124,12 +1124,21 @@ function getAudio(t) {
   return { bass, mid, treb };
 }
 
+let prevWave = null; // temporal smoothing buffer
 function getWave(t) {
   const s=new Float32Array(WAVE_N);
   if(useMic&&analyser){analyser.getByteTimeDomainData(audioTime);for(let i=0;i<WAVE_N;i++)s[i]=(audioTime[Math.floor(i/WAVE_N*audioTime.length)]-128)/128;}
   else{const a=getAudio(t);for(let i=0;i<WAVE_N;i++){const p=i/WAVE_N;s[i]=Math.sin(p*6.283*2+t*3)*a.bass*.6+Math.sin(p*6.283*7+t*8)*a.mid*.3+Math.sin(p*6.283*16+t*15)*a.treb*.2;}}
-  const passes=Math.floor(state.wave_smoothing*5);
+  // Spatial smoothing passes
+  const passes=Math.floor(state.wave_smoothing*8); // was *5, now up to 8 passes
   for(let p=0;p<passes;p++)for(let i=1;i<WAVE_N-1;i++)s[i]=s[i]*.5+(s[i-1]+s[i+1])*.25;
+  // Temporal smoothing (line tension) — blend with previous frame
+  const tension = state.wave_smoothing;
+  if (prevWave && tension > 0) {
+    const blend = tension * 0.6; // 0-0.6 blend with previous frame
+    for(let i=0;i<WAVE_N;i++) s[i] = s[i] * (1 - blend) + prevWave[i] * blend;
+  }
+  prevWave = new Float32Array(s);
   return s;
 }
 
