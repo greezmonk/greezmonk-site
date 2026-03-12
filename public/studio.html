@@ -778,11 +778,13 @@ uniform float u_glow; // 0 = hard edge, 1 = full glow
 in float v_edge;
 void main() {
   float d = v_edge;
-  // Core: bright center, soft falloff to edge
-  float core = 1.0 - smoothstep(0.0, 0.3, d);
-  float glow = 1.0 - smoothstep(0.0, 1.0, d);
-  float alpha = mix(step(0.95, 1.0 - d), mix(glow, core * 0.7 + glow * 0.5, 0.5), u_glow);
-  o = vec4(u_col.rgb * (core * 0.4 + 0.6), u_col.a * alpha);
+  // Core: bright center, soft glow at edges
+  float core = 1.0 - smoothstep(0.0, 0.25, d);
+  float glow = 1.0 - smoothstep(0.1, 1.0, d);
+  float alpha = core + glow * u_glow * 0.6;
+  alpha = clamp(alpha, 0.0, 1.0);
+  float brightness = core * 0.5 + 0.5;
+  o = vec4(u_col.rgb * brightness, u_col.a * alpha);
 }`;
 
 const COMP_FS = `#version 300 es
@@ -948,12 +950,10 @@ gl.bufferData(gl.ARRAY_BUFFER, WAVE_N * 2 * THICK_STRIDE, gl.DYNAMIC_DRAW);
 const tPosL = gl.getAttribLocation(waveP, 'a_pos');
 const tNormL = gl.getAttribLocation(waveP, 'a_normal');
 const tSideL = gl.getAttribLocation(waveP, 'a_side');
-gl.enableVertexAttribArray(tPosL);
-gl.vertexAttribPointer(tPosL, 2, gl.FLOAT, false, THICK_STRIDE, 0);
-gl.enableVertexAttribArray(tNormL);
-gl.vertexAttribPointer(tNormL, 2, gl.FLOAT, false, THICK_STRIDE, 8);
-gl.enableVertexAttribArray(tSideL);
-gl.vertexAttribPointer(tSideL, 1, gl.FLOAT, false, THICK_STRIDE, 16);
+console.log('Thick line attribs:', {pos: tPosL, norm: tNormL, side: tSideL});
+if (tPosL >= 0) { gl.enableVertexAttribArray(tPosL); gl.vertexAttribPointer(tPosL, 2, gl.FLOAT, false, THICK_STRIDE, 0); }
+if (tNormL >= 0) { gl.enableVertexAttribArray(tNormL); gl.vertexAttribPointer(tNormL, 2, gl.FLOAT, false, THICK_STRIDE, 8); }
+if (tSideL >= 0) { gl.enableVertexAttribArray(tSideL); gl.vertexAttribPointer(tSideL, 1, gl.FLOAT, false, THICK_STRIDE, 16); }
 gl.bindVertexArray(null);
 
 // Expand centerline points into triangle strip with normals
@@ -1332,6 +1332,8 @@ function render() {
       gl.uniform1f(vU.u_glow, 0.8);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, WAVE_N * 2);
     }
+    // Restore framebuffer binding (wave draws into writeFB)
+    gl.bindFramebuffer(gl.FRAMEBUFFER, writeFB);
   }
 
   // If transitioning between different wave modes, draw both with alpha crossfade
