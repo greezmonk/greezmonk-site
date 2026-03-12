@@ -314,6 +314,15 @@ const PRESETS = {
     wave_scale: 1.074, wave_smoothing: 0, brighten: 0, darken: 0, solarize: 0, invert: 0,
     bloom_strength: 0.3, bloom_threshold: 0.4,
   },
+  fractal_mandala: {
+    _name: 'Fractal Mandala', wave_mode: 16, wave_r: 0, wave_g: 1, wave_b: 0, wave_a: 0.7,
+    wave_x: 0.5, wave_y: 0.5, wave_mystery: 0.57, wave_dots: 0, wave_thick: 0, wave_additive: 0, wave_brighten: 0,
+    zoom: 0.9, rot: 0.1, warp: 1.0, cx: 0.5, cy: 0.5, dx: 0, dy: 0, sx: 1, sy: 1.1,
+    decay: 0.958, gamma: 1.46, ob_size: 0.005, ob_r: 0, ob_g: 0, ob_b: 0, ob_a: 0,
+    ib_size: 0.25, ib_r: 0, ib_g: 0, ib_b: 0, ib_a: 0,
+    wave_scale: 4, wave_smoothing: 0, brighten: 0, darken: 0, solarize: 0, invert: 0,
+    bloom_strength: 0.3, bloom_threshold: 0.4,
+  },
   accelerator: {
     _name: 'Accelerator', wave_mode: 16, wave_r: 0, wave_g: 0.93, wave_b: 1, wave_a: 0.8,
     wave_x: 0.5, wave_y: 0.5, wave_mystery: -0.8, wave_dots: 0, wave_thick: 0, wave_additive: 0, wave_brighten: 0,
@@ -351,7 +360,7 @@ const GROUPS = [
     { type: 'slider', key: 'wave_y', min: 0, max: 1, step: 0.01, label: 'y pos' },
   ]},
   { name: 'Motion', controls: [
-    { type: 'slider', key: 'zoom', min: 0.9, max: 1.2, step: 0.001, label: 'zoom' },
+    { type: 'slider', key: 'zoom', min: 0.85, max: 1.2, step: 0.001, label: 'zoom' },
     { type: 'slider', key: 'rot', min: -0.1, max: 0.1, step: 0.001, label: 'rotation' },
     { type: 'slider', key: 'warp', min: 0, max: 2, step: 0.01, label: 'warp' },
     { type: 'slider', key: 'cx', min: 0, max: 1, step: 0.01, label: 'center x' },
@@ -1019,7 +1028,6 @@ gl.bufferData(gl.ARRAY_BUFFER, WAVE_N * 2 * THICK_STRIDE, gl.DYNAMIC_DRAW);
 const tPosL = gl.getAttribLocation(waveP, 'a_pos');
 const tNormL = gl.getAttribLocation(waveP, 'a_normal');
 const tSideL = gl.getAttribLocation(waveP, 'a_side');
-console.log('Thick line attribs:', {pos: tPosL, norm: tNormL, side: tSideL});
 if (tPosL >= 0) { gl.enableVertexAttribArray(tPosL); gl.vertexAttribPointer(tPosL, 2, gl.FLOAT, false, THICK_STRIDE, 0); }
 if (tNormL >= 0) { gl.enableVertexAttribArray(tNormL); gl.vertexAttribPointer(tNormL, 2, gl.FLOAT, false, THICK_STRIDE, 8); }
 if (tSideL >= 0) { gl.enableVertexAttribArray(tSideL); gl.vertexAttribPointer(tSideL, 1, gl.FLOAT, false, THICK_STRIDE, 16); }
@@ -1824,7 +1832,7 @@ function randomize() {
     if (target.decay > 0.99) target.decay = 0.985;
     if (target.gamma > 2.5) target.gamma = 2.0;
     if (target.zoom > 1.15) target.zoom = 1.1;
-    if (target.zoom < 0.95) target.zoom = 0.95;
+    if (target.zoom < 0.85) target.zoom = 0.85;
     if (target.wave_a < 0.2) target.wave_a = 0.8;
     if (target.wave_scale < 0.7) target.wave_scale = 0.7;
     // Strip post-processing from library presets — without per-frame equations
@@ -1883,7 +1891,7 @@ function randomize() {
     target.wave_thick = Math.random() > 0.4 ? 1 : 0;
     target.wave_additive = Math.random() > 0.3 ? 1 : 0;
     target.wave_brighten = Math.random() > 0.6 ? 1 : 0;
-    target.zoom = 0.95 + Math.random() * 0.15;
+    target.zoom = 0.85 + Math.random() * 0.25;
     target.rot = (Math.random() - 0.5) * 0.08;
     target.warp = Math.random() * 1.5;
     target.cx = 0.2 + Math.random() * 0.6;
@@ -1990,7 +1998,7 @@ let chaosEnabled = false;
 const CHAOS_SPEED = 0.0008; // base drift per frame
 
 const CHAOS_PARAMS = {
-  zoom:  { min: 0.95, max: 1.1, drift: 1 },
+  zoom:  { min: 0.85, max: 1.1, drift: 1 },
   rot:   { min: -0.08, max: 0.08, drift: 1 },
   warp:  { min: 0, max: 2, drift: 0.8 },
   cx:    { min: 0.15, max: 0.85, drift: 0.7 },
@@ -2040,7 +2048,7 @@ function stepChaos(audio) {
   if (a.bass > 0.7) {
     state.zoom += (Math.random() - 0.5) * 0.003 * a.bass;
     state.warp += (Math.random() - 0.5) * 0.05 * a.bass;
-    state.zoom = Math.max(0.95, Math.min(1.1, state.zoom));
+    state.zoom = Math.max(0.85, Math.min(1.1, state.zoom));
     state.warp = Math.max(0, Math.min(2, state.warp));
   }
 
@@ -2133,7 +2141,8 @@ document.addEventListener('keydown', e => {
     case '5': loadPreset('water'); break;
     case '6': loadPreset('fire'); break;
     case '7': loadPreset('fractal_spiral'); break;
-    case '8': loadPreset('accelerator'); break;
+    case '8': loadPreset('fractal_mandala'); break;
+    case '9': loadPreset('accelerator'); break;
     case 'r': randomize(); break;
     case 'a': toggleAutoRandom(); break;
     case 'c': toggleChaos(); break;
