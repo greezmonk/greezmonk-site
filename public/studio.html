@@ -154,7 +154,9 @@
     body {
       display: flex; flex-direction: column; height: 100vh; height: 100dvh; overflow: hidden;
     }
-    header { flex-shrink: 0; flex-wrap: nowrap; overflow-x: auto; padding: 6px 10px; }
+    header { flex-shrink: 0; padding: 6px 10px; }
+    header .toolbar, header .presets, header .favorites { display: none; }
+    header h1 { font-size: 11px; }
     #mobile-swipe {
       display: flex !important; flex: 1; overflow-x: auto; overflow-y: hidden;
       scroll-snap-type: x mandatory; min-height: 0;
@@ -176,10 +178,10 @@
     #output-panel { display: none !important; }
     #help-overlay { padding: 20px; }
     #controls-stack {
-      width: auto; left: 8px; bottom: 8px; top: 8px;
+      width: 48px; left: 8px; bottom: 8px; top: 8px;
     }
     #touch-btns { padding: 3px; }
-    .tb { font-size: 10px; min-height: 20px; }
+    .tb { font-size: 11px; min-height: 20px; padding: 4px 0; }
   }
   #hud {
     position: absolute; top: 8px; right: 8px;
@@ -3093,6 +3095,9 @@ let frameCount=0, lastFpsTime=performance.now(), fps=0, startTime=performance.no
 
 function render() {
   if(paused){requestAnimationFrame(render);return;}
+  // Auto-fix canvas if dimensions are wrong (mobile layout settle)
+  const wrap = document.getElementById('preview-wrap');
+  if (wrap && wrap.clientWidth > 0 && (canvas.width < 2 || canvas.height < 2)) initFBs();
   stepTransition();
   const now=performance.now(), t=(now-startTime)/1000;
   const w=canvas.width, h=canvas.height, aspect=w/h;
