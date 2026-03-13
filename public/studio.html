@@ -3384,10 +3384,31 @@ function saveStartup() {
   if (btn) { btn.textContent = 'saved!'; btn.style.color = 'var(--accent)'; setTimeout(() => { btn.textContent = 'save startup'; btn.style.color = ''; }, 1500); }
 }
 
+// Factory default: ROOT's curated starting state for new visitors
+const FACTORY_PREFS = {
+  wave_mode:8, wave_r:0.131, wave_g:0.442, wave_b:0.991, wave_a:0.89,
+  wave_x:0.541, wave_y:0.487, wave_mystery:0.092, wave_dots:1, wave_thick:1,
+  wave_additive:0, wave_brighten:0, zoom:1.05, rot:-0.022, warp:0.139,
+  cx:0.388, cy:0.645, dx:0.0076, dy:-0.0046, sx:0.984, sy:0.955,
+  decay:0.933, gamma:1, ob_size:0.01, ob_r:0, ob_g:0, ob_b:0, ob_a:0,
+  ib_size:0.01, ib_r:0.25, ib_g:0.25, ib_b:0.25, ib_a:0,
+  brighten:0, darken:0, solarize:0, invert:1,
+  wave_scale:1.165, wave_smoothing:0.158,
+  wave_r2:1, wave_g2:0.066, wave_b2:0.828, wave_gradient:0.757,
+  wave_pattern:16, wave_pattern_speed:1.738, wave_blend:0,
+  bloom_strength:0.3, bloom_threshold:0.4,
+  audio_bass_gain:3, audio_mid_gain:1.5, audio_treb_gain:0.25,
+  audio_trigger:0.5, transition_speed:0.003, auto_interval:5,
+};
+
 function loadStartup() {
   try {
     const saved = localStorage.getItem(STARTUP_KEY);
-    if (!saved) return false;
+    if (!saved) {
+      // No saved config — apply factory defaults
+      Object.assign(state, FACTORY_PREFS);
+      return { prefs: FACTORY_PREFS };
+    }
     const config = JSON.parse(saved);
     // Restore only preferences, not visual state
     if (config.prefs) Object.assign(state, config.prefs);
