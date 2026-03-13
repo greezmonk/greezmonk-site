@@ -304,6 +304,7 @@
     <div class="help-row"><span class="help-key">M</span><span class="help-desc">toggle microphone</span></div>
     <div class="help-row"><span class="help-key">H</span><span class="help-desc">toggle HUD</span></div>
     <div class="help-row"><span class="help-key">S</span><span class="help-desc">toggle audio monitor (bass/mid/treb/energy bars)</span></div>
+    <div class="help-row"><span class="help-key">G</span><span class="help-desc">audio react mode: SPLIT (shape1=bass, shape2=mid) / UNIFIED (both=bass)</span></div>
     <div class="help-row"><span class="help-key">T</span><span class="help-desc">toggle title attribution</span></div>
     <h3>Shape Pool</h3>
     <div class="help-row"><span class="help-key">Shift+Click shape</span><span class="help-desc">toggle shape in auto/chaos pool</span></div>
@@ -2197,8 +2198,18 @@ function getAudio(t) {
 }
 
 // Scale pulse envelopes — fast attack, smooth release
+// Audio reactivity mode: 'unified' = both shapes use bass (original), 'split' = shape1=bass, shape2=mid
+let audioReactMode = 'split';
+function toggleAudioReactMode() {
+  audioReactMode = audioReactMode === 'split' ? 'unified' : 'split';
+  const label = audioReactMode === 'split' ? 'SPLIT' : 'UNIFIED';
+  const btn = document.getElementById('btn-audio-react');
+  if (btn) { btn.textContent = label; btn.style.color = audioReactMode === 'split' ? 'var(--accent)' : 'var(--dim)'; }
+}
+
 const scalePulse = { w1: 0, w2: 0 };
 function updateScalePulse(audio) {
+  if (audioReactMode === 'unified') { scalePulse.w1 = 0; scalePulse.w2 = 0; return; }
   const attack = 0.4, release = 0.92;
   // Wave 1 driven by bass
   const target1 = audio.bass > 0.5 ? (audio.bass - 0.5) * 0.3 : 0;
@@ -2996,8 +3007,8 @@ function render() {
   state.wave_scale = savedScale1;
 
   // Dual/Split/Layer wave: draw second shape (with fade)
-  // Wave 2: driven by mid, scale pulse on mid hits
-  waveDriver = audio.mid;
+  // Wave 2: driven by mid in split mode, bass in unified mode
+  waveDriver = audioReactMode === 'split' ? audio.mid : audio.bass;
   stepDualFade();
   stepWave2Transition();
   if (dualFade > 0.01) {
@@ -3762,6 +3773,7 @@ document.addEventListener('keydown', e => {
     case 'q': cycleQuality(); break;
     case 'h': document.getElementById('hud').style.display = document.getElementById('hud').style.display === 'none' ? '' : 'none'; break;
     case 's': toggleAudioMonitor(); break;
+    case 'g': toggleAudioReactMode(); break;
     case 't': toggleAttribution(); break;
     case ' ': paused=!paused; e.preventDefault(); break;
   }
@@ -3796,6 +3808,7 @@ function saveStartup() {
     dualIdx: dualIdx,
     autoOn: autoRandomInterval !== null,
     chaosOn: chaosEnabled,
+    audioReactMode: audioReactMode,
     monitorOff: !audioMonitorVisible,
     panelCollapsed: document.getElementById('output-panel').classList.contains('collapsed'),
   };
@@ -3842,6 +3855,7 @@ function loadStartup() {
     if (config.togglePool) Object.assign(togglePool, config.togglePool);
     if (config.togglePool2) Object.assign(togglePool2, config.togglePool2);
     if (config.dualIdx !== undefined) dualIdx = config.dualIdx;
+    if (config.audioReactMode) audioReactMode = config.audioReactMode;
     return config;
   } catch(e) { return false; }
 }
