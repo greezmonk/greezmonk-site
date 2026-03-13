@@ -158,8 +158,9 @@
     header .toolbar, header .presets, header .favorites { display: none; }
     header h1 { font-size: 11px; }
     #mobile-swipe {
-      display: flex !important; flex: 1; overflow-x: auto; overflow-y: hidden;
-      scroll-snap-type: x mandatory; min-height: 0;
+      display: flex !important; flex: 1 1 0; height: 0;
+      overflow-x: auto; overflow-y: hidden;
+      scroll-snap-type: x mandatory;
       scrollbar-width: none; -ms-overflow-style: none;
     }
     #mobile-swipe::-webkit-scrollbar { display: none; }
@@ -168,7 +169,7 @@
       scroll-snap-align: start; position: relative; overflow: hidden;
       background: #000;
     }
-    #preview-wrap canvas { width: 100%; height: 100%; }
+    #preview-wrap canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
     #sidebar {
       flex: 0 0 100vw; width: 100vw; height: 100%;
       scroll-snap-align: start; overflow-y: auto; border-right: none;
