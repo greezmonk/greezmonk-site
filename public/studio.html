@@ -378,7 +378,7 @@ function randomizeWave2() {
   wave2Target.thick = Math.random() > 0.4 ? 1 : 0;
   wave2Target.blend = getPooledBlend(true);
   wave2Target.additive = wave2Target.blend === 1 ? 1 : 0;
-  wave2Target.brighten = 0;
+  wave2Target.brighten = Math.random() > 0.8 ? 1 : 0;
   wave2Target.smoothing = Math.random();
   // Gradient for wave2
   if (Math.random() < 0.5) {
@@ -2983,10 +2983,11 @@ function randomize() {
     target.wave_thick = Math.random() > 0.4 ? 1 : 0;
     target.wave_blend = getPooledBlend();
     target.wave_additive = target.wave_blend === 1 ? 1 : 0;
-    target.wave_brighten = 0; // brighten causes white-out with feedback loop
-    target.brighten = 0;
-    target.invert = 0;
-    target.solarize = 0;
+    target.wave_brighten = Math.random() > 0.8 ? 1 : 0;
+    target.brighten = Math.random() > 0.85 ? 1 : 0;
+    target.invert = Math.random() > 0.85 ? 1 : 0;
+    target.solarize = Math.random() > 0.9 ? 1 : 0;
+    target.darken = Math.random() > 0.85 ? 1 : 0;
     target.zoom = 0.85 + Math.random() * 0.25;
     target.rot = (Math.random() - 0.5) * 0.08;
     target.warp = Math.random() * 1.5;
