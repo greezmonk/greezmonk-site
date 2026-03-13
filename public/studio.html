@@ -253,7 +253,7 @@
     <div class="help-row"><span class="help-key">C</span><span class="help-desc">chaos drift mode</span></div>
     <h3>Wave</h3>
     <div class="help-row"><span class="help-key">Wave 1 / Wave 2</span><span class="help-desc">toggle in sidebar — edits shape, color, all wave params</span></div>
-    <div class="help-row"><span class="help-key">D</span><span class="help-desc">cycle dual mode (single / dual / split)</span></div>
+    <div class="help-row"><span class="help-key">D</span><span class="help-desc">cycle dual mode (single / dual / split / layer)</span></div>
     <div class="help-row"><span class="help-key">E</span><span class="help-desc">toggle wave 2 editing (keyboard shortcut)</span></div>
     <div class="help-row"><span class="help-key">W</span><span class="help-desc">cycle warp mode (17 modes)</span></div>
     <div class="help-row"><span class="help-key">P</span><span class="help-desc">cycle line pattern (17 modes)</span></div>
@@ -296,6 +296,7 @@ const DUAL_MODES = [
   { name: 'SINGLE', count: 1 },
   { name: 'DUAL',   count: 2 },
   { name: 'SPLIT',  count: 2 },
+  { name: 'LAYER',  count: 2 },
 ];
 let dualIdx = 0;
 let wave_mode2 = -1; // -1 = auto-pick
@@ -2470,7 +2471,7 @@ function cycleDual() {
   dualIdx = (dualIdx + 1) % DUAL_MODES.length;
   wave_mode2 = -1;
   dualFadeTarget = DUAL_MODES[dualIdx].count > 1 ? 1 : 0;
-  if (DUAL_MODES[dualIdx].name === 'SPLIT') randomizeWave2();
+  if ((DUAL_MODES[dualIdx].name === 'SPLIT' || DUAL_MODES[dualIdx].name === 'LAYER')) randomizeWave2();
 }
 
 function stepDualFade() {
@@ -2698,22 +2699,27 @@ function render() {
     state.wave_mode = oldMode;
     drawWave(wvNew, state.wave_r, state.wave_g, state.wave_b, state.wave_a * fadeIn, state.wave_dots, 1, state.wave_r2, state.wave_g2, state.wave_b2, state.wave_gradient, state.wave_pattern, state.wave_pattern_speed);
   } else {
+    // In SPLIT mode, offset wave1 to the left
+    const splitActive = DUAL_MODES[dualIdx].name === 'SPLIT' && dualFade > 0.01;
+    if (splitActive) state.wave_x -= 0.15;
     const wv = buildWaveVerts(wave, aspect);
+    if (splitActive) state.wave_x += 0.15;
     drawWave(wv, state.wave_r, state.wave_g, state.wave_b, state.wave_a, state.wave_dots, 1, state.wave_r2, state.wave_g2, state.wave_b2, state.wave_gradient, state.wave_pattern, state.wave_pattern_speed);
   }
 
-  // Dual/Split wave: draw second shape (with fade)
+  // Dual/Split/Layer wave: draw second shape (with fade)
   stepDualFade();
   stepWave2Transition();
   if (dualFade > 0.01 && !xfading) {
     const origMode = state.wave_mode, origMy = state.wave_mystery;
     const origSc = state.wave_scale, origX = state.wave_x, origY = state.wave_y;
-    const isSplit = DUAL_MODES[dualIdx].name === 'SPLIT';
-    if (isSplit) {
+    const isIndependent = (DUAL_MODES[dualIdx].name === 'SPLIT' || DUAL_MODES[dualIdx].name === 'LAYER');
+    const isSplitPos = DUAL_MODES[dualIdx].name === 'SPLIT';
+    if (isIndependent) {
       state.wave_mode = wave2.mode;
       state.wave_mystery = wave2.mystery;
       state.wave_scale = wave2.scale;
-      state.wave_x = wave2.x;
+      state.wave_x = wave2.x + (isSplitPos ? 0.15 : 0);
       state.wave_y = wave2.y;
     } else {
       state.wave_mode = getSecondMode();
@@ -2721,7 +2727,7 @@ function render() {
     const wv2 = buildWaveVerts(wave, aspect);
     state.wave_mode = origMode; state.wave_mystery = origMy;
     state.wave_scale = origSc; state.wave_x = origX; state.wave_y = origY;
-    if (isSplit) {
+    if (isIndependent) {
       setBlendMode(wave2.blend !== undefined ? wave2.blend : 1);
       drawWave(wv2, wave2.r, wave2.g, wave2.b, wave2.a * dualFade, wave2.dots, 0.8, wave2.r2, wave2.g2, wave2.b2, wave2.gradient, wave2.pattern||0, wave2.patSpeed||1);
       setBlendMode(state.wave_blend); // restore wave1 blend
@@ -3164,7 +3170,7 @@ function randomize() {
   transitionFrom = { ...state };
   transitionTarget = target;
   transitionProgress = 0;
-  if (DUAL_MODES[dualIdx].name === 'SPLIT') randomizeWave2();
+  if ((DUAL_MODES[dualIdx].name === 'SPLIT' || DUAL_MODES[dualIdx].name === 'LAYER')) randomizeWave2();
   // Cycle warp mode on each auto-random (~60% chance of new mode)
   if (Math.random() < 0.6) warpModeTarget = Math.floor(Math.random() * TOTAL_WARPS);
   currentPresetName = '';
@@ -3326,7 +3332,7 @@ function stepChaos(audio) {
   }
 
   // Drift wave2 independently in SPLIT mode — audio reactive
-  if (DUAL_MODES[dualIdx].name === 'SPLIT') {
+  if ((DUAL_MODES[dualIdx].name === 'SPLIT' || DUAL_MODES[dualIdx].name === 'LAYER')) {
     const w2drift = 0.5 + energy * 2;
     wave2.x += (Math.random() - 0.5) * 0.003 * w2drift;
     wave2.y += (Math.random() - 0.5) * 0.003 * w2drift;
