@@ -2067,8 +2067,12 @@ function initFBs() {
   const wrap = document.getElementById('preview-wrap');
   const qm = QUALITY_MODES[qualityIdx];
   const dpr = qm.dprMax ? Math.min(window.devicePixelRatio||1, qm.dprMax) : (window.devicePixelRatio||1);
-  canvas.width = wrap.clientWidth * dpr;
-  canvas.height = wrap.clientHeight * dpr;
+  const newW = Math.max(1, Math.floor(wrap.clientWidth * dpr));
+  const newH = Math.max(1, Math.floor(wrap.clientHeight * dpr));
+  if (newW < 2 || newH < 2) return; // layout not ready yet
+  if (newW === canvas.width && newH === canvas.height) return; // no change
+  canvas.width = newW;
+  canvas.height = newH;
   fbW=canvas.width; fbH=canvas.height;
   cleanupFBs();
   // Main ping-pong
@@ -3095,9 +3099,9 @@ let frameCount=0, lastFpsTime=performance.now(), fps=0, startTime=performance.no
 
 function render() {
   if(paused){requestAnimationFrame(render);return;}
-  // Auto-fix canvas if dimensions are wrong (mobile layout settle)
-  const wrap = document.getElementById('preview-wrap');
-  if (wrap && wrap.clientWidth > 0 && (canvas.width < 2 || canvas.height < 2)) initFBs();
+  // Auto-fix canvas if dimensions are wrong or FBs missing (mobile layout settle)
+  if (canvas.width < 2 || canvas.height < 2 || !texA) initFBs();
+  if (!texA) { requestAnimationFrame(render); return; } // FBs not ready, try next frame
   stepTransition();
   const now=performance.now(), t=(now-startTime)/1000;
   const w=canvas.width, h=canvas.height, aspect=w/h;
