@@ -171,8 +171,10 @@
       flex: 0 0 100vw; width: 100vw; height: 100%;
       scroll-snap-align: start; overflow-y: auto; border-right: none;
       padding: 8px; box-sizing: border-box;
+      background: var(--panel);
     }
-    #output-panel { display: none; }
+    #output-panel { display: none !important; }
+    #help-overlay { padding: 20px; }
     #controls-stack {
       width: auto; left: 8px; bottom: 8px; top: 8px;
     }
@@ -2332,13 +2334,12 @@ if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
   toggleTouchBar();
 }
 
-// Mobile: re-init canvas when swipe container scrolls back to canvas
-const swipeEl = document.getElementById('mobile-swipe');
-if (swipeEl) {
-  swipeEl.addEventListener('scrollend', () => { initFBs(); });
-  // Also trigger resize after layout settles on load
-  setTimeout(() => initFBs(), 100);
-}
+// Re-init canvas when preview-wrap gets real dimensions (mobile flex settle + swipe back)
+const resObs = new ResizeObserver(() => {
+  const wrap = document.getElementById('preview-wrap');
+  if (wrap && wrap.clientWidth > 0 && wrap.clientHeight > 0) initFBs();
+});
+resObs.observe(document.getElementById('preview-wrap'));
 
 // Auto-gain: tracks recent peaks per band, normalizes to full 0–1 range
 const agc = {
