@@ -482,7 +482,7 @@ const DEFAULTS = {
   wave_r2: 1, wave_g2: 0, wave_b2: 0, wave_gradient: 0,
   wave_pattern: 0, wave_pattern_speed: 1, wave_blend: 1,
   bloom_strength: 0.3, bloom_threshold: 0.4,
-  audio_bass_gain: 3, audio_mid_gain: 3, audio_treb_gain: 3, audio_trigger: 0.25,
+  audio_bass_gain: 1, audio_mid_gain: 1, audio_treb_gain: 1, audio_trigger: 0.15,
   transition_speed: 0.003, auto_interval: 5,
 };
 
@@ -721,9 +721,9 @@ const TIPS = {
   ib_b: 'Inner border blue', ib_a: 'Inner border opacity',
   transition_speed: 'How fast presets morph into each other',
   auto_interval: 'Seconds between auto-random preset changes',
-  audio_bass_gain: 'Bass frequency sensitivity multiplier',
-  audio_mid_gain: 'Mid frequency sensitivity multiplier',
-  audio_treb_gain: 'Treble frequency sensitivity multiplier',
+  audio_bass_gain: 'Bass bias on top of auto-gain (1.0 = neutral)',
+  audio_mid_gain: 'Mid bias on top of auto-gain (1.0 = neutral)',
+  audio_treb_gain: 'Treble bias on top of auto-gain (1.0 = neutral)',
   audio_trigger: 'Audio level threshold that triggers chaos events',
   bloom_strength: 'Glow intensity around bright areas',
   bloom_threshold: 'Brightness cutoff for bloom effect',
@@ -2155,6 +2155,13 @@ function toggleAudioMonitor() {
   document.getElementById('audio-monitor').style.display = audioMonitorVisible ? 'flex' : 'none';
 }
 
+// Auto-gain: tracks recent peaks per band, normalizes to full 0–1 range
+const agc = {
+  peakBass: 0.01, peakMid: 0.01, peakTreb: 0.01,
+  decay: 0.997,   // peak slowly drops (~3s to halve)
+  rise: 0.15,     // peak rises fast to catch transients
+};
+
 function getAudio(t) {
   let bass, mid, treb;
   if (useMic && analyser) {
@@ -2166,15 +2173,23 @@ function getAudio(t) {
   } else {
     bass=.5+.4*Math.sin(t*1.2); mid=.3+.3*Math.sin(t*2.7+1); treb=.2+.2*Math.sin(t*5.3+2);
   }
-  // Apply gain
+  // Auto-gain normalization: track peaks, scale signal to use full range
+  agc.peakBass = Math.max(agc.peakBass * agc.decay, bass > agc.peakBass ? agc.peakBass + (bass - agc.peakBass) * agc.rise : agc.peakBass);
+  agc.peakMid  = Math.max(agc.peakMid  * agc.decay, mid  > agc.peakMid  ? agc.peakMid  + (mid  - agc.peakMid)  * agc.rise : agc.peakMid);
+  agc.peakTreb = Math.max(agc.peakTreb * agc.decay, treb > agc.peakTreb ? agc.peakTreb + (treb - agc.peakTreb) * agc.rise : agc.peakTreb);
+  // Normalize to peak (floor at 0.01 to avoid divide-by-zero)
+  bass = bass / Math.max(agc.peakBass, 0.01);
+  mid  = mid  / Math.max(agc.peakMid,  0.01);
+  treb = treb / Math.max(agc.peakTreb, 0.01);
+  // Manual gain as multiplier on top of auto-gain
   bass = Math.min(bass * state.audio_bass_gain, 1);
-  mid = Math.min(mid * state.audio_mid_gain, 1);
+  mid  = Math.min(mid  * state.audio_mid_gain, 1);
   treb = Math.min(treb * state.audio_treb_gain, 1);
   // Apply trigger threshold — below threshold maps to 0
   const thr = state.audio_trigger;
   if (thr > 0) {
     bass = bass > thr ? (bass - thr) / (1 - thr) : 0;
-    mid = mid > thr ? (mid - thr) / (1 - thr) : 0;
+    mid  = mid  > thr ? (mid  - thr) / (1 - thr) : 0;
     treb = treb > thr ? (treb - thr) / (1 - thr) : 0;
   }
   return { bass, mid, treb };
@@ -3770,8 +3785,8 @@ const FACTORY_PREFS = {
   wave_r2:1, wave_g2:0.066, wave_b2:0.828, wave_gradient:0.757,
   wave_pattern:16, wave_pattern_speed:1.738, wave_blend:0,
   bloom_strength:0.3, bloom_threshold:0.4,
-  audio_bass_gain:3, audio_mid_gain:3, audio_treb_gain:3,
-  audio_trigger:0.25, transition_speed:0.003, auto_interval:5,
+  audio_bass_gain:1, audio_mid_gain:1, audio_treb_gain:1,
+  audio_trigger:0.15, transition_speed:0.003, auto_interval:5,
 };
 
 function loadStartup() {
