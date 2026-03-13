@@ -24,7 +24,9 @@
   body.fullscreen-mode #sidebar,
   body.fullscreen-mode #output-panel,
   body.fullscreen-mode header { display: none; }
-  body.fullscreen-mode #preview-wrap { grid-column: 1; grid-row: 1; width: 100vw; height: 100vh; }
+  body.fullscreen-mode #preview-wrap { grid-column: 1; grid-row: 1; width: 100vw; height: 100vh; cursor: none; }
+  body.fullscreen-mode { cursor: none; }
+  canvas.cursor-hidden { cursor: none; }
 
   header {
     grid-column: 1 / -1; grid-row: 1; padding: 8px 16px;
@@ -101,6 +103,10 @@
     border-radius: 2px; cursor: pointer;
   }
   .tog.on { background: rgba(240,165,0,0.1); border-color: var(--accent); border-style: solid; color: var(--accent); }
+  .tog[id^="pat-"].pooled { color: var(--text); }
+  .tog[id^="pat-"]:not(.pooled) { opacity: 0.35; }
+  .tog[id^="blend-"].pooled { color: var(--text); }
+  .tog[id^="blend-"]:not(.pooled) { opacity: 0.35; }
   .wave-toggle { display: flex; gap: 4px; margin-bottom: 6px; }
   .wt-btn {
     flex: 1; padding: 5px 0; text-align: center;
@@ -248,7 +254,8 @@
     <div class="help-row"><span class="help-key">D</span><span class="help-desc">cycle dual mode (single / dual / split)</span></div>
     <div class="help-row"><span class="help-key">E</span><span class="help-desc">toggle wave 2 editing (keyboard shortcut)</span></div>
     <div class="help-row"><span class="help-key">W</span><span class="help-desc">cycle warp mode (9 modes)</span></div>
-    <div class="help-row"><span class="help-key">P</span><span class="help-desc">cycle line pattern (14 modes)</span></div>
+    <div class="help-row"><span class="help-key">P</span><span class="help-desc">cycle line pattern (17 modes)</span></div>
+    <div class="help-row"><span class="help-key">B</span><span class="help-desc">cycle blend mode (normal / additive / screen / subtract / multiply)</span></div>
     <div class="help-row"><span class="help-key">Q</span><span class="help-desc">cycle quality (perf / bal / ultra)</span></div>
     <h3>Presets</h3>
     <div class="help-row"><span class="help-key">1-9</span><span class="help-desc">load built-in preset</span></div>
@@ -294,13 +301,48 @@ let wave_mode2 = -1; // -1 = auto-pick
 // Shape pool — which shapes are included in auto/chaos rotation
 // Shape pool initialized after WAVE_NAMES is defined (see TOTAL_SHAPES)
 let shapePool = [];
+let patternPool = [];
+let blendPool = [];
+// Wave 2 gets its own independent pools
+let shapePool2 = [];
+let patternPool2 = [];
+let blendPool2 = [];
 
-function getPooledShape(fallbackMode) {
+function getPooledShape(fallbackMode, forWave2) {
+  const pool = forWave2 ? shapePool2 : shapePool;
   const pooled = [];
-  for (let i = 0; i < TOTAL_SHAPES; i++) if (shapePool[i] !== false) pooled.push(i);
+  for (let i = 0; i < TOTAL_SHAPES; i++) if (pool[i] !== false) pooled.push(i);
   if (pooled.length === 0) return fallbackMode !== undefined ? fallbackMode : Math.floor(Math.random() * TOTAL_SHAPES);
   return pooled[Math.floor(Math.random() * pooled.length)];
 }
+
+function getPooledPattern(excludeGradient, forWave2) {
+  const pool = forWave2 ? patternPool2 : patternPool;
+  const pooled = [];
+  for (let i = 0; i < TOTAL_PATTERNS; i++) {
+    if (pool[i] === false) continue;
+    if (excludeGradient && i === 0) continue;
+    pooled.push(i);
+  }
+  if (pooled.length === 0) return 0; // fallback to gradient
+  return pooled[Math.floor(Math.random() * pooled.length)];
+}
+
+function getPooledBlend(forWave2) {
+  const pool = forWave2 ? blendPool2 : blendPool;
+  const pooled = [];
+  for (let i = 0; i < BLEND_NAMES.length; i++) {
+    if (pool[i] === false) continue;
+    pooled.push(i);
+  }
+  if (pooled.length === 0) return 1; // fallback to additive
+  return pooled[Math.floor(Math.random() * pooled.length)];
+}
+
+// Get the active pools based on which wave is being edited
+function activeShapePool() { return editingWave2 ? shapePool2 : shapePool; }
+function activePatternPool() { return editingWave2 ? patternPool2 : patternPool; }
+function activeBlendPool() { return editingWave2 ? blendPool2 : blendPool; }
 
 // Split wave: fully independent second wave state
 const wave2 = {
@@ -323,7 +365,7 @@ function randomizeWave2() {
   for (const k of WAVE2_LERP_KEYS) wave2From[k] = wave2[k];
   for (const k of WAVE2_SNAP_KEYS) wave2From[k] = wave2[k];
   // Generate new target
-  wave2Target.mode = getPooledShape();
+  wave2Target.mode = getPooledShape(undefined, true);
   wave2Target.r = 0.2 + Math.random() * 0.8;
   wave2Target.g = 0.2 + Math.random() * 0.8;
   wave2Target.b = 0.2 + Math.random() * 0.8;
@@ -344,9 +386,9 @@ function randomizeWave2() {
   } else { wave2Target.gradient = 0; }
   // Pattern for wave2
   if (Math.random() < 0.4) {
-    wave2Target.pattern = 1 + Math.floor(Math.random() * (TOTAL_PATTERNS - 1));
+    wave2Target.pattern = getPooledPattern(true, true);
     wave2Target.patSpeed = 0.5 + Math.random() * 3;
-  } else { wave2Target.pattern = 0; }
+  } else { wave2Target.pattern = patternPool2[0] !== false ? 0 : getPooledPattern(false, true); }
   wave2Transitioning = true;
   wave2TransProgress = 0;
 }
@@ -379,7 +421,7 @@ const DEFAULTS = {
   brighten: 0, darken: 0, solarize: 0, invert: 0,
   wave_scale: 1, wave_smoothing: 0.75,
   wave_r2: 1, wave_g2: 0, wave_b2: 0, wave_gradient: 0,
-  wave_pattern: 0, wave_pattern_speed: 1,
+  wave_pattern: 0, wave_pattern_speed: 1, wave_blend: 1,
   bloom_strength: 0.3, bloom_threshold: 0.4,
   audio_bass_gain: 3, audio_mid_gain: 1.5, audio_treb_gain: 0.25, audio_trigger: 0.5,
   transition_speed: 0.003, auto_interval: 5,
@@ -484,7 +526,8 @@ const GROUPS = [
     { type: 'slider', key: 'wave_mystery', min: -1, max: 1, step: 0.01, label: 'mystery' },
     { type: 'slider', key: 'wave_scale', min: 0.1, max: 4, step: 0.01, label: 'scale' },
     { type: 'slider', key: 'wave_smoothing', min: 0, max: 1, step: 0.01, label: 'tension' },
-    { type: 'toggles', keys: ['wave_dots','wave_thick','wave_additive','wave_brighten'] },
+    { type: 'toggles', keys: ['wave_dots','wave_thick','wave_brighten'] },
+    { type: 'blendcycle' },
   ]},
   { name: 'Wave Color', controls: [
     { type: 'slider', key: 'wave_r', min: 0, max: 1, step: 0.01, label: 'red' },
@@ -569,6 +612,7 @@ function buildUI() {
       else if (c.type === 'wavemode') body.appendChild(mkWaveMode());
       else if (c.type === 'toggles') body.appendChild(mkToggles(c.keys));
       else if (c.type === 'color') body.appendChild(mkColor(c.keys));
+      else if (c.type === 'blendcycle') body.appendChild(mkBlendCycle());
       else if (c.type === 'patterncycle') body.appendChild(mkPatternCycle());
       else if (c.type === 'palette') body.appendChild(mkPalette());
     }
@@ -594,22 +638,32 @@ const WAVE_NAMES = ['circle','x-cross','cross','blob','rings','v-line','sine','o
   'star','lissajous','helix','infinity','pulse','spiral','diamond','spectrum',
   'flower','seed','metatron','sri yantra','vesica','golden','merkaba','torus knot',
   'tetrahedron','cube','octahedron','icosahedron','tesseract',
-  'atom','lorenz','sound bars','celtic knot','penrose'];
+  'atom','lorenz','sound bars','celtic knot','penrose',
+  'yin yang','enneagram','jellyfish','fern','heartbeat',
+  'harmonograph','dna helix','constellation','dodecahedron','mandelbrot','mushroom'];
 const SHAPE_CATEGORIES = [
   { name: 'Basic', shapes: [0,1,2,3,5,6,14] },
-  { name: 'Organic', shapes: [4,7,8,12,13] },
+  { name: 'Organic', shapes: [4,7,8,12,13,36,37,44] },
   { name: 'Sacred Geometry', shapes: [16,17,18,19,20,21,22,23] },
-  { name: 'Platonic / 3D', shapes: [24,25,26,27] },
+  { name: 'Metaphysical', shapes: [34,35] },
+  { name: 'Platonic / 3D', shapes: [24,25,26,27,42] },
   { name: '4D Geometry', shapes: [28] },
-  { name: 'Science / Math', shapes: [9,10,11,15,29,30] },
-  { name: 'Audio', shapes: [31] },
+  { name: 'Science / Math', shapes: [9,10,11,15,29,30,43] },
+  { name: 'Audio', shapes: [31,38] },
   { name: 'Pattern', shapes: [32,33] },
+  { name: 'Metch', shapes: [39,40,41] },
 ];
 const TOTAL_SHAPES = WAVE_NAMES.length;
-const PATTERN_NAMES = ['gradient','rainbow','stripes','pulse','fire','frequency','bounce','christmas','neon','plasma','lightning','ocean','aurora','lava'];
+const PATTERN_NAMES = ['gradient','rainbow','stripes','pulse','fire','frequency','bounce','christmas','neon','plasma','lightning','ocean','aurora','lava','stardust','morse','fireflies'];
+const BLEND_NAMES = ['normal','additive','screen','subtract','multiply'];
 const TOTAL_PATTERNS = PATTERN_NAMES.length;
-// Initialize shape pool — all shapes enabled by default
+// Initialize pools — all enabled by default
 if (shapePool.length === 0) shapePool = new Array(TOTAL_SHAPES).fill(true);
+if (patternPool.length === 0) patternPool = new Array(TOTAL_PATTERNS).fill(true);
+if (blendPool.length === 0) blendPool = new Array(BLEND_NAMES.length).fill(true);
+if (shapePool2.length === 0) shapePool2 = new Array(TOTAL_SHAPES).fill(true);
+if (patternPool2.length === 0) patternPool2 = new Array(TOTAL_PATTERNS).fill(true);
+if (blendPool2.length === 0) blendPool2 = new Array(BLEND_NAMES.length).fill(true);
 
 function mkWaveToggle() {
   const d = document.createElement('div'); d.className = 'wave-toggle';
@@ -622,9 +676,9 @@ function mkWaveToggle() {
 
 function mkShapeBtn(i) {
   const btn = document.createElement('div');
-  // Expand pool array if needed for new shapes
-  if (i >= shapePool.length) shapePool.push(true);
-  btn.className = 'wm-btn' + (shapePool[i] ? ' pooled' : '') + (state.wave_mode === i ? ' active' : '');
+  const pool = activeShapePool();
+  if (i >= pool.length) pool.push(true);
+  btn.className = 'wm-btn' + (pool[i] ? ' pooled' : '') + (state.wave_mode === i ? ' active' : '');
   btn.id = `wm-${i}`;
   const cvs = document.createElement('canvas'); cvs.width = 68; cvs.height = 36;
   drawWaveThumb(cvs, i);
@@ -633,8 +687,9 @@ function mkShapeBtn(i) {
   btn.onclick = (e) => {
     if (e.shiftKey) {
       e.preventDefault();
-      shapePool[i] = !shapePool[i];
-      btn.classList.toggle('pooled', shapePool[i]);
+      const p = activeShapePool();
+      p[i] = !p[i];
+      btn.classList.toggle('pooled', p[i]);
     } else {
       document.querySelectorAll('.wm-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
@@ -643,8 +698,9 @@ function mkShapeBtn(i) {
   };
   btn.oncontextmenu = (e) => {
     e.preventDefault();
-    shapePool[i] = !shapePool[i];
-    btn.classList.toggle('pooled', shapePool[i]);
+    const p = activeShapePool();
+    p[i] = !p[i];
+    btn.classList.toggle('pooled', p[i]);
   };
   return btn;
 }
@@ -709,6 +765,18 @@ function drawWaveThumb(cvs, mode) {
   // Pattern
   else if (mode===32) { for(let a=0;a<=6.3;a+=.05){const x2=cx+(Math.sin(a)+2*Math.sin(2*a))*4,y2=cy+(Math.cos(a)-2*Math.cos(2*a))*4;a===0?ctx.moveTo(x2,y2):ctx.lineTo(x2,y2);} ctx.closePath(); } // celtic knot
   else if (mode===33) { const s=10,ax=[-Math.PI/2,Math.PI/6,5*Math.PI/6]; for(let k=0;k<3;k++){ctx.moveTo(cx+Math.cos(ax[k])*s,cy+Math.sin(ax[k])*s);ctx.lineTo(cx+Math.cos(ax[(k+1)%3])*s,cy+Math.sin(ax[(k+1)%3])*s);} } // penrose
+  // Metaphysical
+  else if (mode===34) { ctx.arc(cx,cy,10,0,Math.PI*2); ctx.moveTo(cx,cy-10); ctx.bezierCurveTo(cx+10,cy-5,cx-10,cy+5,cx,cy+10); ctx.moveTo(cx,cy-10); ctx.bezierCurveTo(cx-10,cy-5,cx+10,cy+5,cx,cy+10); ctx.moveTo(cx-3+1.5,cy-4); ctx.arc(cx-3,cy-4,1.5,0,Math.PI*2); ctx.moveTo(cx+3+1.5,cy+4); ctx.arc(cx+3,cy+4,1.5,0,Math.PI*2); } // yin yang
+  else if (mode===35) { for(let k=0;k<9;k++){const a=k/9*6.283-Math.PI/2;ctx.moveTo(cx+10*Math.cos(a),cy+10*Math.sin(a));ctx.lineTo(cx+10*Math.cos(a+4/9*6.283),cy+10*Math.sin(a+4/9*6.283));} ctx.moveTo(cx+10,cy); ctx.arc(cx,cy,10,0,Math.PI*2); } // enneagram
+  else if (mode===36) { ctx.arc(cx,cy-3,8,Math.PI,0); ctx.moveTo(cx-6,cy-3); ctx.bezierCurveTo(cx-6,cy+2,cx-7,cy+8,cx-8,cy+12); ctx.moveTo(cx-2,cy-3); ctx.bezierCurveTo(cx-2,cy+2,cx-3,cy+8,cx-3,cy+12); ctx.moveTo(cx+2,cy-3); ctx.bezierCurveTo(cx+2,cy+2,cx+3,cy+8,cx+3,cy+12); ctx.moveTo(cx+6,cy-3); ctx.bezierCurveTo(cx+6,cy+2,cx+7,cy+8,cx+8,cy+12); } // jellyfish
+  else if (mode===37) { for(let a=0;a<3.5;a+=.08){const r2=2+a*3,x2=cx+Math.cos(a*2.5)*r2*.5,y2=cy-r2+6;a===0?ctx.moveTo(x2,y2):ctx.lineTo(x2,y2);} } // fern
+  else if (mode===38) { ctx.moveTo(cx-14,cy); ctx.lineTo(cx-6,cy); ctx.lineTo(cx-4,cy+3); ctx.lineTo(cx-2,cy-2); ctx.lineTo(cx,cy-10); ctx.lineTo(cx+2,cy+4); ctx.lineTo(cx+4,cy); ctx.lineTo(cx+14,cy); } // heartbeat
+  else if (mode===39) { for(let a=0;a<=25;a+=.1){const d=Math.exp(-a*.02),x2=cx+d*10*Math.sin(a),y2=cy+d*8*Math.sin(a*1.1);a===0?ctx.moveTo(x2,y2):ctx.lineTo(x2,y2);} } // harmonograph
+  else if (mode===40) { for(let a=0;a<=6.3;a+=.1){ctx.moveTo(cx+8*Math.cos(a),cy+10*Math.sin(a)*.4-a);ctx.lineTo(cx-8*Math.cos(a),cy+10*Math.sin(a)*.4-a);} for(let a=0;a<=6.3;a+=.1){const x2=cx+8*Math.cos(a),y2=cy+a*1.5-5;a===0?ctx.moveTo(x2,y2):ctx.lineTo(x2,y2);} } // dna helix
+  else if (mode===41) { const pts=[]; for(let k=0;k<7;k++)pts.push([cx-12+Math.random()*24,cy-10+Math.random()*20]); for(const p of pts){ctx.moveTo(p[0]+1.5,p[1]);ctx.arc(p[0],p[1],1.5,0,6.283);} for(let i=0;i<pts.length;i++)for(let j=i+1;j<pts.length;j++){if(Math.random()>.5)continue;ctx.moveTo(pts[i][0],pts[i][1]);ctx.lineTo(pts[j][0],pts[j][1]);} } // constellation
+  else if (mode===42) { ctx.moveTo(cx,cy-12);ctx.lineTo(cx-10,cy-4);ctx.lineTo(cx-6,cy+10);ctx.lineTo(cx+6,cy+10);ctx.lineTo(cx+10,cy-4);ctx.closePath(); ctx.moveTo(cx,cy-6);ctx.lineTo(cx-5,cy-2);ctx.lineTo(cx-3,cy+5);ctx.lineTo(cx+3,cy+5);ctx.lineTo(cx+5,cy-2);ctx.closePath(); ctx.moveTo(cx,cy-12);ctx.lineTo(cx,cy-6);ctx.moveTo(cx-10,cy-4);ctx.lineTo(cx-5,cy-2);ctx.moveTo(cx-6,cy+10);ctx.lineTo(cx-3,cy+5);ctx.moveTo(cx+6,cy+10);ctx.lineTo(cx+3,cy+5);ctx.moveTo(cx+10,cy-4);ctx.lineTo(cx+5,cy-2); } // dodecahedron
+  else if (mode===43) { for(let a=0;a<=6.3;a+=.02){const c2=Math.cos(a)-.7,s2=Math.sin(a); let zr=c2,zi=s2; for(let k=0;k<12;k++){const t=zr*zr-zi*zi+c2;zi=2*zr*zi+s2;zr=t;if(zr*zr+zi*zi>4)break;} ctx.moveTo(cx+c2*10,cy+s2*10); ctx.lineTo(cx+c2*10+.5,cy+s2*10+.5);} } // mandelbrot
+  else if (mode===44) { ctx.arc(cx,cy-4,9,Math.PI,0); ctx.bezierCurveTo(cx+9,cy,cx+4,cy+6,cx+4,cy+10); ctx.lineTo(cx-4,cy+10); ctx.bezierCurveTo(cx-4,cy+6,cx-9,cy,cx-9,cy-4); ctx.moveTo(cx-5,cy-2); ctx.arc(cx-5,cy-2,1.5,0,6.283); ctx.moveTo(cx+4,cy-6); ctx.arc(cx+4,cy-6,1,0,6.283); } // mushroom
   ctx.stroke();
 }
 
@@ -725,6 +793,45 @@ function mkToggles(keys) {
   d.appendChild(row); return d;
 }
 
+function mkBlendCycle() {
+  const d = document.createElement('div'); d.className = 'ctl';
+  const label = document.createElement('label');
+  label.innerHTML = '<span>blend mode</span><span class="val" id="v-wave_blend">' + BLEND_NAMES[state.wave_blend] + '</span>';
+  d.appendChild(label);
+  const row = document.createElement('div'); row.className = 'toggle-row';
+  for (let i = 0; i < BLEND_NAMES.length; i++) {
+    const pool = activeBlendPool();
+    if (i >= pool.length) pool.push(true);
+    const b = document.createElement('button');
+    b.className = 'tog' + (state.wave_blend === i ? ' on' : '') + (pool[i] ? ' pooled' : '');
+    b.textContent = BLEND_NAMES[i]; b.id = `blend-${i}`;
+    b.onclick = (e) => {
+      if (e.shiftKey) {
+        const p = activeBlendPool();
+        p[i] = !p[i];
+        b.classList.toggle('pooled');
+        e.preventDefault();
+        return;
+      }
+      state.wave_blend = i;
+      state.wave_additive = (i === 1) ? 1 : 0;
+      document.querySelectorAll('[id^="blend-"]').forEach(el => el.classList.remove('on'));
+      b.classList.add('on');
+      const vl = document.getElementById('v-wave_blend');
+      if (vl) vl.textContent = BLEND_NAMES[i];
+      onParamChange();
+    };
+    b.oncontextmenu = (e) => {
+      e.preventDefault();
+      const p = activeBlendPool();
+      p[i] = !p[i];
+      b.classList.toggle('pooled');
+    };
+    row.appendChild(b);
+  }
+  d.appendChild(row); return d;
+}
+
 function mkPatternCycle() {
   const d = document.createElement('div'); d.className = 'ctl';
   const label = document.createElement('label');
@@ -732,16 +839,31 @@ function mkPatternCycle() {
   d.appendChild(label);
   const row = document.createElement('div'); row.className = 'toggle-row';
   for (let i = 0; i < TOTAL_PATTERNS; i++) {
+    const pool = activePatternPool();
+    if (i >= pool.length) pool.push(true);
     const b = document.createElement('button');
-    b.className = 'tog' + (state.wave_pattern === i ? ' on' : '');
+    b.className = 'tog' + (state.wave_pattern === i ? ' on' : '') + (pool[i] ? ' pooled' : '');
     b.textContent = PATTERN_NAMES[i]; b.id = `pat-${i}`;
-    b.onclick = () => {
+    b.onclick = (e) => {
+      if (e.shiftKey) {
+        const p = activePatternPool();
+        p[i] = !p[i];
+        b.classList.toggle('pooled');
+        e.preventDefault();
+        return;
+      }
       state.wave_pattern = i;
       document.querySelectorAll('[id^="pat-"]').forEach(el => el.classList.remove('on'));
       b.classList.add('on');
       const vl = document.getElementById('v-wave_pattern');
       if (vl) vl.textContent = PATTERN_NAMES[i];
       onParamChange();
+    };
+    b.oncontextmenu = (e) => {
+      e.preventDefault();
+      const p = activePatternPool();
+      p[i] = !p[i];
+      b.classList.toggle('pooled');
     };
     row.appendChild(b);
   }
@@ -883,14 +1005,33 @@ function syncUI() {
       if (sl) { sl.value = state[c.key]; vl.textContent = Number(state[c.key]).toFixed(c.step<0.01?3:2); }
     } else if (c.type === 'toggles') {
       for (const k of c.keys) { const b = document.getElementById(`t-${k}`); if(b) b.className = 'tog'+(state[k]?' on':''); }
+    } else if (c.type === 'blendcycle') {
+      for (let bi = 0; bi < BLEND_NAMES.length; bi++) {
+        const bb2 = document.getElementById(`blend-${bi}`);
+        if (bb2) {
+          bb2.classList.toggle('on', state.wave_blend === bi);
+          bb2.classList.toggle('pooled', activeBlendPool()[bi] !== false);
+        }
+      }
+      const bvl = document.getElementById('v-wave_blend');
+      if (bvl) bvl.textContent = BLEND_NAMES[state.wave_blend] || 'normal';
     } else if (c.type === 'patterncycle') {
-      document.querySelectorAll('[id^="pat-"]').forEach(el => el.classList.remove('on'));
-      const pb = document.getElementById(`pat-${state.wave_pattern}`);
-      if (pb) pb.classList.add('on');
+      for (let pi = 0; pi < TOTAL_PATTERNS; pi++) {
+        const pb2 = document.getElementById(`pat-${pi}`);
+        if (pb2) {
+          pb2.classList.toggle('on', state.wave_pattern === pi);
+          pb2.classList.toggle('pooled', activePatternPool()[pi] !== false);
+        }
+      }
       const pvl = document.getElementById('v-wave_pattern');
       if (pvl) pvl.textContent = PATTERN_NAMES[state.wave_pattern] || 'gradient';
     } else if (c.type === 'wavemode') {
-      document.querySelectorAll('.wm-btn').forEach(b => b.classList.remove('active'));
+      const sp = activeShapePool();
+      document.querySelectorAll('.wm-btn').forEach((b, idx) => {
+        b.classList.remove('active');
+        const si = parseInt(b.id.replace('wm-',''));
+        if (!isNaN(si)) b.classList.toggle('pooled', sp[si] !== false);
+      });
       const a = document.getElementById(`wm-${state.wave_mode}`);
       if(a) {
         a.classList.add('active');
@@ -956,6 +1097,15 @@ const canvas = document.getElementById('c');
 const gl = canvas.getContext('webgl2', { alpha: false, antialias: false, powerPreference: 'high-performance' });
 if (!gl) { document.body.innerHTML = '<p style="color:#f0a500;font:20px monospace;padding:40px">WebGL2 required</p>'; throw 'no gl'; }
 const useFloat = !!gl.getExtension('EXT_color_buffer_float');
+
+// Auto-hide cursor after 2s of no movement
+let cursorTimer = null;
+canvas.addEventListener('mousemove', () => {
+  canvas.classList.remove('cursor-hidden');
+  clearTimeout(cursorTimer);
+  cursorTimer = setTimeout(() => canvas.classList.add('cursor-hidden'), 2000);
+});
+canvas.addEventListener('mouseleave', () => { canvas.classList.remove('cursor-hidden'); clearTimeout(cursorTimer); });
 
 function mkShader(t,s) { const sh=gl.createShader(t); gl.shaderSource(sh,s); gl.compileShader(sh); if(!gl.getShaderParameter(sh,gl.COMPILE_STATUS)){console.error(gl.getShaderInfoLog(sh));} return sh; }
 function mkProg(vs,fs) { const p=gl.createProgram(); gl.attachShader(p,mkShader(gl.VERTEX_SHADER,vs)); gl.attachShader(p,mkShader(gl.FRAGMENT_SHADER,fs)); gl.linkProgram(p); if(!gl.getProgramParameter(p,gl.LINK_STATUS)){console.error(gl.getProgramInfoLog(p));} return p; }
@@ -1285,6 +1435,35 @@ vec3 patternColor(float t, float bass, float time) {
     vec3 hotCore = vec3(1.0, 0.9, 0.3);    // yellow-white hot
     vec3 col = mix(crust, molten, smoothstep(0.1, 0.5, heat));
     return mix(col, hotCore, smoothstep(0.6, 1.0, heat));
+  }
+  // 14: Stardust — tiny bright dots scattered along the line, mostly invisible
+  if (u_pattern == 14) {
+    float n = fract(sin(t * 999.1 + floor(time * spd * 3.0) * 71.7) * 43758.5);
+    float dot = step(0.92 - bass * 0.08, n); // ~8% visible, bass adds more
+    vec3 col = mix(c1, c2, fract(t * 7.0 + time * 0.2));
+    return col * dot * (1.5 + bass);
+  }
+  // 15: Morse — dots and dashes, mostly dark
+  if (u_pattern == 15) {
+    float pos = t * 20.0 - time * spd * 1.5;
+    float cell = floor(pos);
+    float local = fract(pos);
+    float isDash = step(0.5, fract(cell * 0.7)); // alternating pattern
+    float dashShape = smoothstep(0.1, 0.15, local) * (1.0 - smoothstep(0.6, 0.65, local));
+    float dotShape = 1.0 - smoothstep(0.0, 0.2, abs(local - 0.3));
+    float shape = mix(dotShape, dashShape, isDash);
+    shape *= 0.8 + bass * 0.4;
+    return mix(c1, c2, fract(cell * 0.3)) * shape;
+  }
+  // 16: Fireflies — moving points of light drifting along the shape
+  if (u_pattern == 16) {
+    float n1 = fract(sin(t * 311.7) * 43758.5);
+    float fly = sin(t * 50.0 + n1 * 6.28 + time * spd * (2.0 + n1 * 3.0));
+    fly = fly * 0.5 + 0.5;
+    fly = pow(fly, 12.0); // very sharp peaks — tiny bright points
+    fly *= 1.0 + bass * 1.5; // bass makes them flare
+    float hue = fract(t + time * spd * 0.1 + n1 * 0.5);
+    return hsv2rgb(vec3(hue, 0.3, 1.0)) * fly;
   }
   return c1; // fallback
 }
@@ -1682,13 +1861,16 @@ function getWave(t) {
 
 // Multi-stroke: shapes return {verts, strokes} where strokes is [[start,count,closed],...]
 // Strokes are detected during vertex generation so boundaries are always exact
+// Deterministic pseudo-random for fern IFS (returns 0-1)
+function fract_seed(s) { const v = Math.sin(s * 127.1 + 311.7) * 43758.5453; return v - Math.floor(v); }
+
 function buildWaveVerts(samples, aspect) {
   const v=new Float32Array(WAVE_N*2);
   const sc=state.wave_scale*0.3, cx=state.wave_x*2-1, cy=1-state.wave_y*2, my=state.wave_mystery, mode=state.wave_mode;
   let strokes = null;
 
   // For multi-stroke shapes, track element index to detect transitions
-  const isMultiStroke = (mode>=4 && mode<=4) || mode===12 || (mode>=16 && mode<=20) || mode===22 || (mode>=24 && mode<=29) || mode===31 || mode===33;
+  const isMultiStroke = (mode>=4 && mode<=4) || mode===12 || (mode>=16 && mode<=20) || mode===22 || (mode>=24 && mode<=29) || mode===31 || mode===33 || (mode>=34 && mode<=36) || (mode>=40 && mode<=42) || mode===44;
   let prevElement = -1, prevClosed = true, strokeStart = 0;
   if (isMultiStroke) strokes = [];
 
@@ -1897,6 +2079,211 @@ function buildWaveVerts(samples, aspect) {
       const ox=Math.cos(a1+Math.PI/3)*offI*(1-sf), oy=Math.sin(a1+Math.PI/3)*offI*(1-sf);
       x=(x1+(x2-x1)*sf+ox); y=(y1+(y2-y1)*sf+oy);
     }
+    // ===== METAPHYSICAL (34-35) =====
+    else if(mode===34){ // Yin Yang — two teardrops with dots, multi-stroke
+      const parts=4, pi2=Math.floor(t*parts); element=pi2;
+      const pf=(t*parts)%1, a2=pf*6.283;
+      const s=sc*.3+val*sc*.06+my*.02;
+      if(pi2===0){ // outer circle
+        x=Math.cos(a2)*s; y=Math.sin(a2)*s;
+      } else if(pi2===1){ // S-curve (upper half arc)
+        x=Math.cos(a2)*s*.5; y=Math.sin(a2)*s*.5+s*.25;
+      } else if(pi2===2){ // S-curve (lower half arc, reversed)
+        x=-Math.cos(a2)*s*.5; y=-Math.sin(a2)*s*.5-s*.25;
+      } else { // two dots (small circles)
+        const dot=pf<.5?0:1; const df=dot===0?pf*2:(pf-.5)*2;
+        const da=df*6.283, dr=s*.08;
+        x=Math.cos(da)*dr; y=Math.sin(da)*dr+(dot===0?s*.25:-s*.25);
+      }
+    }
+    else if(mode===35){ // Enneagram — 9-pointed with inner connections
+      const parts=2, pi2=Math.floor(t*parts); element=pi2; closed=false;
+      const pf=(t*parts)%1;
+      const s=sc*.35+val*sc*.08+my*.02;
+      if(pi2===0){ // outer nonagon
+        const si2=Math.floor(pf*9), sf2=(pf*9)%1;
+        const a1=-Math.PI/2+si2/9*6.283, a2=-Math.PI/2+(si2+1)/9*6.283;
+        x=(Math.cos(a1)+(Math.cos(a2)-Math.cos(a1))*sf2)*s;
+        y=(Math.sin(a1)+(Math.sin(a2)-Math.sin(a1))*sf2)*s;
+        element=si2;
+      } else { // inner star connections: 1→4→2→8→5→7→1 and 3→6→9→3
+        const conns=[[0,3],[3,1],[1,7],[7,4],[4,6],[6,0],[2,5],[5,8],[8,2]];
+        const ci2=Math.floor(pf*9), cf2=(pf*9)%1;
+        element=9+ci2;
+        const[a,b]=conns[ci2%conns.length];
+        const ax=-Math.PI/2+a/9*6.283, bx=-Math.PI/2+b/9*6.283;
+        x=(Math.cos(ax)+(Math.cos(bx)-Math.cos(ax))*cf2)*s;
+        y=(Math.sin(ax)+(Math.sin(bx)-Math.sin(ax))*cf2)*s;
+      }
+    }
+    // ===== ORGANIC / NATURE (36-38) =====
+    else if(mode===36){ // Jellyfish — bell dome + trailing tentacles
+      const parts=5, pi2=Math.floor(t*parts); element=pi2;
+      const pf=(t*parts)%1;
+      const s=sc*.3+val*sc*.06+my*.02;
+      if(pi2===0){ // bell dome (half circle)
+        const a2=pf*Math.PI; // 0 to PI (top half)
+        x=Math.cos(a2)*s; y=Math.sin(a2)*s*.7+s*.1;
+      } else { // tentacles (4 wavy lines hanging down)
+        const ti2=pi2-1; closed=false;
+        const tx=(ti2/3-.5)*s*1.2; // spread across bell width
+        const ty=-pf*s*1.2; // hang down (negative Y)
+        const wave=Math.sin(pf*8+val*3+ti2*1.5+my)*s*.12; // ripple
+        x=tx+wave; y=ty+s*.1;
+      }
+    }
+    else if(mode===37){ // Fern — parametric frond with self-similar branching
+      const s=sc*.35+val*sc*.06+my*.02;
+      // Main stem with branching fronds
+      const stemT=t; // 0 to 1 along the fern
+      const stemY=(stemT-.5)*s*2; // vertical position
+      // Lateral offset creates the frond shape
+      const level=stemT*6; // 6 frond levels
+      const curve=Math.sin(stemT*3.14)*.8; // envelope narrows at top and bottom
+      const branch=Math.sin(level*6.283+my)*curve;
+      const fine=Math.sin(stemT*40+my*2)*.1*curve; // fine leaflet detail
+      x=(branch*.3+fine)*s+val*s*.1; y=stemY;
+    }
+    else if(mode===38){ // Heartbeat — ECG waveform as loop
+      const s=sc*.35+my*.02;
+      const p=t*6.283;
+      // Simplified ECG: flat → P wave → flat → QRS spike → flat → T wave → flat
+      const seg=t*7;
+      let h=0;
+      if(seg<1) h=0; // baseline
+      else if(seg<1.5) h=Math.sin((seg-1)*6.283)*.15; // P wave
+      else if(seg<2.5) h=0; // PR segment
+      else if(seg<2.8) h=-.1; // Q dip
+      else if(seg<3.2) h=.8+val*.4; // R spike (audio reactive!)
+      else if(seg<3.5) h=-.15; // S dip
+      else if(seg<4.5) h=0; // ST segment
+      else if(seg<5.5) h=Math.sin((seg-4.5)*3.14)*.25; // T wave
+      else h=0; // baseline
+      x=(t-.5)*s*2; y=h*s;
+    }
+    // ===== METCH (39-41) =====
+    else if(mode===39){ // Harmonograph — decaying Lissajous with interference
+      const s=sc*.35+val*sc*.05+my*.02;
+      const decay=Math.exp(-t*2.5); // exponential decay
+      const f1=2, f2=3, f3=2.01; // slight detuning creates drift
+      const p1=my*.5, p2=0;
+      x=decay*(Math.sin(t*f1*6.283*3+p1)+Math.sin(t*f3*6.283*3)*.5)*s*.5;
+      y=decay*Math.sin(t*f2*6.283*3+p2)*s*.5;
+    }
+    else if(mode===40){ // DNA Helix — double helix with rungs
+      const parts=3, pi2=Math.floor(t*parts); element=pi2;
+      const pf=(t*parts)%1;
+      const s=sc*.3+val*sc*.05+my*.02;
+      if(pi2<2){ // two helical strands
+        const strand=pi2;
+        const ty=(pf-.5)*s*2;
+        const twist=pf*12.56+my; // 2 full twists
+        const tx=Math.sin(twist+strand*Math.PI)*s*.35;
+        x=tx; y=ty;
+      } else { // rungs connecting the strands
+        const ri=Math.floor(pf*8); element=2+ri; closed=false;
+        const rf=(pf*8)%1;
+        const ry=(ri/8-.5)*s*2+s*.125;
+        const twist=ri/8*12.56+my;
+        const lx=Math.sin(twist)*s*.35, rx2=Math.sin(twist+Math.PI)*s*.35;
+        x=lx+(rx2-lx)*rf; y=ry;
+      }
+    }
+    else if(mode===41){ // Constellation — star points with connecting lines
+      // 8 stars in a pattern with connecting lines
+      const stars=[[-.3,-.3],[.1,-.35],[.35,-.1],[.25,.2],[-.05,.3],[-.35,.1],[-.2,0],[.1,.05]];
+      const links=[[0,1],[1,2],[2,3],[3,4],[4,5],[5,0],[0,6],[6,7],[7,2],[6,4]];
+      const parts=2, pi2=Math.floor(t*parts); element=pi2;
+      const pf=(t*parts)%1;
+      const s=sc*.8+val*sc*.1+my*.03;
+      if(pi2===0){ // star dots (small circles at each point)
+        const si2=Math.floor(pf*8); element=si2;
+        const sf2=(pf*8)%1, a2=sf2*6.283, dr=s*.03;
+        x=(stars[si2][0]+Math.cos(a2)*dr)*s*.5; y=(stars[si2][1]+Math.sin(a2)*dr)*s*.5;
+      } else { // connecting lines
+        const li=Math.floor(pf*10); element=8+li; closed=false;
+        const lf=(pf*10)%1;
+        const[a,b]=links[li%links.length];
+        x=(stars[a][0]+(stars[b][0]-stars[a][0])*lf)*s*.5;
+        y=(stars[a][1]+(stars[b][1]-stars[a][1])*lf)*s*.5;
+      }
+    }
+    // ===== PLATONIC (42) =====
+    else if(mode===42){ // Dodecahedron — 30 edges of 12 pentagonal faces
+      // Projected vertices of a dodecahedron (simplified 2D projection)
+      const phi=(1+Math.sqrt(5))/2, ip=1/phi;
+      const raw=[
+        [1,1,1],[1,1,-1],[1,-1,1],[1,-1,-1],[-1,1,1],[-1,1,-1],[-1,-1,1],[-1,-1,-1],
+        [0,phi,ip],[0,phi,-ip],[0,-phi,ip],[0,-phi,-ip],
+        [ip,0,phi],[-ip,0,phi],[ip,0,-phi],[-ip,0,-phi],
+        [phi,ip,0],[phi,-ip,0],[-phi,ip,0],[-phi,-ip,0]
+      ];
+      const edgeList=[
+        [0,8],[8,4],[4,13],[13,12],[12,0],[0,16],[16,1],[1,9],[9,8],[1,14],
+        [14,5],[5,9],[5,15],[15,7],[7,19],[19,18],[18,5],[4,18],[6,19],
+        [6,13],[6,10],[10,11],[11,7],[11,3],[3,17],[17,16],[17,2],[2,12],
+        [2,10],[3,14]
+      ];
+      const edges=edgeList.length, ei=Math.floor(t*edges); element=ei; closed=false;
+      const ef=(t*edges)%1;
+      const[a,b]=edgeList[ei%edges];
+      // Simple 2D projection: x,y of 3D vertex
+      const proj=(v2)=>[v2[0]*.2+v2[2]*.1, v2[1]*.2+v2[2]*.05];
+      const pa=proj(raw[a]), pb=proj(raw[b]);
+      const s=sc*.7+val*sc*.08+my*.02;
+      x=(pa[0]+(pb[0]-pa[0])*ef)*s; y=(pa[1]+(pb[1]-pa[1])*ef)*s;
+    }
+    // ===== SCIENCE (43) =====
+    else if(mode===43){ // Mandelbrot boundary — outline of the set
+      // Trace the boundary by walking angles
+      const s=sc*.2+val*sc*.03+my*.01;
+      const angle=t*6.283;
+      // Start point on a circle, iterate to find boundary
+      const cr=-0.5+Math.cos(angle)*1.2, ci2=Math.sin(angle)*1.1;
+      let zr=0, zi=0, iter=0;
+      const maxIter=40;
+      while(zr*zr+zi*zi<4 && iter<maxIter){
+        const tr=zr*zr-zi*zi+cr;
+        zi=2*zr*zi+ci2; zr=tr; iter++;
+      }
+      // Map escape time to radius for boundary trace
+      const escaped=iter<maxIter;
+      const r2=escaped ? sc*.3*(1-iter/maxIter) : sc*.01;
+      x=Math.cos(angle)*r2+cr*s*.3; y=Math.sin(angle)*r2+ci2*s*.3;
+    }
+    // ===== ORGANIC (44) =====
+    else if(mode===44){ // Mushroom — cap with greebles + stem + gills
+      const parts=4, pi2=Math.floor(t*parts); element=pi2;
+      const pf=(t*parts)%1;
+      const s=sc*.3+val*sc*.05+my*.02;
+      if(pi2===0){ // cap — dome with bumpy greebles
+        const a2=pf*Math.PI; // half circle
+        const baseR=s*1.1;
+        const greeble=Math.sin(pf*40+my*3)*.03*s + Math.sin(pf*17)*.02*s + Math.sin(pf*63+my)*.015*s;
+        const r=baseR+greeble+val*s*.1;
+        x=Math.cos(a2)*r; y=Math.sin(a2)*r*.6+s*.15;
+      } else if(pi2===1){ // stem — slightly curved trunk
+        closed=false;
+        const stemH=s*1.2;
+        const taper=.12+pf*.05; // widens slightly at base
+        const curve=Math.sin(pf*3.14+my*.5)*s*.08; // gentle lean
+        x=((pf<.5?-1:1)*taper*s+curve); y=s*.15-pf*stemH;
+      } else if(pi2===2){ // gills — radial lines under cap
+        const gi=Math.floor(pf*8); element=2+gi; closed=false;
+        const gf=(pf*8)%1;
+        const ga=-Math.PI*.1-gi/8*Math.PI*.8; // fan under cap
+        const gr=gf*s*.35;
+        x=Math.cos(ga)*gr; y=Math.sin(ga)*gr*.4+s*.12;
+      } else { // spots on cap — small circles
+        const si2=Math.floor(pf*5); element=10+si2;
+        const sf2=(pf*5)%1, sa=sf2*6.283;
+        const spotAngle=.3+si2/5*2.5; // spread across cap
+        const spotR=s*.07;
+        const capR=s*.9;
+        x=Math.cos(spotAngle)*capR*.7+Math.cos(sa)*spotR;
+        y=Math.sin(spotAngle)*capR*.5+s*.2+Math.sin(sa)*spotR;
+      }
+    }
     else{ x=0; y=0; } // fallback
 
     // Detect stroke boundaries for multi-stroke shapes
@@ -1928,7 +2315,7 @@ const DUAL_FADE_SPEED = 0.008; // ~125 frames to full fade = ~2s at 60fps
 
 // Wave2 editing — swap UI controls between shape 1 and shape 2
 let editingWave2 = false;
-const WAVE2_KEYS = ['wave_mode','wave_r','wave_g','wave_b','wave_a','wave_x','wave_y','wave_mystery','wave_dots','wave_thick','wave_additive','wave_brighten','wave_scale','wave_smoothing','wave_r2','wave_g2','wave_b2','wave_gradient','wave_pattern','wave_pattern_speed'];
+const WAVE2_KEYS = ['wave_mode','wave_r','wave_g','wave_b','wave_a','wave_x','wave_y','wave_mystery','wave_dots','wave_thick','wave_additive','wave_brighten','wave_scale','wave_smoothing','wave_r2','wave_g2','wave_b2','wave_gradient','wave_pattern','wave_pattern_speed','wave_blend'];
 // Map: wave2 property name → state key name
 const WAVE2_MAP = {
   mode:'wave_mode', r:'wave_r', g:'wave_g', b:'wave_b', a:'wave_a',
@@ -1936,7 +2323,7 @@ const WAVE2_MAP = {
   thick:'wave_thick', additive:'wave_additive', brighten:'wave_brighten',
   scale:'wave_scale', smoothing:'wave_smoothing',
   r2:'wave_r2', g2:'wave_g2', b2:'wave_b2', gradient:'wave_gradient',
-  pattern:'wave_pattern', patSpeed:'wave_pattern_speed',
+  pattern:'wave_pattern', patSpeed:'wave_pattern_speed', blend:'wave_blend',
 };
 let wave1Stash = {}; // stash wave1 params while editing wave2
 
@@ -1993,7 +2380,25 @@ function cycleWarpMode() {
 }
 
 function cyclePattern() {
-  state.wave_pattern = (state.wave_pattern + 1) % TOTAL_PATTERNS;
+  const pool = activePatternPool();
+  let next = (state.wave_pattern + 1) % TOTAL_PATTERNS;
+  for (let tries = 0; tries < TOTAL_PATTERNS; tries++) {
+    if (pool[next] !== false) break;
+    next = (next + 1) % TOTAL_PATTERNS;
+  }
+  state.wave_pattern = next;
+  syncUI();
+}
+
+function cycleBlend() {
+  const pool = activeBlendPool();
+  let next = (state.wave_blend + 1) % BLEND_NAMES.length;
+  for (let tries = 0; tries < BLEND_NAMES.length; tries++) {
+    if (pool[next] !== false) break;
+    next = (next + 1) % BLEND_NAMES.length;
+  }
+  state.wave_blend = next;
+  state.wave_additive = (state.wave_blend === 1) ? 1 : 0;
   syncUI();
 }
 
@@ -2094,7 +2499,13 @@ function render() {
     editSwapped = true;
   }
   gl.enable(gl.BLEND);
-  gl.blendFunc(state.wave_additive?gl.SRC_ALPHA:gl.SRC_ALPHA, state.wave_additive?gl.ONE:gl.ONE_MINUS_SRC_ALPHA);
+  // Blend modes: 0=normal, 1=additive, 2=screen, 3=subtract, 4=multiply
+  const bm = state.wave_blend;
+  if (bm === 1) { gl.blendFunc(gl.SRC_ALPHA, gl.ONE); gl.blendEquation(gl.FUNC_ADD); }
+  else if (bm === 2) { gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_COLOR); gl.blendEquation(gl.FUNC_ADD); } // screen
+  else if (bm === 3) { gl.blendFunc(gl.SRC_ALPHA, gl.ONE); gl.blendEquation(gl.FUNC_REVERSE_SUBTRACT); } // subtract
+  else if (bm === 4) { gl.blendFunc(gl.DST_COLOR, gl.ZERO); gl.blendEquation(gl.FUNC_ADD); } // multiply
+  else { gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); gl.blendEquation(gl.FUNC_ADD); } // normal
 
   // Base line width in clip space — bass punches width harder
   const bassPunch = audio.bass > 0.6 ? (audio.bass - 0.6) * 0.025 : 0; // extra kick on hard hits
@@ -2206,6 +2617,7 @@ function render() {
     drawWave(wvT, state.wave_r*1.2, state.wave_g*1.2, state.wave_b*1.2, state.wave_a*0.4, state.wave_dots, 1.8, state.wave_r2*1.2, state.wave_g2*1.2, state.wave_b2*1.2, state.wave_gradient, state.wave_pattern, state.wave_pattern_speed);
   }
   gl.disable(gl.BLEND);
+  gl.blendEquation(gl.FUNC_ADD); // reset for other passes
 
   // Restore wave2 values to state if we swapped for rendering
   if (editSwapped) {
@@ -2278,7 +2690,8 @@ function render() {
   const warpTag = ` <span class="d">|</span> ${WARP_MODE_NAMES[Math.floor(warpMode) % 9]}`;
   const qTag = ` <span class="d">|</span> ${QUALITY_MODES[qualityIdx].name}`;
   const patTag = state.wave_pattern > 0 ? ` <span class="d">|</span> ${PATTERN_NAMES[state.wave_pattern].toUpperCase()}` : '';
-  document.getElementById('hud').innerHTML=`${fps} <span class="d">fps</span> ${useMic?'<span class="d">|</span> MIC':''}${trans}${autoTag}${chaosTag}${libTag}${dualTag}${warpTag}${patTag}${qTag}`;
+  const blendTag = state.wave_blend > 0 ? ` <span class="d">|</span> ${BLEND_NAMES[state.wave_blend].toUpperCase()}` : '';
+  document.getElementById('hud').innerHTML=`${fps} <span class="d">fps</span> ${useMic?'<span class="d">|</span> MIC':''}${trans}${autoTag}${chaosTag}${libTag}${dualTag}${warpTag}${patTag}${blendTag}${qTag}`;
 
   requestAnimationFrame(render);
 }
@@ -2546,12 +2959,12 @@ function randomize() {
     } else {
       target.wave_gradient = 0;
     }
-    // ~40% chance of a line pattern (non-gradient)
-    if (Math.random() < 0.4) {
-      target.wave_pattern = 1 + Math.floor(Math.random() * (TOTAL_PATTERNS - 1)); // skip gradient (0)
+    // ~70% chance of a line pattern (non-gradient)
+    if (Math.random() < 0.7) {
+      target.wave_pattern = getPooledPattern(true); // skip gradient (0)
       target.wave_pattern_speed = 0.5 + Math.random() * 3;
     } else {
-      target.wave_pattern = 0;
+      target.wave_pattern = patternPool[0] !== false ? 0 : getPooledPattern(false);
     }
   } else {
     // Generate random config
@@ -2563,7 +2976,8 @@ function randomize() {
     target.wave_mystery = (Math.random() - 0.5) * 2;
     target.wave_dots = Math.random() > 0.7 ? 1 : 0;
     target.wave_thick = Math.random() > 0.4 ? 1 : 0;
-    target.wave_additive = Math.random() > 0.4 ? 1 : 0;
+    target.wave_blend = getPooledBlend();
+    target.wave_additive = target.wave_blend === 1 ? 1 : 0;
     target.wave_brighten = 0; // brighten causes white-out with feedback loop
     target.brighten = 0;
     target.invert = 0;
@@ -2604,12 +3018,12 @@ function randomize() {
     } else {
       target.wave_gradient = 0;
     }
-    // ~50% chance of a line pattern
-    if (Math.random() < 0.5) {
-      target.wave_pattern = 1 + Math.floor(Math.random() * (TOTAL_PATTERNS - 1));
+    // ~75% chance of a line pattern
+    if (Math.random() < 0.75) {
+      target.wave_pattern = getPooledPattern(true);
       target.wave_pattern_speed = 0.5 + Math.random() * 3;
     } else {
-      target.wave_pattern = 0;
+      target.wave_pattern = patternPool[0] !== false ? 0 : getPooledPattern(false);
     }
   }
 
@@ -2632,7 +3046,7 @@ function randomize() {
 }
 
 // Keys that should snap (integers/booleans), not lerp
-const SNAP_KEYS = new Set(['wave_mode','wave_dots','wave_thick','wave_additive','wave_brighten','wave_pattern','brighten','darken','solarize','invert']);
+const SNAP_KEYS = new Set(['wave_mode','wave_dots','wave_thick','wave_additive','wave_brighten','wave_pattern','wave_blend','brighten','darken','solarize','invert']);
 
 function stepTransition() {
   if (!transitionTarget) return;
@@ -2755,9 +3169,14 @@ function stepChaos(audio) {
   // Treble triggers boolean flips — high treble = more frequent changes
   const flipChance = a.treb > 0.5 ? 300 : 600; // frames between flips
   if (chaosFrameCount % flipChance === 0) {
-    const bools = ['wave_dots','wave_thick','wave_additive'];
+    const bools = ['wave_dots','wave_thick'];
     const pick = bools[Math.floor(Math.random() * bools.length)];
     state[pick] = state[pick] ? 0 : 1;
+    // Occasionally shift blend mode
+    if (Math.random() < 0.3) {
+      state.wave_blend = getPooledBlend();
+      state.wave_additive = state.wave_blend === 1 ? 1 : 0;
+    }
   }
 
   // Mid energy drives wave mode changes — sustained mids trigger shifts
@@ -2768,7 +3187,7 @@ function stepChaos(audio) {
   }
   // Pattern shifts — bass-driven, every ~15 seconds
   if (chaosFrameCount % 900 === 0 && a.bass > 0.4) {
-    state.wave_pattern = Math.floor(Math.random() * TOTAL_PATTERNS);
+    state.wave_pattern = getPooledPattern(true);
     state.wave_pattern_speed = 0.5 + Math.random() * 3;
   }
 
@@ -2867,6 +3286,7 @@ document.addEventListener('keydown', e => {
     case 'e': toggleWave2Edit(); break;
     case 'w': cycleWarpMode(); break;
     case 'p': cyclePattern(); break;
+    case 'b': cycleBlend(); break;
     case 'q': cycleQuality(); break;
     case 'h': document.getElementById('hud').style.display = document.getElementById('hud').style.display === 'none' ? '' : 'none'; break;
     case 't': toggleAttribution(); break;
@@ -2893,6 +3313,11 @@ function saveStartup() {
   const config = {
     prefs: prefs,
     shapePool: [...shapePool],
+    patternPool: [...patternPool],
+    blendPool: [...blendPool],
+    shapePool2: [...shapePool2],
+    patternPool2: [...patternPool2],
+    blendPool2: [...blendPool2],
     dualIdx: dualIdx,
     autoOn: autoRandomInterval !== null,
     chaosOn: chaosEnabled,
@@ -2911,6 +3336,11 @@ function loadStartup() {
     if (config.prefs) Object.assign(state, config.prefs);
     // Legacy: if old format had full state, ignore visual params
     if (config.shapePool) config.shapePool.forEach((v, i) => { if (i < shapePool.length) shapePool[i] = v; });
+    if (config.patternPool) config.patternPool.forEach((v, i) => { if (i < patternPool.length) patternPool[i] = v; });
+    if (config.blendPool) config.blendPool.forEach((v, i) => { if (i < blendPool.length) blendPool[i] = v; });
+    if (config.shapePool2) config.shapePool2.forEach((v, i) => { if (i < shapePool2.length) shapePool2[i] = v; });
+    if (config.patternPool2) config.patternPool2.forEach((v, i) => { if (i < patternPool2.length) patternPool2[i] = v; });
+    if (config.blendPool2) config.blendPool2.forEach((v, i) => { if (i < blendPool2.length) blendPool2[i] = v; });
     if (config.dualIdx !== undefined) dualIdx = config.dualIdx;
     return config;
   } catch(e) { return false; }
