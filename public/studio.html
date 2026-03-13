@@ -2113,6 +2113,8 @@ populateMicList().then(() => {
 
 // Audio monitor overlay
 let audioMonitorVisible = false;
+// Audio reactivity mode: 'unified' = both shapes use bass (original), 'split' = shape1=bass, shape2=mid
+let audioReactMode = 'split';
 function buildAudioMonitor() {
   const mon = document.getElementById('audio-monitor');
   const bars = [
@@ -2208,8 +2210,6 @@ function getAudio(t) {
 }
 
 // Scale pulse envelopes — fast attack, smooth release
-// Audio reactivity mode: 'unified' = both shapes use bass (original), 'split' = shape1=bass, shape2=mid
-let audioReactMode = 'split';
 function toggleAudioReactMode() {
   audioReactMode = audioReactMode === 'split' ? 'unified' : 'split';
   const btn = document.getElementById('btn-audio-react');
