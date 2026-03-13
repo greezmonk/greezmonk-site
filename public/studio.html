@@ -1537,7 +1537,8 @@ uniform vec4 u_col;
 uniform vec3 u_col2;      // gradient end color (u_col.rgb = start)
 uniform float u_gradient;  // 0 = flat color, 1 = full gradient
 uniform float u_glow;
-uniform float u_bass;      // 0-1 bass energy for reactive effects
+uniform float u_bass;      // 0-1 primary driver energy (bass for shape1, mid for shape2)
+uniform float u_mid;       // 0-1 mid energy for secondary reactive effects
 uniform float u_time;      // seconds since start
 uniform int u_pattern;     // 0-13: gradient, rainbow, stripes, pulse, fire, frequency, bounce, christmas, neon, plasma, lightning, ocean, aurora, lava
 uniform float u_patspeed;  // pattern animation speed multiplier
@@ -1813,7 +1814,7 @@ const bloomBlendP = mkProg(QUAD_VS, BLOOM_BLEND_FS);
 function uL(p,n) { return gl.getUniformLocation(p,n); }
 const wU={}; ['u_prev','u_time','u_zoom','u_rot','u_warp','u_cx','u_cy','u_dx','u_dy','u_sx','u_sy','u_decay','u_warp_mode','u_warp_blend'].forEach(n=>wU[n]=uL(warpP,n));
 const cU={}; ['u_tex','u_gamma','u_darken','u_brighten','u_solarize','u_invert','u_obSize','u_obCol'].forEach(n=>cU[n]=uL(compP,n));
-const vU={}; ['u_col','u_col2','u_gradient','u_width','u_glow','u_bass','u_time','u_pattern','u_patspeed'].forEach(n=>vU[n]=uL(waveP,n));
+const vU={}; ['u_col','u_col2','u_gradient','u_width','u_glow','u_bass','u_mid','u_time','u_pattern','u_patspeed'].forEach(n=>vU[n]=uL(waveP,n));
 const vUL={}; ['u_col'].forEach(n=>vUL[n]=uL(waveLegacyP,n));
 const beU={}; ['u_tex','u_threshold'].forEach(n=>beU[n]=uL(bloomExtP,n));
 const bbU={}; ['u_tex','u_dir'].forEach(n=>bbU[n]=uL(bloomBlurP,n));
@@ -2193,6 +2194,18 @@ function getAudio(t) {
     treb = treb > thr ? (treb - thr) / (1 - thr) : 0;
   }
   return { bass, mid, treb };
+}
+
+// Scale pulse envelopes — fast attack, smooth release
+const scalePulse = { w1: 0, w2: 0 };
+function updateScalePulse(audio) {
+  const attack = 0.4, release = 0.92;
+  // Wave 1 driven by bass
+  const target1 = audio.bass > 0.5 ? (audio.bass - 0.5) * 0.3 : 0;
+  scalePulse.w1 = target1 > scalePulse.w1 ? scalePulse.w1 + (target1 - scalePulse.w1) * attack : scalePulse.w1 * release;
+  // Wave 2 driven by mid
+  const target2 = audio.mid > 0.4 ? (audio.mid - 0.4) * 0.25 : 0;
+  scalePulse.w2 = target2 > scalePulse.w2 ? scalePulse.w2 + (target2 - scalePulse.w2) * attack : scalePulse.w2 * release;
 }
 
 let prevWave = null; // temporal smoothing buffer
@@ -2847,6 +2860,7 @@ function render() {
   const now=performance.now(), t=(now-startTime)/1000;
   const w=canvas.width, h=canvas.height, aspect=w/h;
   const audio=getAudio(t);
+  updateScalePulse(audio);
   updateAudioMonitor(audio);
   stepChaos(audio);
   const wave=getWave(t);
@@ -2891,12 +2905,16 @@ function render() {
   }
   setBlendMode(state.wave_blend);
 
-  // Base line width in clip space — bass punches width harder
-  const bassPunch = audio.bass > 0.6 ? (audio.bass - 0.6) * 0.025 : 0; // extra kick on hard hits
-  const baseWidth = 0.008 + audio.bass * 0.006 + bassPunch;
+  // Per-wave audio driver and line width
+  let waveDriver = audio.bass; // default to bass, swapped for wave2
+  function getLineWidth(driver) {
+    const punch = driver > 0.6 ? (driver - 0.6) * 0.025 : 0;
+    return 0.008 + driver * 0.006 + punch;
+  }
 
   // Helper: draw a wave shape (thick line or dots), with multi-stroke + gradient + pattern support
   function drawWave(waveData, r, g, b, a, useDots, widthMul, r2, g2, b2, gradient, pattern, patSpeed) {
+    const baseWidth = getLineWidth(waveDriver);
     const verts = waveData.verts || waveData;
     const strokes = waveData.strokes || null;
     if (useDots) {
@@ -2915,7 +2933,8 @@ function render() {
       gl.uniform4f(vU.u_col, r, g, b, a);
       gl.uniform3f(vU.u_col2, r2||r, g2||g, b2||b);
       gl.uniform1f(vU.u_gradient, gradient||0);
-      gl.uniform1f(vU.u_bass, audio.bass);
+      gl.uniform1f(vU.u_bass, waveDriver);
+      gl.uniform1f(vU.u_mid, audio.mid);
       gl.uniform1f(vU.u_width, baseWidth * (widthMul || 1));
       gl.uniform1f(vU.u_glow, 0.8);
       gl.uniform1f(vU.u_time, t);
@@ -2928,7 +2947,8 @@ function render() {
       gl.uniform4f(vU.u_col, r, g, b, a);
       gl.uniform3f(vU.u_col2, r2||r, g2||g, b2||b);
       gl.uniform1f(vU.u_gradient, gradient||0);
-      gl.uniform1f(vU.u_bass, audio.bass);
+      gl.uniform1f(vU.u_bass, waveDriver);
+      gl.uniform1f(vU.u_mid, audio.mid);
       gl.uniform1f(vU.u_width, baseWidth * (widthMul || 1));
       gl.uniform1f(vU.u_glow, 0.8);
       gl.uniform1f(vU.u_time, t);
@@ -2951,6 +2971,11 @@ function render() {
     transitionFrom.wave_mode !== undefined && transitionTarget.wave_mode !== undefined &&
     transitionFrom.wave_mode !== transitionTarget.wave_mode;
 
+  // Wave 1: driven by bass, scale pulse on bass hits
+  waveDriver = audio.bass;
+  const savedScale1 = state.wave_scale;
+  state.wave_scale = state.wave_scale * (1 + scalePulse.w1);
+
   if (xfading) {
     const ease = transitionProgress < 0.5 ? 2*transitionProgress*transitionProgress : 1-Math.pow(-2*transitionProgress+2,2)/2;
     const fadeOut = 1 - ease, fadeIn = ease;
@@ -2968,8 +2993,11 @@ function render() {
     const wv = buildWaveVerts(wave, aspect);
     drawWave(wv, state.wave_r, state.wave_g, state.wave_b, state.wave_a, state.wave_dots, 1, state.wave_r2, state.wave_g2, state.wave_b2, state.wave_gradient, state.wave_pattern, state.wave_pattern_speed);
   }
+  state.wave_scale = savedScale1;
 
   // Dual/Split/Layer wave: draw second shape (with fade)
+  // Wave 2: driven by mid, scale pulse on mid hits
+  waveDriver = audio.mid;
   stepDualFade();
   stepWave2Transition();
   if (dualFade > 0.01) {
@@ -2980,11 +3008,12 @@ function render() {
     if (isIndependent) {
       state.wave_mode = wave2.mode;
       state.wave_mystery = wave2.mystery;
-      state.wave_scale = wave2.scale;
+      state.wave_scale = wave2.scale * (1 + scalePulse.w2);
       state.wave_x = isCombine ? state.wave_x : wave2.x;
       state.wave_y = isCombine ? state.wave_y : wave2.y;
     } else {
       state.wave_mode = getSecondMode();
+      state.wave_scale = state.wave_scale * (1 + scalePulse.w2);
     }
     const wv2 = buildWaveVerts(wave, aspect);
     state.wave_mode = origMode; state.wave_mystery = origMy;
@@ -2997,6 +3026,9 @@ function render() {
       drawWave(wv2, state.wave_r, state.wave_g, state.wave_b, state.wave_a * 0.7 * dualFade, state.wave_dots, 0.8, state.wave_r2, state.wave_g2, state.wave_b2, state.wave_gradient, state.wave_pattern, state.wave_pattern_speed);
     }
   }
+
+  // Reset driver to bass for glow pass (wave1's glow)
+  waveDriver = audio.bass;
 
   // Thick/brighten glow pass
   if (state.wave_thick || state.wave_brighten) {
