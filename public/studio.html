@@ -3854,7 +3854,7 @@ document.addEventListener('keydown', e => {
     case '7': loadPreset('fractal_spiral'); break;
     case '8': loadPreset('fractal_mandala'); break;
     case '9': loadPreset('accelerator'); break;
-    case 'r': randomize(); break;
+    case 'r': randomize(); if (dualIdx > 0) randomizeWave2(); break;
     case 'a': toggleAutoRandom(); break;
     case 'c': toggleChaos(); break;
     case 'f': goFullscreen(); break;
