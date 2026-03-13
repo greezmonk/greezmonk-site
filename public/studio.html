@@ -206,12 +206,13 @@
 <header>
   <a href="lab.html" style="color:var(--dim);text-decoration:none;border:1px dashed var(--border);padding:3px 9px;font:10px 'Courier New',monospace;letter-spacing:0.5px;transition:all 0.3s;" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--dim)'">&larr; LAB</a>
   <h1>// synthestasia</h1>
+  <span id="help-hint" style="color:var(--dim);font:10px 'Courier New',monospace;letter-spacing:1px;opacity:0.5;cursor:pointer;" onclick="document.getElementById('help-overlay').classList.add('show')" title="Open keyboard shortcuts & controls legend">? legend</span>
   <div class="toolbar">
     <select id="mic-select" onchange="switchMic(this.value)" title="Audio input device">
       <option value="">-- mic select --</option>
     </select>
-    <button id="btn-mic" onclick="toggleMic()">mic: off</button>
-    <button id="btn-fs" onclick="goFullscreen()">fullscreen</button>
+    <button id="btn-mic" onclick="toggleMic()" title="Toggle microphone input (M)">mic: off</button>
+    <button id="btn-fs" onclick="goFullscreen()" title="Enter fullscreen mode (F)">fullscreen</button>
   </div>
   <div class="presets">
     <button onclick="loadPreset('cyan_vscope')" id="pre-cyan_vscope">Cyan V-Scope</button>
@@ -222,7 +223,8 @@
     <button onclick="loadPreset('fire')" id="pre-fire">Fire</button>
   </div>
   <div class="toolbar">
-    <button onclick="randomize()" title="Random preset (r)">random</button>
+    <button onclick="resetToBlank()" title="Reset to blank canvas — minimal shape, no effects">reset</button>
+    <button onclick="randomize()" title="Random preset — randomizes both waves and all settings (R)">random</button>
     <button onclick="toggleAutoRandom()" id="btn-auto" title="Auto-random mode (a)">auto: off</button>
     <button onclick="toggleChaos()" id="btn-chaos" title="Chaos drift mode (c)">chaos: off</button>
     <button onclick="saveConfig()" title="Save preset to file">save</button>
@@ -253,7 +255,7 @@
     <div class="help-row"><span class="help-key">C</span><span class="help-desc">chaos drift mode</span></div>
     <h3>Wave</h3>
     <div class="help-row"><span class="help-key">Wave 1 / Wave 2</span><span class="help-desc">toggle in sidebar — edits shape, color, all wave params</span></div>
-    <div class="help-row"><span class="help-key">D</span><span class="help-desc">cycle dual mode (single / dual / split / layer)</span></div>
+    <div class="help-row"><span class="help-key">D</span><span class="help-desc">cycle dual mode (single / dual / split / layer / combine)</span></div>
     <div class="help-row"><span class="help-key">E</span><span class="help-desc">toggle wave 2 editing (keyboard shortcut)</span></div>
     <div class="help-row"><span class="help-key">W</span><span class="help-desc">cycle warp mode (17 modes)</span></div>
     <div class="help-row"><span class="help-key">P</span><span class="help-desc">cycle line pattern (17 modes)</span></div>
@@ -297,6 +299,7 @@ const DUAL_MODES = [
   { name: 'DUAL',   count: 2 },
   { name: 'SPLIT',  count: 2 },
   { name: 'LAYER',  count: 2 },
+  { name: 'COMBINE', count: 2 },
 ];
 let dualIdx = 0;
 let wave_mode2 = -1; // -1 = auto-pick
@@ -384,7 +387,15 @@ function randomizeWave2() {
   wave2Target.scale = 0.5 + Math.random() * 2.5;
   wave2Target.dots = Math.random() > 0.8 ? 1 : 0;
   wave2Target.thick = Math.random() > 0.4 ? 1 : 0;
-  wave2Target.blend = getPooledBlend(true);
+  // Bias wave2 blend toward subtract/multiply when invert is active, but still allow them anytime
+  const invertActive = state.invert || (transitionTarget && transitionTarget.invert);
+  const smChance = invertActive ? 0.8 : 0.2; // high chance with invert, still possible without
+  if (Math.random() < smChance) {
+    const smBlends = [3, 4].filter(b => blendPool2[b] !== false);
+    wave2Target.blend = smBlends.length > 0 ? smBlends[Math.floor(Math.random() * smBlends.length)] : getPooledBlend(true);
+  } else {
+    wave2Target.blend = getPooledBlend(true);
+  }
   wave2Target.additive = wave2Target.blend === 1 ? 1 : 0;
   wave2Target.brighten = Math.random() > 0.8 ? 1 : 0;
   wave2Target.smoothing = Math.random();
@@ -528,6 +539,17 @@ let useMic = false;
 // =====================================================
 // UI CONTROLS
 // =====================================================
+const GROUP_TIPS = {
+  'Wave Shape': 'Shape geometry, style, and blend mode for the active wave',
+  'Wave Color': 'Colors, gradient, line pattern, and position',
+  'Motion': 'Zoom, rotation, warp, drift, and stretch applied each frame',
+  'Decay & Gamma': 'Trail persistence and brightness curve',
+  'Borders': 'Inner and outer colored borders around the frame',
+  'Randomizer': 'Morph speed, auto interval, and color palette for randomization',
+  'Audio Sensitivity': 'How much bass, mid, and treble affect the visuals',
+  'Bloom': 'Glow effect around bright areas',
+  'Post-Processing': 'Screen-wide effects: brighten, darken, solarize, invert (applies to entire frame)',
+};
 const GROUPS = [
   { name: 'Wave Shape', controls: [
     { type: 'wavetoggle' },
@@ -611,6 +633,7 @@ function buildUI() {
     div.className = 'group' + (g.collapsed ? ' collapsed' : '');
     const hdr = document.createElement('div');
     hdr.className = 'group-header'; hdr.textContent = g.name;
+    if (GROUP_TIPS[g.name]) hdr.title = GROUP_TIPS[g.name];
     hdr.onclick = () => div.classList.toggle('collapsed');
     div.appendChild(hdr);
     const body = document.createElement('div');
@@ -630,8 +653,50 @@ function buildUI() {
   }
 }
 
+// Tooltip descriptions for sliders and toggles
+const TIPS = {
+  wave_mystery: 'Shape morph parameter — distorts geometry in shape-specific ways',
+  wave_scale: 'Size of the wave shape on screen',
+  wave_smoothing: 'Temporal smoothing — higher = smoother, more fluid motion',
+  wave_dots: 'Draw as dots instead of lines (shift+click to lock from auto/chaos)',
+  wave_thick: 'Thick glowing lines with bloom effect (shift+click to lock)',
+  wave_brighten: 'Brighten the wave shape (shift+click to lock)',
+  wave_r: 'Red channel of wave color', wave_g: 'Green channel of wave color',
+  wave_b: 'Blue channel of wave color', wave_a: 'Wave opacity',
+  wave_pattern_speed: 'Speed of the line color pattern animation',
+  wave_gradient: 'Blend between start and end colors along the wave',
+  wave_r2: 'Red channel of gradient end color', wave_g2: 'Green channel of gradient end color',
+  wave_b2: 'Blue channel of gradient end color',
+  wave_x: 'Horizontal position of the wave shape', wave_y: 'Vertical position of the wave shape',
+  zoom: 'Frame-over-frame zoom — above 1.0 zooms in, below zooms out',
+  rot: 'Frame-over-frame rotation speed',
+  warp: 'Warp intensity — strength of the active warp mode (W to cycle)',
+  cx: 'Warp center X position', cy: 'Warp center Y position',
+  dx: 'Horizontal drift per frame', dy: 'Vertical drift per frame',
+  sx: 'Horizontal stretch factor', sy: 'Vertical stretch factor',
+  decay: 'Trail persistence — 1.0 = infinite trails, 0.9 = fast fade',
+  gamma: 'Brightness curve — higher = brighter midtones',
+  ob_size: 'Outer border thickness', ob_r: 'Outer border red', ob_g: 'Outer border green',
+  ob_b: 'Outer border blue', ob_a: 'Outer border opacity',
+  ib_size: 'Inner border thickness', ib_r: 'Inner border red', ib_g: 'Inner border green',
+  ib_b: 'Inner border blue', ib_a: 'Inner border opacity',
+  transition_speed: 'How fast presets morph into each other',
+  auto_interval: 'Seconds between auto-random preset changes',
+  audio_bass_gain: 'Bass frequency sensitivity multiplier',
+  audio_mid_gain: 'Mid frequency sensitivity multiplier',
+  audio_treb_gain: 'Treble frequency sensitivity multiplier',
+  audio_trigger: 'Audio level threshold that triggers chaos events',
+  bloom_strength: 'Glow intensity around bright areas',
+  bloom_threshold: 'Brightness cutoff for bloom effect',
+  brighten: 'Post-processing: brighten the whole frame (shift+click to lock)',
+  darken: 'Post-processing: darken the whole frame (shift+click to lock)',
+  solarize: 'Post-processing: solarize color inversion effect (shift+click to lock)',
+  invert: 'Post-processing: invert all colors (shift+click to lock)',
+};
+
 function mkSlider(c) {
   const d = document.createElement('div'); d.className = 'ctl';
+  if (TIPS[c.key]) d.title = TIPS[c.key];
   const dec = c.step < 0.01 ? 3 : 2;
   d.innerHTML = `<label><span>${c.label}</span><span class="val" id="v-${c.key}">${Number(state[c.key]).toFixed(dec)}</span></label>
     <input type="range" id="s-${c.key}" min="${c.min}" max="${c.max}" step="${c.step}" value="${state[c.key]}">`;
@@ -677,9 +742,9 @@ if (blendPool2.length === 0) blendPool2 = new Array(BLEND_NAMES.length).fill(tru
 function mkWaveToggle() {
   const d = document.createElement('div'); d.className = 'wave-toggle';
   const btn1 = document.createElement('button'); btn1.className = 'wt-btn active'; btn1.id = 'wt-1';
-  btn1.textContent = 'wave 1'; btn1.onclick = () => setEditingWave(1);
+  btn1.textContent = 'wave 1'; btn1.title = 'Edit wave 1 settings (E to toggle)'; btn1.onclick = () => setEditingWave(1);
   const btn2 = document.createElement('button'); btn2.className = 'wt-btn'; btn2.id = 'wt-2';
-  btn2.textContent = 'wave 2'; btn2.onclick = () => setEditingWave(2);
+  btn2.textContent = 'wave 2'; btn2.title = 'Edit wave 2 settings — independent shape, color, pools (E to toggle)'; btn2.onclick = () => setEditingWave(2);
   d.appendChild(btn1); d.appendChild(btn2); return d;
 }
 
@@ -689,6 +754,7 @@ function mkShapeBtn(i) {
   if (i >= pool.length) pool.push(true);
   btn.className = 'wm-btn' + (pool[i] ? ' pooled' : '') + (state.wave_mode === i ? ' active' : '');
   btn.id = `wm-${i}`;
+  btn.title = (WAVE_NAMES[i]||i) + ' — click to select, shift+click to toggle in/out of pool';
   const cvs = document.createElement('canvas'); cvs.width = 68; cvs.height = 36;
   drawWaveThumb(cvs, i);
   btn.appendChild(cvs);
@@ -794,6 +860,7 @@ function mkToggles(keys) {
   const row = document.createElement('div'); row.className = 'toggle-row';
   for (const k of keys) {
     const b = document.createElement('button');
+    if (TIPS[k]) b.title = TIPS[k];
     const tp = activeTogglePool();
     const poolable = tp.hasOwnProperty(k);
     b.className = 'tog' + (state[k] ? ' on' : '') + (poolable && tp[k] ? ' pooled' : '') + (poolable && !tp[k] ? ' locked' : '');
@@ -826,6 +893,7 @@ function mkBlendCycle() {
   const d = document.createElement('div'); d.className = 'ctl';
   const label = document.createElement('label');
   label.innerHTML = '<span>blend mode</span><span class="val" id="v-wave_blend">' + BLEND_NAMES[state.wave_blend] + '</span>';
+  d.title = 'How waves composite onto the frame. Click to select, shift+click to exclude from auto/chaos (B to cycle)';
   d.appendChild(label);
   const row = document.createElement('div'); row.className = 'toggle-row';
   for (let i = 0; i < BLEND_NAMES.length; i++) {
@@ -865,6 +933,7 @@ function mkPatternCycle() {
   const d = document.createElement('div'); d.className = 'ctl';
   const label = document.createElement('label');
   label.innerHTML = '<span>line pattern</span><span class="val" id="v-wave_pattern">' + PATTERN_NAMES[state.wave_pattern] + '</span>';
+  d.title = 'Color pattern applied along the wave line. Click to select, shift+click to exclude from auto/chaos (P to cycle)';
   d.appendChild(label);
   const row = document.createElement('div'); row.className = 'toggle-row';
   for (let i = 0; i < TOTAL_PATTERNS; i++) {
@@ -1985,7 +2054,7 @@ function buildWaveVerts(samples, aspect) {
   let strokes = null;
 
   // For multi-stroke shapes, track element index to detect transitions
-  const isMultiStroke = (mode>=4 && mode<=4) || mode===12 || (mode>=16 && mode<=20) || mode===22 || (mode>=24 && mode<=29) || mode===31 || mode===33 || (mode>=34 && mode<=36) || (mode>=40 && mode<=42) || mode===44;
+  const isMultiStroke = (mode>=1 && mode<=2) || (mode>=4 && mode<=4) || mode===12 || (mode>=16 && mode<=20) || mode===22 || (mode>=24 && mode<=29) || mode===31 || mode===33 || (mode>=34 && mode<=36) || (mode>=40 && mode<=42) || mode===44;
   let prevElement = -1, prevClosed = true, strokeStart = 0;
   if (isMultiStroke) strokes = [];
 
@@ -1993,8 +2062,18 @@ function buildWaveVerts(samples, aspect) {
     const t=i/WAVE_N, val=samples[i];
     let x=0,y=0, element=0, closed=true;
     if(mode===0){const a=t*6.283,r=sc*.5+val*sc*.5+my*.05;x=Math.cos(a)*r;y=Math.sin(a)*r;}
-    else if(mode===1){const p=(t-.5)*2;x=p*sc+val*sc*.3*my;y=p*sc*(my>0?1:-1)+val*sc*.5;}
-    else if(mode===2){const p=(t-.5)*2;x=p*sc;y=val*sc*.5+my*.04;}
+    else if(mode===1){ // X-cross — two diagonal strokes
+      const half=t<0.5?0:1; element=half; closed=false;
+      const tf=half===0?(t*2):(t-0.5)*2;
+      const p=(tf-.5)*2, s=sc*.4+val*sc*.2;
+      if(half===0){x=p*s;y=p*s+val*sc*.15;} else {x=p*s;y=-p*s+val*sc*.15;}
+    }
+    else if(mode===2){ // Cross/Plus — two perpendicular strokes
+      const half=t<0.5?0:1; element=half; closed=false;
+      const tf=half===0?(t*2):(t-0.5)*2;
+      const p=(tf-.5)*2, s=sc*.4+val*sc*.2;
+      if(half===0){x=p*s;y=val*sc*.15+my*.03;} else {x=val*sc*.15+my*.03;y=p*s;}
+    }
     else if(mode===3){const a=t*6.283,r=sc*.4*(1+val*.7+my*.5);x=Math.cos(a)*r;y=Math.sin(a)*r*(1+my*.3);}
     else if(mode===4){ // rings — 2 rings with pen lift
       const ring=t<.5?0:1; element=ring;
@@ -2090,22 +2169,28 @@ function buildWaveVerts(samples, aspect) {
       const s=sc+val*sc*.1+my*.02;
       x=(vt[a][0]+(vt[b][0]-vt[a][0])*ef)*s; y=(vt[a][1]+(vt[b][1]-vt[a][1])*ef)*s;
     }
-    else if(mode===25){ // Cube — 12 edges, isometric projection
+    else if(mode===25){ // Cube — 12 edges, perspective projection with mystery rotation
       const edges=12, ei=Math.floor(t*edges); element=ei; closed=false;
       const ef=(t*edges)%1;
-      const d=.22, f=.13; // front/back offset for 3D feel
-      const vt=[[-d,-d,-f],[d,-d,-f],[d,d,-f],[-d,d,-f],[-d+f,-d+f,f],[d+f,-d+f,f],[d+f,d+f,f],[-d+f,d+f,f]];
+      const d=.22;
+      // 3D cube vertices, mystery rotates around Y axis
+      const ca=Math.cos(my*.4), sa=Math.sin(my*.4);
+      const raw=[[-d,-d,-d],[d,-d,-d],[d,d,-d],[-d,d,-d],[-d,-d,d],[d,-d,d],[d,d,d],[-d,d,d]];
+      const proj=(v2)=>{const rx=v2[0]*ca-v2[2]*sa,rz=v2[0]*sa+v2[2]*ca;const p=1.2/(1.2+rz*.3);return[rx*p,v2[1]*p];};
       const edgeList=[[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]];
-      const[a,b]=edgeList[ei%edgeList.length];
-      const s=sc+val*sc*.1+my*.02;
-      x=(vt[a][0]+(vt[b][0]-vt[a][0])*ef)*s; y=(vt[a][1]+(vt[b][1]-vt[a][1])*ef)*s;
+      const[a,b]=edgeList[ei%edges];
+      const pa=proj(raw[a]), pb=proj(raw[b]);
+      const s=sc+val*sc*.1;
+      x=(pa[0]+(pb[0]-pa[0])*ef)*s; y=(pa[1]+(pb[1]-pa[1])*ef)*s;
     }
-    else if(mode===26){ // Octahedron — 12 edges
+    else if(mode===26){ // Octahedron — 12 edges, proper 3D projection
       const edges=12, ei=Math.floor(t*edges); element=ei; closed=false;
       const ef=(t*edges)%1;
-      const vt=[[0,-.35],[-.3,0],[0,0],[.3,0],[0,.35],[0,-.05]];
+      // 6 vertices: top, bottom, and 4 equatorial with slight depth offset
+      const d=.28, z1=.12;
+      const vt=[[0,-.35],[-.3,-z1*.3],[0,z1],[.3,-z1*.3],[0,.35],[0,-z1]];
       const edgeList=[[0,1],[0,2],[0,3],[0,5],[4,1],[4,2],[4,3],[4,5],[1,2],[2,3],[3,5],[5,1]];
-      const[a,b]=edgeList[ei%edgeList.length];
+      const[a,b]=edgeList[ei%edges];
       const s=sc+val*sc*.1+my*.02;
       x=(vt[a][0]+(vt[b][0]-vt[a][0])*ef)*s; y=(vt[a][1]+(vt[b][1]-vt[a][1])*ef)*s;
     }
@@ -2129,20 +2214,17 @@ function buildWaveVerts(samples, aspect) {
       x=(vt[a][0]+(vt[b][0]-vt[a][0])*ef)*s; y=(vt[a][1]+(vt[b][1]-vt[a][1])*ef)*s;
     }
     // ===== 4D GEOMETRY (28) =====
-    else if(mode===28){ // Tesseract — 32 edges of 4D hypercube, projected
-      const edges=32, ei=Math.floor(t*edges); element=ei; closed=false;
-      const ef=(t*edges)%1;
-      const d=.25, s2=.12; // outer/inner cube sizes
-      const rot4=my*.5; // mystery rotates 4D projection
+    else if(mode===28){ // Tesseract — clean 4D hypercube, 16 edges
+      const d=.25, s2=.14;
+      const rot4=my*.5;
+      const c4=Math.cos(rot4)*.04, s4=Math.sin(rot4)*.04;
       const outer=[[-d,-d],[d,-d],[d,d],[-d,d]];
-      const inner=[[-s2+Math.sin(rot4)*.05,-s2+Math.cos(rot4)*.05],[s2+Math.sin(rot4)*.05,-s2+Math.cos(rot4)*.05],[s2+Math.sin(rot4)*.05,s2+Math.cos(rot4)*.05],[-s2+Math.sin(rot4)*.05,s2+Math.cos(rot4)*.05]];
-      const vt=[...outer,...inner]; // 8 vertices
-      const edgeList=[[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7],
-        // Diagonal cross-connections for 4D feel
-        [0,5],[1,6],[2,7],[3,4],[0,6],[1,7],[2,4],[3,5],
-        [0,2],[1,3],[4,6],[5,7],
-        [0,7],[1,4],[2,5],[3,6],[0,3],[1,2],[4,7],[5,6]];
-      const[a,b]=edgeList[ei%edgeList.length];
+      const inner=[[-s2+c4,-s2+s4],[s2+c4,-s2+s4],[s2+c4,s2+s4],[-s2+c4,s2+s4]];
+      const vt=[...outer,...inner];
+      const edgeList=[[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]];
+      const edges=edgeList.length, ei=Math.floor(t*edges); element=ei; closed=false;
+      const ef=(t*edges)%1;
+      const[a,b]=edgeList[ei%edges];
       const s=sc+val*sc*.1;
       x=(vt[a][0]+(vt[b][0]-vt[a][0])*ef)*s; y=(vt[a][1]+(vt[b][1]-vt[a][1])*ef)*s;
     }
@@ -2167,12 +2249,14 @@ function buildWaveVerts(samples, aspect) {
       x=lx*s; y=(lz-25)*s; // project x,z plane
     }
     // ===== AUDIO (31) =====
-    else if(mode===31){ // Sound Bars — EQ visualization
+    else if(mode===31){ // Sound Bars — EQ visualization with per-bar height
       const bars=16, bi=Math.floor(t*bars); element=bi; closed=false;
       const bf=(t*bars)%1;
       const bx=(bi/(bars-1)-.5)*sc*.7;
-      const bh=Math.abs(val)*sc*.4+.02;
-      x=bx; y=-bh*.5+bf*bh; // vertical bar
+      // Sample height from the center of each bar's range for consistent per-bar height
+      const barCenter=Math.floor((bi+.5)/bars*WAVE_N);
+      const bh=Math.abs(samples[Math.min(barCenter,WAVE_N-1)])*sc*.4+.02;
+      x=bx; y=-bh*.5+bf*bh;
     }
     // ===== PATTERN (32-33) =====
     else if(mode===32){ // Celtic Trefoil Knot
@@ -2195,36 +2279,39 @@ function buildWaveVerts(samples, aspect) {
       x=(x1+(x2-x1)*sf+ox); y=(y1+(y2-y1)*sf+oy);
     }
     // ===== METAPHYSICAL (34-35) =====
-    else if(mode===34){ // Yin Yang — two teardrops with dots, multi-stroke
+    else if(mode===34){ // Yin Yang — outer circle, S-curve divider, two dots
       const parts=4, pi2=Math.floor(t*parts); element=pi2;
-      const pf=(t*parts)%1, a2=pf*6.283;
+      const pf=(t*parts)%1;
       const s=sc*.3+val*sc*.06+my*.02;
       if(pi2===0){ // outer circle
+        const a2=pf*6.283;
         x=Math.cos(a2)*s; y=Math.sin(a2)*s;
-      } else if(pi2===1){ // S-curve (upper half arc)
-        x=Math.cos(a2)*s*.5; y=Math.sin(a2)*s*.5+s*.25;
-      } else if(pi2===2){ // S-curve (lower half arc, reversed)
-        x=-Math.cos(a2)*s*.5; y=-Math.sin(a2)*s*.5-s*.25;
+      } else if(pi2===1){ // S-curve: right half of circle + small arc top
+        const a2=pf*Math.PI-Math.PI/2; // -90° to +90° (right semicircle)
+        x=Math.cos(a2)*s*.5; y=Math.sin(a2)*s*.5+s*.5;
+      } else if(pi2===2){ // S-curve: left half reversed + small arc bottom
+        const a2=pf*Math.PI+Math.PI/2; // +90° to +270° (left semicircle)
+        x=Math.cos(a2)*s*.5; y=Math.sin(a2)*s*.5-s*.5;
       } else { // two dots (small circles)
-        const dot=pf<.5?0:1; const df=dot===0?pf*2:(pf-.5)*2;
-        const da=df*6.283, dr=s*.08;
-        x=Math.cos(da)*dr; y=Math.sin(da)*dr+(dot===0?s*.25:-s*.25);
+        const dot=pf<.5?0:1; element=3+dot;
+        const df=dot===0?pf*2:(pf-.5)*2;
+        const da=df*6.283, dr=s*.1;
+        x=Math.cos(da)*dr; y=Math.sin(da)*dr+(dot===0?s*.5:-s*.5);
       }
     }
     else if(mode===35){ // Enneagram — 9-pointed with inner connections
-      const parts=2, pi2=Math.floor(t*parts); element=pi2; closed=false;
+      const parts=2, pi2=Math.floor(t*parts);
       const pf=(t*parts)%1;
       const s=sc*.35+val*sc*.08+my*.02;
-      if(pi2===0){ // outer nonagon
-        const si2=Math.floor(pf*9), sf2=(pf*9)%1;
-        const a1=-Math.PI/2+si2/9*6.283, a2=-Math.PI/2+(si2+1)/9*6.283;
-        x=(Math.cos(a1)+(Math.cos(a2)-Math.cos(a1))*sf2)*s;
-        y=(Math.sin(a1)+(Math.sin(a2)-Math.sin(a1))*sf2)*s;
-        element=si2;
-      } else { // inner star connections: 1→4→2→8→5→7→1 and 3→6→9→3
+      if(pi2===0){ // outer nonagon — one continuous closed ring
+        element=0; closed=true;
+        const a1=pf*6.283-Math.PI/2;
+        x=Math.cos(a1)*s; y=Math.sin(a1)*s;
+      } else { // inner connections: hexad 1→4→2→8→5→7→1 + triangle 3→6→9→3
+        closed=false;
         const conns=[[0,3],[3,1],[1,7],[7,4],[4,6],[6,0],[2,5],[5,8],[8,2]];
         const ci2=Math.floor(pf*9), cf2=(pf*9)%1;
-        element=9+ci2;
+        element=1+ci2;
         const[a,b]=conns[ci2%conns.length];
         const ax=-Math.PI/2+a/9*6.283, bx=-Math.PI/2+b/9*6.283;
         x=(Math.cos(ax)+(Math.cos(bx)-Math.cos(ax))*cf2)*s;
@@ -2295,11 +2382,13 @@ function buildWaveVerts(samples, aspect) {
         const twist=pf*12.56+my; // 2 full twists
         const tx=Math.sin(twist+strand*Math.PI)*s*.35;
         x=tx; y=ty;
-      } else { // rungs connecting the strands
-        const ri=Math.floor(pf*8); element=2+ri; closed=false;
-        const rf=(pf*8)%1;
-        const ry=(ri/8-.5)*s*2+s*.125;
-        const twist=ri/8*12.56+my;
+      } else { // rungs connecting the strands — evenly spaced along helix
+        const nRungs=10;
+        const ri=Math.floor(pf*nRungs); element=2+ri; closed=false;
+        const rf=(pf*nRungs)%1;
+        const rungPos=(ri+.5)/nRungs; // position along helix (0-1)
+        const ry=(rungPos-.5)*s*2;
+        const twist=rungPos*12.56+my;
         const lx=Math.sin(twist)*s*.35, rx2=Math.sin(twist+Math.PI)*s*.35;
         x=lx+(rx2-lx)*rf; y=ry;
       }
@@ -2324,8 +2413,7 @@ function buildWaveVerts(samples, aspect) {
       }
     }
     // ===== PLATONIC (42) =====
-    else if(mode===42){ // Dodecahedron — 30 edges of 12 pentagonal faces
-      // Projected vertices of a dodecahedron (simplified 2D projection)
+    else if(mode===42){ // Dodecahedron — 30 edges, perspective projection
       const phi=(1+Math.sqrt(5))/2, ip=1/phi;
       const raw=[
         [1,1,1],[1,1,-1],[1,-1,1],[1,-1,-1],[-1,1,1],[-1,1,-1],[-1,-1,1],[-1,-1,-1],
@@ -2342,10 +2430,11 @@ function buildWaveVerts(samples, aspect) {
       const edges=edgeList.length, ei=Math.floor(t*edges); element=ei; closed=false;
       const ef=(t*edges)%1;
       const[a,b]=edgeList[ei%edges];
-      // Simple 2D projection: x,y of 3D vertex
-      const proj=(v2)=>[v2[0]*.2+v2[2]*.1, v2[1]*.2+v2[2]*.05];
+      // Perspective projection with slight Y-axis rotation from mystery
+      const ca=Math.cos(my*.3), sa=Math.sin(my*.3);
+      const proj=(v2)=>{const rx=v2[0]*ca-v2[2]*sa,rz=v2[0]*sa+v2[2]*ca;const p=1.4/(1.4+rz*.15);return[rx*p*.14,v2[1]*p*.14];};
       const pa=proj(raw[a]), pb=proj(raw[b]);
-      const s=sc*.7+val*sc*.08+my*.02;
+      const s=sc*.7+val*sc*.08;
       x=(pa[0]+(pb[0]-pa[0])*ef)*s; y=(pa[1]+(pb[1]-pa[1])*ef)*s;
     }
     // ===== SCIENCE (43) =====
@@ -2367,32 +2456,38 @@ function buildWaveVerts(samples, aspect) {
       x=Math.cos(angle)*r2+cr*s*.3; y=Math.sin(angle)*r2+ci2*s*.3;
     }
     // ===== ORGANIC (44) =====
-    else if(mode===44){ // Mushroom — cap with greebles + stem + gills
-      const parts=4, pi2=Math.floor(t*parts); element=pi2;
+    else if(mode===44){ // Mushroom — cap dome + stem outline + gills + spots
+      const parts=5, pi2=Math.floor(t*parts); element=pi2;
       const pf=(t*parts)%1;
       const s=sc*.3+val*sc*.05+my*.02;
       if(pi2===0){ // cap — dome with bumpy greebles
-        const a2=pf*Math.PI; // half circle
+        const a2=pf*Math.PI;
         const baseR=s*1.1;
         const greeble=Math.sin(pf*40+my*3)*.03*s + Math.sin(pf*17)*.02*s + Math.sin(pf*63+my)*.015*s;
         const r=baseR+greeble+val*s*.1;
         x=Math.cos(a2)*r; y=Math.sin(a2)*r*.6+s*.15;
-      } else if(pi2===1){ // stem — slightly curved trunk
+      } else if(pi2===1){ // stem left side — top to bottom
         closed=false;
         const stemH=s*1.2;
-        const taper=.12+pf*.05; // widens slightly at base
-        const curve=Math.sin(pf*3.14+my*.5)*s*.08; // gentle lean
-        x=((pf<.5?-1:1)*taper*s+curve); y=s*.15-pf*stemH;
-      } else if(pi2===2){ // gills — radial lines under cap
-        const gi=Math.floor(pf*8); element=2+gi; closed=false;
+        const taper=s*(.12+pf*.06);
+        const curve=Math.sin(pf*3.14+my*.5)*s*.06;
+        x=-taper+curve; y=s*.15-pf*stemH;
+      } else if(pi2===2){ // stem right side — top to bottom
+        closed=false;
+        const stemH=s*1.2;
+        const taper=s*(.12+pf*.06);
+        const curve=Math.sin(pf*3.14+my*.5)*s*.06;
+        x=taper+curve; y=s*.15-pf*stemH;
+      } else if(pi2===3){ // gills — radial lines under cap
+        const gi=Math.floor(pf*8); element=3+gi; closed=false;
         const gf=(pf*8)%1;
-        const ga=-Math.PI*.1-gi/8*Math.PI*.8; // fan under cap
+        const ga=-Math.PI*.1-gi/8*Math.PI*.8;
         const gr=gf*s*.35;
         x=Math.cos(ga)*gr; y=Math.sin(ga)*gr*.4+s*.12;
       } else { // spots on cap — small circles
-        const si2=Math.floor(pf*5); element=10+si2;
+        const si2=Math.floor(pf*5); element=11+si2;
         const sf2=(pf*5)%1, sa=sf2*6.283;
-        const spotAngle=.3+si2/5*2.5; // spread across cap
+        const spotAngle=.3+si2/5*2.5;
         const spotR=s*.07;
         const capR=s*.9;
         x=Math.cos(spotAngle)*capR*.7+Math.cos(sa)*spotR;
@@ -2471,7 +2566,7 @@ function cycleDual() {
   dualIdx = (dualIdx + 1) % DUAL_MODES.length;
   wave_mode2 = -1;
   dualFadeTarget = DUAL_MODES[dualIdx].count > 1 ? 1 : 0;
-  if ((DUAL_MODES[dualIdx].name === 'SPLIT' || DUAL_MODES[dualIdx].name === 'LAYER')) randomizeWave2();
+  if ((DUAL_MODES[dualIdx].name === 'SPLIT' || DUAL_MODES[dualIdx].name === 'LAYER' || DUAL_MODES[dualIdx].name === 'COMBINE')) randomizeWave2();
 }
 
 function stepDualFade() {
@@ -2709,13 +2804,14 @@ function render() {
   if (dualFade > 0.01) {
     const origMode = state.wave_mode, origMy = state.wave_mystery;
     const origSc = state.wave_scale, origX = state.wave_x, origY = state.wave_y;
-    const isIndependent = (DUAL_MODES[dualIdx].name === 'SPLIT' || DUAL_MODES[dualIdx].name === 'LAYER');
+    const isIndependent = (DUAL_MODES[dualIdx].name === 'SPLIT' || DUAL_MODES[dualIdx].name === 'LAYER' || DUAL_MODES[dualIdx].name === 'COMBINE');
+    const isCombine = DUAL_MODES[dualIdx].name === 'COMBINE';
     if (isIndependent) {
       state.wave_mode = wave2.mode;
       state.wave_mystery = wave2.mystery;
       state.wave_scale = wave2.scale;
-      state.wave_x = wave2.x;
-      state.wave_y = wave2.y;
+      state.wave_x = isCombine ? state.wave_x : wave2.x;
+      state.wave_y = isCombine ? state.wave_y : wave2.y;
     } else {
       state.wave_mode = getSecondMode();
     }
@@ -2978,6 +3074,37 @@ let transitionTarget = null;
 let transitionProgress = 0;
 let transitionFrom = null; // snapshot of state before transition
 
+function resetToBlank() {
+  // Stop auto and chaos
+  if (autoRandomInterval) { clearInterval(autoRandomInterval); autoRandomInterval = null; }
+  chaosEnabled = false;
+  document.getElementById('btn-auto').textContent = 'auto: off';
+  document.getElementById('btn-auto').classList.remove('active');
+  document.getElementById('btn-chaos').textContent = 'chaos: off';
+  document.getElementById('btn-chaos').classList.remove('active');
+  // Blank canvas: circle, white, no effects, clean decay
+  const blank = { ...DEFAULTS };
+  blank.wave_mode = 0; // circle
+  blank.wave_r = 1; blank.wave_g = 1; blank.wave_b = 1; blank.wave_a = 0.9;
+  blank.wave_r2 = 1; blank.wave_g2 = 1; blank.wave_b2 = 1;
+  blank.wave_gradient = 0; blank.wave_pattern = 0; blank.wave_pattern_speed = 1;
+  blank.wave_x = 0.5; blank.wave_y = 0.5; blank.wave_mystery = 0;
+  blank.wave_scale = 1; blank.wave_smoothing = 0.5;
+  blank.wave_dots = 0; blank.wave_thick = 1; blank.wave_additive = 0;
+  blank.wave_brighten = 0; blank.wave_blend = 0;
+  blank.zoom = 1; blank.rot = 0; blank.warp = 0;
+  blank.cx = 0.5; blank.cy = 0.5; blank.dx = 0; blank.dy = 0;
+  blank.sx = 1; blank.sy = 1; blank.decay = 0.95; blank.gamma = 1;
+  blank.brighten = 0; blank.darken = 0; blank.solarize = 0; blank.invert = 0;
+  blank.bloom_strength = 0; blank.bloom_threshold = 0.5;
+  blank.ob_a = 0; blank.ib_a = 0;
+  Object.assign(state, blank);
+  transitionTarget = null; transitionFrom = null;
+  // Reset to single wave
+  dualIdx = 0; dualFadeTarget = 0; dualFade = 0;
+  syncUI(); updateMilk();
+}
+
 function randomize() {
   let target;
 
@@ -3165,7 +3292,7 @@ function randomize() {
   transitionFrom = { ...state };
   transitionTarget = target;
   transitionProgress = 0;
-  if ((DUAL_MODES[dualIdx].name === 'SPLIT' || DUAL_MODES[dualIdx].name === 'LAYER')) randomizeWave2();
+  if ((DUAL_MODES[dualIdx].name === 'SPLIT' || DUAL_MODES[dualIdx].name === 'LAYER' || DUAL_MODES[dualIdx].name === 'COMBINE')) randomizeWave2();
   // Cycle warp mode on each auto-random (~60% chance of new mode)
   if (Math.random() < 0.6) warpModeTarget = Math.floor(Math.random() * TOTAL_WARPS);
   currentPresetName = '';
@@ -3296,7 +3423,8 @@ function stepChaos(audio) {
   // Treble triggers boolean flips — high treble = more frequent changes
   const flipChance = a.treb > 0.5 ? 300 : 600; // frames between flips
   if (chaosFrameCount % flipChance === 0) {
-    const bools = ['wave_dots','wave_thick','wave_brighten','brighten','darken','invert','solarize'].filter(k => togglePool[k]);
+    // Chaos flips wave toggles only — post-processing (brighten/darken/invert/solarize) left to auto
+    const bools = ['wave_dots','wave_thick','wave_brighten'].filter(k => togglePool[k]);
     if (bools.length > 0) {
       const pick = bools[Math.floor(Math.random() * bools.length)];
       state[pick] = state[pick] ? 0 : 1;
@@ -3326,17 +3454,21 @@ function stepChaos(audio) {
     warpModeTarget = Math.floor(Math.random() * TOTAL_WARPS);
   }
 
-  // Drift wave2 independently in SPLIT mode — audio reactive
-  if ((DUAL_MODES[dualIdx].name === 'SPLIT' || DUAL_MODES[dualIdx].name === 'LAYER')) {
+  // Drift wave2 independently — audio reactive
+  if ((DUAL_MODES[dualIdx].name === 'SPLIT' || DUAL_MODES[dualIdx].name === 'LAYER' || DUAL_MODES[dualIdx].name === 'COMBINE')) {
     const w2drift = 0.5 + energy * 2;
-    wave2.x += (Math.random() - 0.5) * 0.003 * w2drift;
-    wave2.y += (Math.random() - 0.5) * 0.003 * w2drift;
-    wave2.mystery += (Math.random() - 0.5) * 0.02 * w2drift;
+    const isCombine = DUAL_MODES[dualIdx].name === 'COMBINE';
+    // COMBINE: skip position drift — wave2 locked to wave1 position, but scale drifts independently
+    if (!isCombine) {
+      wave2.x += (Math.random() - 0.5) * 0.003 * w2drift;
+      wave2.y += (Math.random() - 0.5) * 0.003 * w2drift;
+      wave2.x = Math.max(0.15, Math.min(0.85, wave2.x));
+      wave2.y = Math.max(0.15, Math.min(0.85, wave2.y));
+    }
     wave2.scale += (Math.random() - 0.5) * 0.005 * w2drift;
-    wave2.x = Math.max(0.15, Math.min(0.85, wave2.x));
-    wave2.y = Math.max(0.15, Math.min(0.85, wave2.y));
-    wave2.mystery = Math.max(-3, Math.min(3, wave2.mystery));
     wave2.scale = Math.max(0.3, Math.min(4, wave2.scale));
+    wave2.mystery += (Math.random() - 0.5) * 0.02 * w2drift;
+    wave2.mystery = Math.max(-3, Math.min(3, wave2.mystery));
     // Drift color slowly
     wave2.r += (Math.random() - 0.5) * 0.008;
     wave2.g += (Math.random() - 0.5) * 0.008;
