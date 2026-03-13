@@ -560,7 +560,7 @@ const DEFAULTS = {
   wave_r2: 1, wave_g2: 0, wave_b2: 0, wave_gradient: 0,
   wave_pattern: 0, wave_pattern_speed: 1, wave_blend: 1,
   bloom_strength: 0.3, bloom_threshold: 0.4,
-  audio_bass_gain: 1.54, audio_mid_gain: 1.67, audio_treb_gain: 1.99, audio_trigger: 0.45,
+  audio_bass_gain: 1.54, audio_mid_gain: 1.67, audio_treb_gain: 1.77, audio_trigger: 0.18,
   transition_speed: 0.003, auto_interval: 5,
 };
 
@@ -1345,6 +1345,40 @@ function pasteConfig() {
 // =====================================================
 // WEBGL ENGINE
 // =====================================================
+// Mobile debug: catch any JS errors and show on screen
+const _mobileDbgLog = [];
+window.addEventListener('error', (e) => {
+  _mobileDbgLog.push(`JS:${e.message}@${e.lineno}`);
+  const d = document.getElementById('mobile-debug');
+  if (d) d.textContent = _mobileDbgLog.join('\n');
+});
+// Create a visible debug panel on mobile that shows over the black canvas
+if (window.innerWidth < 769) {
+  const dbg = document.createElement('div');
+  dbg.id = 'mobile-debug';
+  dbg.style.cssText = 'position:fixed;top:50px;left:8px;right:8px;z-index:9999;font:10px monospace;color:#0f0;background:rgba(0,0,0,0.85);padding:8px;border-radius:4px;white-space:pre-wrap;pointer-events:none;max-height:40vh;overflow:hidden;';
+  document.body.appendChild(dbg);
+  // Log init state after a brief delay
+  setTimeout(() => {
+    const wrap = document.getElementById('preview-wrap');
+    const c = document.getElementById('c');
+    const sb = document.getElementById('sidebar');
+    const lines = [
+      `wrap: ${wrap?wrap.clientWidth+'x'+wrap.clientHeight:'null'}`,
+      `canvas: ${c?c.width+'x'+c.height:'null'} css:${c?c.offsetWidth+'x'+c.offsetHeight:'?'}`,
+      `gl: ${typeof gl !== 'undefined' ? 'ok' : 'none'}`,
+      `float: ${typeof useFloat !== 'undefined' ? useFloat : '?'}`,
+      `texA: ${typeof texA !== 'undefined' ? (texA ? 'ok' : 'null') : '?'}`,
+      `sidebar children: ${sb ? sb.children.length : 'null'}`,
+      `shaderErrors: ${typeof _glErrors !== 'undefined' ? _glErrors.length : '?'}`,
+    ];
+    if (typeof _glErrors !== 'undefined' && _glErrors.length > 0) {
+      lines.push('ERRORS: ' + _glErrors.slice(0,3).join(' | '));
+    }
+    dbg.textContent = lines.join('\n');
+    _mobileDbgLog.push(...lines);
+  }, 1500);
+}
 const canvas = document.getElementById('c');
 const gl = canvas.getContext('webgl2', { alpha: false, antialias: false, powerPreference: 'high-performance' });
 if (!gl) { document.body.innerHTML = '<p style="color:#f0a500;font:20px monospace;padding:40px">WebGL2 required</p>'; throw 'no gl'; }
@@ -1369,8 +1403,9 @@ canvas.addEventListener('mousemove', () => {
 });
 canvas.addEventListener('mouseleave', () => { canvas.classList.remove('cursor-hidden'); clearTimeout(cursorTimer); });
 
-function mkShader(t,s) { const sh=gl.createShader(t); gl.shaderSource(sh,s); gl.compileShader(sh); if(!gl.getShaderParameter(sh,gl.COMPILE_STATUS)){console.error(gl.getShaderInfoLog(sh));} return sh; }
-function mkProg(vs,fs) { const p=gl.createProgram(); gl.attachShader(p,mkShader(gl.VERTEX_SHADER,vs)); gl.attachShader(p,mkShader(gl.FRAGMENT_SHADER,fs)); gl.linkProgram(p); if(!gl.getProgramParameter(p,gl.LINK_STATUS)){console.error(gl.getProgramInfoLog(p));} return p; }
+let _glErrors = [];
+function mkShader(t,s) { const sh=gl.createShader(t); gl.shaderSource(sh,s); gl.compileShader(sh); if(!gl.getShaderParameter(sh,gl.COMPILE_STATUS)){const e=gl.getShaderInfoLog(sh);console.error(e);_glErrors.push(e.slice(0,80));} return sh; }
+function mkProg(vs,fs) { const p=gl.createProgram(); gl.attachShader(p,mkShader(gl.VERTEX_SHADER,vs)); gl.attachShader(p,mkShader(gl.FRAGMENT_SHADER,fs)); gl.linkProgram(p); if(!gl.getProgramParameter(p,gl.LINK_STATUS)){const e=gl.getProgramInfoLog(p);console.error(e);_glErrors.push('LINK:'+e.slice(0,60));} return p; }
 
 const QUAD_VS = `#version 300 es
 in vec2 a_pos; out vec2 v_uv;
@@ -3405,7 +3440,7 @@ function render() {
   const qTag = ` <span class="d">|</span> ${QUALITY_MODES[qualityIdx].name}`;
   const patTag = state.wave_pattern > 0 ? ` <span class="d">|</span> ${PATTERN_NAMES[state.wave_pattern].toUpperCase()}` : '';
   const blendTag = state.wave_blend > 0 ? ` <span class="d">|</span> ${BLEND_NAMES[state.wave_blend].toUpperCase()}` : '';
-  const mobileDbg = window.innerWidth < 769 ? ` <span class="d">|</span> ${canvas.width}x${canvas.height} ${useFloat?'F':'U'}` : '';
+  const mobileDbg = window.innerWidth < 769 ? ` <span class="d">|</span> ${canvas.width}x${canvas.height} ${useFloat?'F':'U'}${_glErrors.length?' <span style="color:#f44">ERR:'+_glErrors.length+'</span>':''}` : '';
   document.getElementById('hud').innerHTML=`${fps} <span class="d">fps</span> ${useMic?'<span class="d">|</span> MIC':''}${trans}${autoTag}${chaosTag}${libTag}${dualTag}${warpTag}${patTag}${blendTag}${qTag}${mobileDbg}`;
 
   requestAnimationFrame(render);
@@ -4118,8 +4153,8 @@ const FACTORY_PREFS = {
   wave_r2:1, wave_g2:0.066, wave_b2:0.828, wave_gradient:0.757,
   wave_pattern:16, wave_pattern_speed:1.738, wave_blend:0,
   bloom_strength:0.3, bloom_threshold:0.4,
-  audio_bass_gain:1, audio_mid_gain:1, audio_treb_gain:1,
-  audio_trigger:0.15, transition_speed:0.003, auto_interval:5,
+  audio_bass_gain:1.54, audio_mid_gain:1.67, audio_treb_gain:1.77,
+  audio_trigger:0.18, transition_speed:0.003, auto_interval:5,
 };
 
 function loadStartup() {
