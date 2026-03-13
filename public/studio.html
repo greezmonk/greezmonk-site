@@ -248,6 +248,7 @@
     <div class="help-row"><span class="help-key">D</span><span class="help-desc">cycle dual mode (single / dual / split)</span></div>
     <div class="help-row"><span class="help-key">E</span><span class="help-desc">toggle wave 2 editing (keyboard shortcut)</span></div>
     <div class="help-row"><span class="help-key">W</span><span class="help-desc">cycle warp mode (9 modes)</span></div>
+    <div class="help-row"><span class="help-key">P</span><span class="help-desc">cycle line pattern (8 modes)</span></div>
     <div class="help-row"><span class="help-key">Q</span><span class="help-desc">cycle quality (perf / bal / ultra)</span></div>
     <h3>Presets</h3>
     <div class="help-row"><span class="help-key">1-9</span><span class="help-desc">load built-in preset</span></div>
@@ -306,16 +307,16 @@ const wave2 = {
   mode: 8, r: 0.4, g: 0.8, b: 1.0, a: 0.8,
   x: 0.5, y: 0.5, mystery: 0.5, scale: 1.2, dots: 0,
   thick: 1, additive: 1, brighten: 0, smoothing: 0.75,
-  r2: 1, g2: 0, b2: 0, gradient: 0,
+  r2: 1, g2: 0, b2: 0, gradient: 0, pattern: 0, patSpeed: 1,
 };
 // Wave2 transition system — smooth morph like wave1
 const wave2Target = { mode: 8, r: 0.4, g: 0.8, b: 1.0, a: 0.8, x: 0.5, y: 0.5, mystery: 0.5, scale: 1.2, dots: 0,
-  thick: 1, additive: 1, brighten: 0, smoothing: 0.75, r2: 1, g2: 0, b2: 0, gradient: 0 };
+  thick: 1, additive: 1, brighten: 0, smoothing: 0.75, r2: 1, g2: 0, b2: 0, gradient: 0, pattern: 0, patSpeed: 1 };
 let wave2Transitioning = false;
 let wave2TransProgress = 0;
 let wave2From = {};
-const WAVE2_LERP_KEYS = ['r','g','b','a','x','y','mystery','scale','smoothing','r2','g2','b2','gradient'];
-const WAVE2_SNAP_KEYS = ['mode','dots','thick','additive','brighten'];
+const WAVE2_LERP_KEYS = ['r','g','b','a','x','y','mystery','scale','smoothing','r2','g2','b2','gradient','patSpeed'];
+const WAVE2_SNAP_KEYS = ['mode','dots','thick','additive','brighten','pattern'];
 
 function randomizeWave2() {
   // Stash current as "from" for lerp
@@ -341,6 +342,11 @@ function randomizeWave2() {
     wave2Target.gradient = 0.4 + Math.random() * 0.6;
     wave2Target.r2 = Math.random(); wave2Target.g2 = Math.random(); wave2Target.b2 = Math.random();
   } else { wave2Target.gradient = 0; }
+  // Pattern for wave2
+  if (Math.random() < 0.4) {
+    wave2Target.pattern = 1 + Math.floor(Math.random() * (TOTAL_PATTERNS - 1));
+    wave2Target.patSpeed = 0.5 + Math.random() * 3;
+  } else { wave2Target.pattern = 0; }
   wave2Transitioning = true;
   wave2TransProgress = 0;
 }
@@ -373,6 +379,7 @@ const DEFAULTS = {
   brighten: 0, darken: 0, solarize: 0, invert: 0,
   wave_scale: 1, wave_smoothing: 0.75,
   wave_r2: 1, wave_g2: 0, wave_b2: 0, wave_gradient: 0,
+  wave_pattern: 0, wave_pattern_speed: 1,
   bloom_strength: 0.3, bloom_threshold: 0.4,
   audio_bass_gain: 3, audio_mid_gain: 1.5, audio_treb_gain: 0.25, audio_trigger: 0.5,
   transition_speed: 0.003, auto_interval: 5,
@@ -485,6 +492,8 @@ const GROUPS = [
     { type: 'slider', key: 'wave_b', min: 0, max: 1, step: 0.01, label: 'blue' },
     { type: 'slider', key: 'wave_a', min: 0, max: 1, step: 0.01, label: 'alpha' },
     { type: 'color', keys: ['wave_r','wave_g','wave_b','wave_a'] },
+    { type: 'patterncycle' },
+    { type: 'slider', key: 'wave_pattern_speed', min: 0.1, max: 5, step: 0.1, label: 'pattern speed' },
     { type: 'slider', key: 'wave_gradient', min: 0, max: 1, step: 0.01, label: 'gradient' },
     { type: 'slider', key: 'wave_r2', min: 0, max: 1, step: 0.01, label: 'end red' },
     { type: 'slider', key: 'wave_g2', min: 0, max: 1, step: 0.01, label: 'end green' },
@@ -560,6 +569,7 @@ function buildUI() {
       else if (c.type === 'wavemode') body.appendChild(mkWaveMode());
       else if (c.type === 'toggles') body.appendChild(mkToggles(c.keys));
       else if (c.type === 'color') body.appendChild(mkColor(c.keys));
+      else if (c.type === 'patterncycle') body.appendChild(mkPatternCycle());
       else if (c.type === 'palette') body.appendChild(mkPalette());
     }
     div.appendChild(body);
@@ -596,6 +606,8 @@ const SHAPE_CATEGORIES = [
   { name: 'Pattern', shapes: [32,33] },
 ];
 const TOTAL_SHAPES = WAVE_NAMES.length;
+const PATTERN_NAMES = ['gradient','rainbow','stripes','pulse','fire','frequency','bounce','christmas'];
+const TOTAL_PATTERNS = PATTERN_NAMES.length;
 // Initialize shape pool — all shapes enabled by default
 if (shapePool.length === 0) shapePool = new Array(TOTAL_SHAPES).fill(true);
 
@@ -708,6 +720,29 @@ function mkToggles(keys) {
     b.className = 'tog' + (state[k] ? ' on' : '');
     b.textContent = k.replace('wave_',''); b.id = `t-${k}`;
     b.onclick = () => { state[k] = state[k] ? 0 : 1; b.classList.toggle('on'); onParamChange(); };
+    row.appendChild(b);
+  }
+  d.appendChild(row); return d;
+}
+
+function mkPatternCycle() {
+  const d = document.createElement('div'); d.className = 'ctl';
+  const label = document.createElement('label');
+  label.innerHTML = '<span>line pattern</span><span class="val" id="v-wave_pattern">' + PATTERN_NAMES[state.wave_pattern] + '</span>';
+  d.appendChild(label);
+  const row = document.createElement('div'); row.className = 'toggle-row';
+  for (let i = 0; i < TOTAL_PATTERNS; i++) {
+    const b = document.createElement('button');
+    b.className = 'tog' + (state.wave_pattern === i ? ' on' : '');
+    b.textContent = PATTERN_NAMES[i]; b.id = `pat-${i}`;
+    b.onclick = () => {
+      state.wave_pattern = i;
+      document.querySelectorAll('[id^="pat-"]').forEach(el => el.classList.remove('on'));
+      b.classList.add('on');
+      const vl = document.getElementById('v-wave_pattern');
+      if (vl) vl.textContent = PATTERN_NAMES[i];
+      onParamChange();
+    };
     row.appendChild(b);
   }
   d.appendChild(row); return d;
@@ -848,6 +883,12 @@ function syncUI() {
       if (sl) { sl.value = state[c.key]; vl.textContent = Number(state[c.key]).toFixed(c.step<0.01?3:2); }
     } else if (c.type === 'toggles') {
       for (const k of c.keys) { const b = document.getElementById(`t-${k}`); if(b) b.className = 'tog'+(state[k]?' on':''); }
+    } else if (c.type === 'patterncycle') {
+      document.querySelectorAll('[id^="pat-"]').forEach(el => el.classList.remove('on'));
+      const pb = document.getElementById(`pat-${state.wave_pattern}`);
+      if (pb) pb.classList.add('on');
+      const pvl = document.getElementById('v-wave_pattern');
+      if (pvl) pvl.textContent = PATTERN_NAMES[state.wave_pattern] || 'gradient';
     } else if (c.type === 'wavemode') {
       document.querySelectorAll('.wm-btn').forEach(b => b.classList.remove('active'));
       const a = document.getElementById(`wm-${state.wave_mode}`);
@@ -1093,19 +1134,105 @@ uniform vec3 u_col2;      // gradient end color (u_col.rgb = start)
 uniform float u_gradient;  // 0 = flat color, 1 = full gradient
 uniform float u_glow;
 uniform float u_bass;      // 0-1 bass energy for reactive effects
+uniform float u_time;      // seconds since start
+uniform int u_pattern;     // 0=gradient, 1=rainbow, 2=stripes, 3=pulse, 4=fire, 5=frequency, 6=bounce, 7=christmas
+uniform float u_patspeed;  // pattern animation speed multiplier
 in float v_edge;
 in float v_t;
+
+vec3 hsv2rgb(vec3 c) {
+  vec4 K = vec4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
+  vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+  return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
+vec3 patternColor(float t, float bass, float time) {
+  vec3 c1 = u_col.rgb;
+  vec3 c2 = u_col2;
+  float spd = u_patspeed;
+
+  // 0: Gradient (original behavior)
+  if (u_pattern == 0) {
+    float bassShift = bass * bass * 0.6;
+    float gradT = clamp(t + bassShift, 0.0, 1.0);
+    return mix(c1, c2, gradT * u_gradient);
+  }
+  // 1: Rainbow — full HSV spectrum, bass widens the band
+  if (u_pattern == 1) {
+    float hue = fract(t + time * spd * 0.3);
+    float sat = 0.85 + bass * 0.15;
+    return hsv2rgb(vec3(hue, sat, 1.0));
+  }
+  // 2: Stripes — hard-edged barber pole between colors
+  if (u_pattern == 2) {
+    float freq = 6.0 + bass * 8.0; // bass widens stripes
+    float stripe = step(0.5, fract(t * freq - time * spd * 2.0));
+    return mix(c1, c2, stripe);
+  }
+  // 3: Pulse — animated color bands chasing along the line
+  if (u_pattern == 3) {
+    float wave = sin((t * 8.0 - time * spd * 3.0) * 3.14159) * 0.5 + 0.5;
+    wave = smoothstep(0.2, 0.8, wave); // sharpen the bands
+    float bassKick = bass * bass;
+    wave = clamp(wave + bassKick * 0.4, 0.0, 1.0);
+    return mix(c1, c2, wave);
+  }
+  // 4: Fire — red-orange-yellow-white with flickering
+  if (u_pattern == 4) {
+    float flicker = sin(t * 20.0 + time * spd * 5.0) * 0.15 + sin(t * 7.3 + time * 3.7) * 0.1;
+    float fireT = clamp(t + flicker + bass * 0.3, 0.0, 1.0);
+    vec3 fireCol;
+    if (fireT < 0.33) fireCol = mix(vec3(0.6, 0.0, 0.0), vec3(1.0, 0.3, 0.0), fireT * 3.0);
+    else if (fireT < 0.66) fireCol = mix(vec3(1.0, 0.3, 0.0), vec3(1.0, 0.85, 0.0), (fireT - 0.33) * 3.0);
+    else fireCol = mix(vec3(1.0, 0.85, 0.0), vec3(1.0, 1.0, 0.9), (fireT - 0.66) * 3.0);
+    return fireCol;
+  }
+  // 5: Frequency — bass=warm, treble=cool along the line
+  if (u_pattern == 5) {
+    float hue = t * 0.7 + 0.0; // red at start → blue at end
+    float sat = 0.9;
+    float val = 0.8 + bass * 0.2;
+    // Bass energy pushes warm colors further along the line
+    hue = fract(hue - bass * 0.15 + time * spd * 0.05);
+    return hsv2rgb(vec3(hue, sat, val));
+  }
+  // 6: Bounce — color ping-pongs back and forth
+  if (u_pattern == 6) {
+    float ping = abs(fract(t + time * spd * 0.5) * 2.0 - 1.0); // triangle wave 0-1-0
+    ping = ping * ping * (3.0 - 2.0 * ping); // smoothstep it
+    float bassBoost = bass * bass * 0.5;
+    ping = clamp(ping + bassBoost, 0.0, 1.0);
+    return mix(c1, c2, ping);
+  }
+  // 7: Christmas — rotating multi-color spots like fairy lights
+  if (u_pattern == 7) {
+    float pos = t * 12.0 - time * spd * 2.0;
+    float cell = floor(pos);
+    float local = fract(pos);
+    // Each cell picks from 4 bright colors based on its index
+    float idx = mod(cell, 4.0);
+    vec3 col;
+    if (idx < 1.0) col = vec3(1.0, 0.1, 0.1);       // red
+    else if (idx < 2.0) col = vec3(0.1, 1.0, 0.2);   // green
+    else if (idx < 3.0) col = vec3(0.2, 0.4, 1.0);   // blue
+    else col = vec3(1.0, 0.85, 0.0);                   // gold
+    // Bright spot in center of each cell, dark between
+    float spot = 1.0 - smoothstep(0.0, 0.45, abs(local - 0.5));
+    spot = spot * spot; // sharpen
+    float pulse = 0.7 + 0.3 * sin(cell * 2.7 + time * spd * 4.0); // twinkle
+    spot *= pulse + bass * 0.5;
+    return col * spot;
+  }
+  return c1; // fallback
+}
+
 void main() {
   float d = abs(v_edge);
   float core = 1.0 - smoothstep(0.0, 0.25, d);
   float glow = 1.0 - smoothstep(0.1, 1.0, d);
   float alpha = core + glow * u_glow * 0.6;
   alpha = clamp(alpha, 0.0, 1.0);
-  // Bass-reactive gradient: bass shifts the gradient mix point
-  // At rest: smooth linear gradient. On bass hit: end color punches through
-  float bassShift = u_bass * u_bass * 0.6; // squared for punch feel
-  float gradT = clamp(v_t + bassShift, 0.0, 1.0);
-  vec3 baseCol = mix(u_col.rgb, u_col2, gradT * u_gradient);
+  vec3 baseCol = patternColor(v_t, u_bass, u_time);
   // Bass boosts brightness — kept subtle to prevent white-out accumulation
   float bassBright = 1.0 + u_bass * 0.25;
   float brightness = mix(bassBright, 0.6, d * d);
@@ -1190,7 +1317,7 @@ const bloomBlendP = mkProg(QUAD_VS, BLOOM_BLEND_FS);
 function uL(p,n) { return gl.getUniformLocation(p,n); }
 const wU={}; ['u_prev','u_time','u_zoom','u_rot','u_warp','u_cx','u_cy','u_dx','u_dy','u_sx','u_sy','u_decay','u_warp_mode','u_warp_blend'].forEach(n=>wU[n]=uL(warpP,n));
 const cU={}; ['u_tex','u_gamma','u_darken','u_brighten','u_solarize','u_invert','u_obSize','u_obCol'].forEach(n=>cU[n]=uL(compP,n));
-const vU={}; ['u_col','u_col2','u_gradient','u_width','u_glow','u_bass'].forEach(n=>vU[n]=uL(waveP,n));
+const vU={}; ['u_col','u_col2','u_gradient','u_width','u_glow','u_bass','u_time','u_pattern','u_patspeed'].forEach(n=>vU[n]=uL(waveP,n));
 const vUL={}; ['u_col'].forEach(n=>vUL[n]=uL(waveLegacyP,n));
 const beU={}; ['u_tex','u_threshold'].forEach(n=>beU[n]=uL(bloomExtP,n));
 const bbU={}; ['u_tex','u_dir'].forEach(n=>bbU[n]=uL(bloomBlurP,n));
@@ -1738,7 +1865,7 @@ const DUAL_FADE_SPEED = 0.008; // ~125 frames to full fade = ~2s at 60fps
 
 // Wave2 editing — swap UI controls between shape 1 and shape 2
 let editingWave2 = false;
-const WAVE2_KEYS = ['wave_mode','wave_r','wave_g','wave_b','wave_a','wave_x','wave_y','wave_mystery','wave_dots','wave_thick','wave_additive','wave_brighten','wave_scale','wave_smoothing','wave_r2','wave_g2','wave_b2','wave_gradient'];
+const WAVE2_KEYS = ['wave_mode','wave_r','wave_g','wave_b','wave_a','wave_x','wave_y','wave_mystery','wave_dots','wave_thick','wave_additive','wave_brighten','wave_scale','wave_smoothing','wave_r2','wave_g2','wave_b2','wave_gradient','wave_pattern','wave_pattern_speed'];
 // Map: wave2 property name → state key name
 const WAVE2_MAP = {
   mode:'wave_mode', r:'wave_r', g:'wave_g', b:'wave_b', a:'wave_a',
@@ -1746,6 +1873,7 @@ const WAVE2_MAP = {
   thick:'wave_thick', additive:'wave_additive', brighten:'wave_brighten',
   scale:'wave_scale', smoothing:'wave_smoothing',
   r2:'wave_r2', g2:'wave_g2', b2:'wave_b2', gradient:'wave_gradient',
+  pattern:'wave_pattern', patSpeed:'wave_pattern_speed',
 };
 let wave1Stash = {}; // stash wave1 params while editing wave2
 
@@ -1799,6 +1927,11 @@ const WARP_MORPH_SPEED = 0.008; // ~2s to crossfade between modes
 
 function cycleWarpMode() {
   warpModeTarget = (Math.floor(warpModeTarget) + 1) % 9;
+}
+
+function cyclePattern() {
+  state.wave_pattern = (state.wave_pattern + 1) % TOTAL_PATTERNS;
+  syncUI();
 }
 
 function stepWarpMode() {
@@ -1904,8 +2037,8 @@ function render() {
   const bassPunch = audio.bass > 0.6 ? (audio.bass - 0.6) * 0.025 : 0; // extra kick on hard hits
   const baseWidth = 0.008 + audio.bass * 0.006 + bassPunch;
 
-  // Helper: draw a wave shape (thick line or dots), with multi-stroke + gradient support
-  function drawWave(waveData, r, g, b, a, useDots, widthMul, r2, g2, b2, gradient) {
+  // Helper: draw a wave shape (thick line or dots), with multi-stroke + gradient + pattern support
+  function drawWave(waveData, r, g, b, a, useDots, widthMul, r2, g2, b2, gradient, pattern, patSpeed) {
     const verts = waveData.verts || waveData;
     const strokes = waveData.strokes || null;
     if (useDots) {
@@ -1927,6 +2060,9 @@ function render() {
       gl.uniform1f(vU.u_bass, audio.bass);
       gl.uniform1f(vU.u_width, baseWidth * (widthMul || 1));
       gl.uniform1f(vU.u_glow, 0.8);
+      gl.uniform1f(vU.u_time, t);
+      gl.uniform1i(vU.u_pattern, pattern||0);
+      gl.uniform1f(vU.u_patspeed, patSpeed!==undefined?patSpeed:1);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, WAVE_N * 2);
     } else {
       gl.useProgram(waveP);
@@ -1937,6 +2073,9 @@ function render() {
       gl.uniform1f(vU.u_bass, audio.bass);
       gl.uniform1f(vU.u_width, baseWidth * (widthMul || 1));
       gl.uniform1f(vU.u_glow, 0.8);
+      gl.uniform1f(vU.u_time, t);
+      gl.uniform1i(vU.u_pattern, pattern||0);
+      gl.uniform1f(vU.u_patspeed, patSpeed!==undefined?patSpeed:1);
       for (const stroke of strokes) {
         const [start, count, closed] = stroke;
         if (count < 2) continue;
@@ -1962,14 +2101,14 @@ function render() {
     const wvOld = buildWaveVerts(wave, aspect);
     state.wave_mode = oldMode;
     const oldR = transitionFrom.wave_r ?? state.wave_r, oldG = transitionFrom.wave_g ?? state.wave_g, oldB = transitionFrom.wave_b ?? state.wave_b;
-    drawWave(wvOld, oldR, oldG, oldB, state.wave_a * fadeOut, state.wave_dots, 1, state.wave_r2, state.wave_g2, state.wave_b2, state.wave_gradient);
+    drawWave(wvOld, oldR, oldG, oldB, state.wave_a * fadeOut, state.wave_dots, 1, state.wave_r2, state.wave_g2, state.wave_b2, state.wave_gradient, state.wave_pattern, state.wave_pattern_speed);
     state.wave_mode = transitionTarget.wave_mode;
     const wvNew = buildWaveVerts(wave, aspect);
     state.wave_mode = oldMode;
-    drawWave(wvNew, state.wave_r, state.wave_g, state.wave_b, state.wave_a * fadeIn, state.wave_dots, 1, state.wave_r2, state.wave_g2, state.wave_b2, state.wave_gradient);
+    drawWave(wvNew, state.wave_r, state.wave_g, state.wave_b, state.wave_a * fadeIn, state.wave_dots, 1, state.wave_r2, state.wave_g2, state.wave_b2, state.wave_gradient, state.wave_pattern, state.wave_pattern_speed);
   } else {
     const wv = buildWaveVerts(wave, aspect);
-    drawWave(wv, state.wave_r, state.wave_g, state.wave_b, state.wave_a, state.wave_dots, 1, state.wave_r2, state.wave_g2, state.wave_b2, state.wave_gradient);
+    drawWave(wv, state.wave_r, state.wave_g, state.wave_b, state.wave_a, state.wave_dots, 1, state.wave_r2, state.wave_g2, state.wave_b2, state.wave_gradient, state.wave_pattern, state.wave_pattern_speed);
   }
 
   // Dual/Split wave: draw second shape (with fade)
@@ -1992,16 +2131,16 @@ function render() {
     state.wave_mode = origMode; state.wave_mystery = origMy;
     state.wave_scale = origSc; state.wave_x = origX; state.wave_y = origY;
     if (isSplit) {
-      drawWave(wv2, wave2.r, wave2.g, wave2.b, wave2.a * dualFade, wave2.dots, 0.8, wave2.r2, wave2.g2, wave2.b2, wave2.gradient);
+      drawWave(wv2, wave2.r, wave2.g, wave2.b, wave2.a * dualFade, wave2.dots, 0.8, wave2.r2, wave2.g2, wave2.b2, wave2.gradient, wave2.pattern||0, wave2.patSpeed||1);
     } else {
-      drawWave(wv2, state.wave_r, state.wave_g, state.wave_b, state.wave_a * 0.7 * dualFade, state.wave_dots, 0.8, state.wave_r2, state.wave_g2, state.wave_b2, state.wave_gradient);
+      drawWave(wv2, state.wave_r, state.wave_g, state.wave_b, state.wave_a * 0.7 * dualFade, state.wave_dots, 0.8, state.wave_r2, state.wave_g2, state.wave_b2, state.wave_gradient, state.wave_pattern, state.wave_pattern_speed);
     }
   }
 
   // Thick/brighten glow pass
   if (state.wave_thick || state.wave_brighten) {
     const wvT = buildWaveVerts(wave, aspect);
-    drawWave(wvT, state.wave_r*1.2, state.wave_g*1.2, state.wave_b*1.2, state.wave_a*0.4, state.wave_dots, 1.8, state.wave_r2*1.2, state.wave_g2*1.2, state.wave_b2*1.2, state.wave_gradient);
+    drawWave(wvT, state.wave_r*1.2, state.wave_g*1.2, state.wave_b*1.2, state.wave_a*0.4, state.wave_dots, 1.8, state.wave_r2*1.2, state.wave_g2*1.2, state.wave_b2*1.2, state.wave_gradient, state.wave_pattern, state.wave_pattern_speed);
   }
   gl.disable(gl.BLEND);
 
@@ -2075,7 +2214,8 @@ function render() {
   const dualTag = dualIdx > 0 ? ` <span class="d">|</span> ${DUAL_MODES[dualIdx].name}${editTag}` : '';
   const warpTag = ` <span class="d">|</span> ${WARP_MODE_NAMES[Math.floor(warpMode) % 9]}`;
   const qTag = ` <span class="d">|</span> ${QUALITY_MODES[qualityIdx].name}`;
-  document.getElementById('hud').innerHTML=`${fps} <span class="d">fps</span> ${useMic?'<span class="d">|</span> MIC':''}${trans}${autoTag}${chaosTag}${libTag}${dualTag}${warpTag}${qTag}`;
+  const patTag = state.wave_pattern > 0 ? ` <span class="d">|</span> ${PATTERN_NAMES[state.wave_pattern].toUpperCase()}` : '';
+  document.getElementById('hud').innerHTML=`${fps} <span class="d">fps</span> ${useMic?'<span class="d">|</span> MIC':''}${trans}${autoTag}${chaosTag}${libTag}${dualTag}${warpTag}${patTag}${qTag}`;
 
   requestAnimationFrame(render);
 }
@@ -2343,6 +2483,13 @@ function randomize() {
     } else {
       target.wave_gradient = 0;
     }
+    // ~40% chance of a line pattern (non-gradient)
+    if (Math.random() < 0.4) {
+      target.wave_pattern = 1 + Math.floor(Math.random() * (TOTAL_PATTERNS - 1)); // skip gradient (0)
+      target.wave_pattern_speed = 0.5 + Math.random() * 3;
+    } else {
+      target.wave_pattern = 0;
+    }
   } else {
     // Generate random config
     target = { ...DEFAULTS };
@@ -2394,6 +2541,13 @@ function randomize() {
     } else {
       target.wave_gradient = 0;
     }
+    // ~50% chance of a line pattern
+    if (Math.random() < 0.5) {
+      target.wave_pattern = 1 + Math.floor(Math.random() * (TOTAL_PATTERNS - 1));
+      target.wave_pattern_speed = 0.5 + Math.random() * 3;
+    } else {
+      target.wave_pattern = 0;
+    }
   }
 
   // Preserve audio settings and randomizer settings
@@ -2415,7 +2569,7 @@ function randomize() {
 }
 
 // Keys that should snap (integers/booleans), not lerp
-const SNAP_KEYS = new Set(['wave_mode','wave_dots','wave_thick','wave_additive','wave_brighten','brighten','darken','solarize','invert']);
+const SNAP_KEYS = new Set(['wave_mode','wave_dots','wave_thick','wave_additive','wave_brighten','wave_pattern','brighten','darken','solarize','invert']);
 
 function stepTransition() {
   if (!transitionTarget) return;
@@ -2494,6 +2648,7 @@ const CHAOS_PARAMS = {
   wave_g2: { min: 0.05, max: 1, drift: 0.6 },
   wave_b2: { min: 0.05, max: 1, drift: 0.6 },
   wave_gradient: { min: 0, max: 1, drift: 0.6 },
+  wave_pattern_speed: { min: 0.3, max: 4, drift: 0.5 },
   wave_x: { min: 0.2, max: 0.8, drift: 0.3 },
   wave_y: { min: 0.2, max: 0.8, drift: 0.3 },
   wave_mystery: { min: -2, max: 2, drift: 0.4 },
@@ -2547,6 +2702,11 @@ function stepChaos(audio) {
   if (chaosFrameCount % modeChance === 0 && Math.random() < 0.5) {
     state.wave_mode = getPooledShape(state.wave_mode);
     wave_mode2 = -1;
+  }
+  // Pattern shifts — bass-driven, every ~15 seconds
+  if (chaosFrameCount % 900 === 0 && a.bass > 0.4) {
+    state.wave_pattern = Math.floor(Math.random() * TOTAL_PATTERNS);
+    state.wave_pattern_speed = 0.5 + Math.random() * 3;
   }
 
   // Drift warp mode (~every 25 seconds, audio-influenced)
@@ -2643,6 +2803,7 @@ document.addEventListener('keydown', e => {
     case 'd': cycleDual(); break;
     case 'e': toggleWave2Edit(); break;
     case 'w': cycleWarpMode(); break;
+    case 'p': cyclePattern(); break;
     case 'q': cycleQuality(); break;
     case 'h': document.getElementById('hud').style.display = document.getElementById('hud').style.display === 'none' ? '' : 'none'; break;
     case 't': toggleAttribution(); break;
