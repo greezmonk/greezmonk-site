@@ -154,7 +154,7 @@
     body {
       display: flex; flex-direction: column; height: 100vh; height: 100dvh; overflow: hidden;
     }
-    header { flex-shrink: 0; }
+    header { flex-shrink: 0; flex-wrap: nowrap; overflow-x: auto; padding: 6px 10px; }
     #mobile-swipe {
       display: flex !important; flex: 1; overflow-x: auto; overflow-y: hidden;
       scroll-snap-type: x mandatory; min-height: 0;
@@ -164,12 +164,20 @@
     #preview-wrap {
       flex: 0 0 100vw; width: 100vw; height: 100%;
       scroll-snap-align: start; position: relative; overflow: hidden;
+      background: #000;
     }
+    #preview-wrap canvas { width: 100%; height: 100%; }
     #sidebar {
       flex: 0 0 100vw; width: 100vw; height: 100%;
       scroll-snap-align: start; overflow-y: auto; border-right: none;
+      padding: 8px; box-sizing: border-box;
     }
     #output-panel { display: none; }
+    #controls-stack {
+      width: auto; left: 8px; bottom: 8px; top: 8px;
+    }
+    #touch-btns { padding: 3px; }
+    .tb { font-size: 10px; min-height: 20px; }
   }
   #hud {
     position: absolute; top: 8px; right: 8px;
@@ -2322,6 +2330,14 @@ document.getElementById('c').addEventListener('touchend', (e) => {
 // Auto-show on touch devices
 if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
   toggleTouchBar();
+}
+
+// Mobile: re-init canvas when swipe container scrolls back to canvas
+const swipeEl = document.getElementById('mobile-swipe');
+if (swipeEl) {
+  swipeEl.addEventListener('scrollend', () => { initFBs(); });
+  // Also trigger resize after layout settles on load
+  setTimeout(() => initFBs(), 100);
 }
 
 // Auto-gain: tracks recent peaks per band, normalizes to full 0–1 range
