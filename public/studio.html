@@ -255,7 +255,7 @@
     <div class="help-row"><span class="help-key">Wave 1 / Wave 2</span><span class="help-desc">toggle in sidebar — edits shape, color, all wave params</span></div>
     <div class="help-row"><span class="help-key">D</span><span class="help-desc">cycle dual mode (single / dual / split)</span></div>
     <div class="help-row"><span class="help-key">E</span><span class="help-desc">toggle wave 2 editing (keyboard shortcut)</span></div>
-    <div class="help-row"><span class="help-key">W</span><span class="help-desc">cycle warp mode (9 modes)</span></div>
+    <div class="help-row"><span class="help-key">W</span><span class="help-desc">cycle warp mode (17 modes)</span></div>
     <div class="help-row"><span class="help-key">P</span><span class="help-desc">cycle line pattern (17 modes)</span></div>
     <div class="help-row"><span class="help-key">B</span><span class="help-desc">cycle blend mode (normal / additive / screen / subtract / multiply)</span></div>
     <div class="help-row"><span class="help-key">Q</span><span class="help-desc">cycle quality (perf / bal / ultra)</span></div>
@@ -1243,16 +1243,96 @@ vec2 warpDisplace(float mode, vec2 rel, float r, float a, float w, float t) {
     // Tangential component for swirl
     d += vec2(-rel.y, rel.x) * (wave1 - wave2b) * 0.15;
 
-  } else {
+  } else if (m == 8) {
     // DNA Twist — S-curve twist, double helix warp
     float twist = sin(rel.y * 8.0 + t * 0.6) * w * 2.0;
-    float twist2 = sin(rel.y * 8.0 + t * 0.6 + 3.14159) * w * 2.0; // opposite helix
     float strand = sin(rel.x * 15.0 + t * 0.3);
-    // X displacement depends on Y position (creates the twist)
     d.x = twist * (0.3 + 0.2 * sin(rel.y * 4.0 - t * 0.4));
-    d.y = cos(rel.y * 8.0 + t * 0.6) * w * 0.5; // vertical compression/stretch
-    // Cross-linking between strands
+    d.y = cos(rel.y * 8.0 + t * 0.6) * w * 0.5;
     d += vec2(sin(rel.y * 16.0 + t) * w * 0.2 * strand, 0.0);
+
+  } else if (m == 9) {
+    // Fish Eye — radial bulge, barrel distortion from center
+    float strength = w * 8.0;
+    float rNorm = r / 0.5;
+    float distort = 1.0 + strength * rNorm * rNorm;
+    d = rel * (1.0 / distort - 1.0);
+    // Subtle breathing
+    d *= 1.0 + 0.15 * sin(t * 0.4);
+
+  } else if (m == 10) {
+    // Push — everything expands outward from center
+    float push = w * 3.0 / (r + 0.08);
+    float wave = 1.0 + 0.3 * sin(r * 6.0 - t * 1.2);
+    d = normalize(rel + 0.001) * push * wave * 0.04;
+    // Slight spiral as it pushes out
+    d += vec2(-rel.y, rel.x) * w * 0.1 * sin(t * 0.25);
+
+  } else if (m == 11) {
+    // Pull — everything contracts toward center, suction
+    float pull = w * 3.0 / (r + 0.08);
+    float wave = 1.0 + 0.4 * sin(r * 8.0 + t * 1.0);
+    d = -normalize(rel + 0.001) * pull * wave * 0.04;
+    // Counter-spiral
+    d += vec2(rel.y, -rel.x) * w * 0.15 * sin(t * 0.3);
+
+  } else if (m == 12) {
+    // Micro Vortices — field of tiny spinning tornadoes
+    float vw = w * 2.0;
+    for (int v = 0; v < 10; v++) {
+      float vx = sin(float(v) * 3.7 + t * 0.1) * 0.35;
+      float vy = cos(float(v) * 2.3 + t * 0.08) * 0.35;
+      vec2 vc = vec2(vx, vy);
+      vec2 toV = rel - vc;
+      float vd = length(toV) + 0.02;
+      float spin = (mod(float(v), 2.0) < 1.0) ? 1.0 : -1.0;
+      d += vec2(-toV.y, toV.x) * spin * vw / (vd * vd + 0.08) * 0.008;
+    }
+
+  } else if (m == 13) {
+    // Kaleidoscope — angular mirror/repeat in slices
+    float slices = 6.0;
+    float ka = mod(a + 3.14159, 6.28318 / slices);
+    float mirror = ka > 3.14159 / slices ? 6.28318 / slices - ka : ka;
+    float targetA = mirror - (a - floor((a + 3.14159) / (6.28318 / slices)) * (6.28318 / slices));
+    d = vec2(cos(a + targetA) - cos(a), sin(a + targetA) - sin(a)) * r * w * 3.0;
+    // Slow rotation of the kaleidoscope
+    float krot = t * 0.15;
+    d += vec2(cos(krot) * d.x - sin(krot) * d.y, sin(krot) * d.x + cos(krot) * d.y) * 0.1;
+
+  } else if (m == 14) {
+    // Black Hole — extreme gravitational lensing around a moving singularity
+    vec2 bh = vec2(0.1 * sin(t * 0.12), 0.08 * cos(t * 0.15));
+    vec2 toBH = rel - bh;
+    float bhDist = length(toBH) + 0.01;
+    float warp2 = w * 5.0;
+    // Gravitational deflection — bends perpendicular to radius
+    d = vec2(-toBH.y, toBH.x) * warp2 / (bhDist * bhDist + 0.02) * 0.02;
+    // Radial stretching toward singularity
+    d -= normalize(toBH) * warp2 / (bhDist + 0.1) * 0.03;
+    // Accretion disk ring
+    d += vec2(-toBH.y, toBH.x) * sin(bhDist * 30.0 - t * 2.0) * w * 0.1;
+
+  } else if (m == 15) {
+    // Heat Haze — subtle organic wavering, atmospheric distortion
+    float hz1 = sin(rel.x * 5.0 + t * 0.3 + rel.y * 3.0) * 0.7;
+    float hz2 = sin(rel.y * 7.0 - t * 0.25 + rel.x * 2.0) * 0.5;
+    float hz3 = sin((rel.x + rel.y) * 4.0 + t * 0.4) * 0.3;
+    float hz4 = cos(rel.x * 9.0 - rel.y * 6.0 + t * 0.35) * 0.4;
+    d.x = (hz1 + hz3) * w * 0.6;
+    d.y = (hz2 + hz4) * w * 0.6;
+    // Rising heat shimmer
+    d.y += sin(rel.x * 12.0 + t * 0.8) * w * 0.3;
+
+  } else {
+    // Zoom Burst — radial streaks from center, motion blur feel
+    float zb = w * 4.0;
+    float streak = sin(a * 12.0 + r * 20.0 - t * 1.5) * 0.5 + 0.5;
+    d = normalize(rel + 0.001) * zb * streak * r * 0.5;
+    // Pulsing intensity
+    d *= 1.0 + 0.4 * sin(t * 0.6);
+    // Angular jitter
+    d += vec2(-rel.y, rel.x) * sin(a * 8.0 + t) * w * 0.15;
   }
   return d;
 }
@@ -1269,7 +1349,7 @@ void main() {
   // Warp displacement — blend between two modes
   float r = length(rel), a = atan(rel.y, rel.x), w = u_warp * 0.04;
   float modeA = floor(u_warp_mode);
-  float modeB = mod(modeA + 1.0, 9.0);
+  float modeB = mod(modeA + 1.0, 17.0);
   float blend = fract(u_warp_mode);
   vec2 dA = warpDisplace(modeA, rel, r, a, w, u_time);
   vec2 dB = warpDisplace(modeB, rel, r, a, w, u_time);
@@ -2404,13 +2484,14 @@ function getSecondMode() {
 }
 
 // Warp mode — smooth float, floor = current mode, fract = blend to next
-const WARP_MODE_NAMES = ['RIPPLE', 'VORTEX', 'TURB', 'GRAVITY', 'PULSE', 'SHATTER', 'MAGNETIC', 'INTERF', 'DNA'];
+const WARP_MODE_NAMES = ['RIPPLE', 'VORTEX', 'TURB', 'GRAVITY', 'PULSE', 'SHATTER', 'MAGNETIC', 'INTERF', 'DNA', 'FISHEYE', 'PUSH', 'PULL', 'MICRO-V', 'KALEID', 'BLACKHOLE', 'HAZE', 'ZOOM'];
+const TOTAL_WARPS = WARP_MODE_NAMES.length;
 let warpMode = 0.0; // 0-4, fractional = blending
 let warpModeTarget = 0;
 const WARP_MORPH_SPEED = 0.008; // ~2s to crossfade between modes
 
 function cycleWarpMode() {
-  warpModeTarget = (Math.floor(warpModeTarget) + 1) % 9;
+  warpModeTarget = (Math.floor(warpModeTarget) + 1) % TOTAL_WARPS;
 }
 
 function cyclePattern() {
@@ -2439,9 +2520,9 @@ function cycleBlend() {
 function stepWarpMode() {
   if (Math.abs(warpMode - warpModeTarget) > 0.01) {
     let diff = warpModeTarget - Math.floor(warpMode);
-    if (diff < 0) diff += 9;
+    if (diff < 0) diff += TOTAL_WARPS;
     warpMode += WARP_MORPH_SPEED;
-    if (warpMode >= 9.0) warpMode -= 9.0;
+    if (warpMode >= TOTAL_WARPS) warpMode -= TOTAL_WARPS;
     if (Math.abs(warpMode - warpModeTarget) < WARP_MORPH_SPEED * 2) {
       warpMode = warpModeTarget;
     }
@@ -2725,7 +2806,7 @@ function render() {
   const libTag = configLibrary.length ? ` <span class="d">|</span> LIB:${configLibrary.length}` : '';
   const editTag = editingWave2 ? ' <span style="color:#ff0">EDIT:W2</span>' : '';
   const dualTag = dualIdx > 0 ? ` <span class="d">|</span> ${DUAL_MODES[dualIdx].name}${editTag}` : '';
-  const warpTag = ` <span class="d">|</span> ${WARP_MODE_NAMES[Math.floor(warpMode) % 9]}`;
+  const warpTag = ` <span class="d">|</span> ${WARP_MODE_NAMES[Math.floor(warpMode) % TOTAL_WARPS]}`;
   const qTag = ` <span class="d">|</span> ${QUALITY_MODES[qualityIdx].name}`;
   const patTag = state.wave_pattern > 0 ? ` <span class="d">|</span> ${PATTERN_NAMES[state.wave_pattern].toUpperCase()}` : '';
   const blendTag = state.wave_blend > 0 ? ` <span class="d">|</span> ${BLEND_NAMES[state.wave_blend].toUpperCase()}` : '';
@@ -3085,7 +3166,7 @@ function randomize() {
   transitionProgress = 0;
   if (DUAL_MODES[dualIdx].name === 'SPLIT') randomizeWave2();
   // Cycle warp mode on each auto-random (~60% chance of new mode)
-  if (Math.random() < 0.6) warpModeTarget = Math.floor(Math.random() * 9);
+  if (Math.random() < 0.6) warpModeTarget = Math.floor(Math.random() * TOTAL_WARPS);
   currentPresetName = '';
   document.querySelectorAll('.presets button').forEach(b => b.classList.remove('active'));
 }
@@ -3241,7 +3322,7 @@ function stepChaos(audio) {
   // Drift warp mode (~every 25 seconds, audio-influenced)
   const warpChance = energy > 0.5 ? 1200 : 1500;
   if (chaosFrameCount % warpChance === 0 && Math.random() < 0.4) {
-    warpModeTarget = Math.floor(Math.random() * 9);
+    warpModeTarget = Math.floor(Math.random() * TOTAL_WARPS);
   }
 
   // Drift wave2 independently in SPLIT mode — audio reactive
