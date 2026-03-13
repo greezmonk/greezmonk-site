@@ -2699,11 +2699,12 @@ function render() {
     state.wave_mode = oldMode;
     drawWave(wvNew, state.wave_r, state.wave_g, state.wave_b, state.wave_a * fadeIn, state.wave_dots, 1, state.wave_r2, state.wave_g2, state.wave_b2, state.wave_gradient, state.wave_pattern, state.wave_pattern_speed);
   } else {
-    // In SPLIT mode, offset wave1 to the left
+    // In SPLIT mode, push wave1 to the left side
     const splitActive = DUAL_MODES[dualIdx].name === 'SPLIT' && dualFade > 0.01;
-    if (splitActive) state.wave_x -= 0.15;
+    const origW1X = state.wave_x;
+    if (splitActive) state.wave_x = state.wave_x * 0.4 + 0.05;
     const wv = buildWaveVerts(wave, aspect);
-    if (splitActive) state.wave_x += 0.15;
+    if (splitActive) state.wave_x = origW1X;
     drawWave(wv, state.wave_r, state.wave_g, state.wave_b, state.wave_a, state.wave_dots, 1, state.wave_r2, state.wave_g2, state.wave_b2, state.wave_gradient, state.wave_pattern, state.wave_pattern_speed);
   }
 
@@ -2719,7 +2720,7 @@ function render() {
       state.wave_mode = wave2.mode;
       state.wave_mystery = wave2.mystery;
       state.wave_scale = wave2.scale;
-      state.wave_x = wave2.x + (isSplitPos ? 0.15 : 0);
+      state.wave_x = isSplitPos ? wave2.x * 0.4 + 0.55 : wave2.x;
       state.wave_y = wave2.y;
     } else {
       state.wave_mode = getSecondMode();
