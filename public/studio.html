@@ -2240,6 +2240,7 @@ function toggleAudioReactMode() {
 const scalePulse = { w1: 0, w2: 0 };
 const wiggle = { w1x: 0, w1y: 0, w2x: 0, w2y: 0 };
 let w2MidRotation = 0; // accumulated rotation for wave2 driven by mid
+let lastTreb = 0; // treble level for vertex jitter
 function updateScalePulse(audio) {
   if (audioReactMode === 'unified') {
     scalePulse.w1 = 0; scalePulse.w2 = 0;
@@ -2774,6 +2775,14 @@ function buildWaveVerts(samples, aspect) {
     strokes.push([strokeStart, WAVE_N - strokeStart, prevClosed]);
   }
 
+  // Treble jitter — high-frequency static on the geometry
+  if (audioReactMode === 'split' && lastTreb > 0.3) {
+    const jitAmt = (lastTreb - 0.3) * 0.025;
+    for (let i = 0; i < WAVE_N * 2; i++) {
+      v[i] += (Math.random() - 0.5) * jitAmt;
+    }
+  }
+
   return { verts: v, strokes: strokes };
 }
 
@@ -2936,6 +2945,7 @@ function render() {
   const now=performance.now(), t=(now-startTime)/1000;
   const w=canvas.width, h=canvas.height, aspect=w/h;
   const audio=getAudio(t);
+  lastTreb = audio.treb;
   updateScalePulse(audio);
   updateBassPeak(audio);
   updateAudioMonitor(audio);
