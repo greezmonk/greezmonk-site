@@ -482,7 +482,7 @@ const DEFAULTS = {
   wave_r2: 1, wave_g2: 0, wave_b2: 0, wave_gradient: 0,
   wave_pattern: 0, wave_pattern_speed: 1, wave_blend: 1,
   bloom_strength: 0.3, bloom_threshold: 0.4,
-  audio_bass_gain: 3, audio_mid_gain: 1.5, audio_treb_gain: 0.25, audio_trigger: 0.5,
+  audio_bass_gain: 3, audio_mid_gain: 3, audio_treb_gain: 3, audio_trigger: 0.25,
   transition_speed: 0.003, auto_interval: 5,
 };
 
@@ -3749,6 +3749,8 @@ function saveStartup() {
     dualIdx: dualIdx,
     autoOn: autoRandomInterval !== null,
     chaosOn: chaosEnabled,
+    monitorOff: !audioMonitorVisible,
+    panelCollapsed: document.getElementById('output-panel').classList.contains('collapsed'),
   };
   localStorage.setItem(STARTUP_KEY, JSON.stringify(config));
   const btn = document.getElementById('btn-save-startup');
@@ -3768,8 +3770,8 @@ const FACTORY_PREFS = {
   wave_r2:1, wave_g2:0.066, wave_b2:0.828, wave_gradient:0.757,
   wave_pattern:16, wave_pattern_speed:1.738, wave_blend:0,
   bloom_strength:0.3, bloom_threshold:0.4,
-  audio_bass_gain:3, audio_mid_gain:1.5, audio_treb_gain:0.25,
-  audio_trigger:0.5, transition_speed:0.003, auto_interval:5,
+  audio_bass_gain:3, audio_mid_gain:3, audio_treb_gain:3,
+  audio_trigger:0.25, transition_speed:0.003, auto_interval:5,
 };
 
 function loadStartup() {
@@ -3814,9 +3816,13 @@ syncUI();
 if (startupConfig) {
   if (startupConfig.autoOn) toggleAutoRandom();
   if (startupConfig.chaosOn) toggleChaos();
+  if (!startupConfig.monitorOff) toggleAudioMonitor();
+  if (startupConfig.panelCollapsed !== false) toggleOutputPanel();
 } else {
   toggleAutoRandom();
   toggleChaos();
+  toggleAudioMonitor();
+  toggleOutputPanel();
 }
 render();
 </script>
