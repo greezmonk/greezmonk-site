@@ -201,8 +201,11 @@
   #paste-btn.err { background: #a44; color: var(--bg); }
   #copy-label { font-size: 9px; color: var(--dim); text-transform: uppercase; letter-spacing: 1.5px; }
 
-  #audio-monitor {
+  #controls-stack {
     position: absolute; bottom: 12px; left: 12px; z-index: 50;
+    display: flex; flex-direction: column; gap: 4px; align-items: flex-start;
+  }
+  #audio-monitor {
     display: flex; gap: 4px; align-items: flex-end;
     background: rgba(0,0,0,0.3); border-radius: 4px; padding: 6px 8px;
     font: 8px 'Courier New', monospace; color: var(--dim);
@@ -212,6 +215,30 @@
   .am-bar-fill { position: absolute; bottom: 0; width: 100%; border-radius: 2px; transition: height 0.05s; }
   .am-bar-label { font-size: 7px; letter-spacing: 0.5px; opacity: 0.6; }
   .am-thr-line { position: absolute; width: 100%; height: 1px; background: rgba(255,200,50,0.6); pointer-events: none; }
+
+  #touch-bar {
+    display: none;
+    pointer-events: auto;
+  }
+  #touch-bar.show { display: block; }
+  #touch-btns {
+    display: flex; gap: 3px; flex-wrap: nowrap;
+    padding: 6px 8px;
+    background: rgba(0,0,0,0.3); border-radius: 4px;
+    overflow-x: auto; max-width: calc(100vw - 36px);
+    scrollbar-width: none; -ms-overflow-style: none;
+  }
+  #touch-btns::-webkit-scrollbar { display: none; }
+  .tb {
+    min-width: 32px; height: 32px; border: 1px solid rgba(255,255,255,0.15);
+    background: rgba(255,255,255,0.06); border-radius: 3px;
+    color: var(--dim); font: bold 9px 'Courier New', monospace;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; user-select: none; -webkit-user-select: none;
+    transition: background 0.15s, color 0.15s;
+  }
+  .tb:active { background: rgba(255,255,255,0.2); color: var(--accent); }
+  .tb.active { color: var(--accent); border-color: var(--accent); }
 
   #help-overlay {
     display: none; position: fixed; inset: 0; z-index: 9999;
@@ -275,7 +302,10 @@
 <div id="preview-wrap">
   <canvas id="c"></canvas>
   <div id="hud">--</div>
-  <div id="audio-monitor" style="display:none;"></div>
+  <div id="controls-stack">
+    <div id="touch-bar"><div id="touch-btns"></div></div>
+    <div id="audio-monitor" style="display:none;"></div>
+  </div>
   <div id="attribution"></div>
 </div>
 
@@ -305,6 +335,7 @@
     <div class="help-row"><span class="help-key">H</span><span class="help-desc">toggle HUD</span></div>
     <div class="help-row"><span class="help-key">S</span><span class="help-desc">toggle audio monitor (bass/mid/treb/energy bars)</span></div>
     <div class="help-row"><span class="help-key">G</span><span class="help-desc">audio react mode: SPLIT (shape1=bass, shape2=mid) / UNIFIED (both=bass)</span></div>
+    <div class="help-row"><span class="help-key">X</span><span class="help-desc">toggle on-screen touch controls (auto-shows on phones)</span></div>
     <div class="help-row"><span class="help-key">T</span><span class="help-desc">toggle title attribution</span></div>
     <h3>Shape Pool</h3>
     <div class="help-row"><span class="help-key">Shift+Click shape</span><span class="help-desc">toggle shape in auto/chaos pool</span></div>
@@ -2189,6 +2220,78 @@ function toggleAudioMonitor() {
   document.getElementById('audio-monitor').style.display = audioMonitorVisible ? 'flex' : 'none';
 }
 
+// Touch control bar — on-screen buttons for keyboard shortcuts
+let touchBarVisible = false;
+const TOUCH_BUTTONS = [
+  { label: 'R', tip: 'Random', fn: () => { randomize(); if (dualIdx > 0) randomizeWave2(); } },
+  { label: 'A', tip: 'Auto', fn: () => toggleAutoRandom(), isActive: () => autoRandomInterval !== null },
+  { label: 'C', tip: 'Chaos', fn: () => toggleChaos(), isActive: () => chaosEnabled },
+  { label: 'D', tip: 'Dual', fn: () => cycleDual() },
+  { label: 'E', tip: 'Edit W2', fn: () => toggleWave2Edit(), isActive: () => editingWave2 },
+  { label: 'W', tip: 'Warp', fn: () => cycleWarpMode() },
+  { label: 'P', tip: 'Pattern', fn: () => cyclePattern() },
+  { label: 'B', tip: 'Blend', fn: () => cycleBlend() },
+  { label: 'G', tip: 'Audio', fn: () => toggleAudioReactMode() },
+  { label: 'Q', tip: 'Quality', fn: () => cycleQuality() },
+  { label: 'M', tip: 'Mic', fn: () => toggleMic() },
+  { label: 'S', tip: 'Monitor', fn: () => toggleAudioMonitor() },
+  { label: 'F', tip: 'Full', fn: () => goFullscreen() },
+  { label: 'H', tip: 'HUD', fn: () => { document.getElementById('hud').style.display = document.getElementById('hud').style.display === 'none' ? '' : 'none'; } },
+  { label: '?', tip: 'Help', fn: () => document.getElementById('help-overlay').classList.add('show') },
+];
+
+function buildTouchBar() {
+  const container = document.getElementById('touch-btns');
+  container.innerHTML = '';
+  for (const b of TOUCH_BUTTONS) {
+    const btn = document.createElement('button');
+    btn.className = 'tb';
+    btn.textContent = b.label;
+    btn.title = b.tip;
+    btn.setAttribute('data-label', b.label);
+    btn.addEventListener('click', (e) => { e.stopPropagation(); b.fn(); updateTouchBarStates(); });
+    container.appendChild(btn);
+  }
+}
+
+function updateTouchBarStates() {
+  if (!touchBarVisible) return;
+  for (const b of TOUCH_BUTTONS) {
+    if (!b.isActive) continue;
+    const btn = document.querySelector(`.tb[data-label="${b.label}"]`);
+    if (btn) btn.classList.toggle('active', b.isActive());
+  }
+}
+
+function toggleTouchBar() {
+  touchBarVisible = !touchBarVisible;
+  const bar = document.getElementById('touch-bar');
+  bar.classList.toggle('show', touchBarVisible);
+  // Shift audio monitor right to make room
+  const mon = document.getElementById('audio-monitor');
+  if (touchBarVisible) {
+    updateTouchBarStates();
+  }
+}
+
+buildTouchBar();
+
+// Double-tap canvas to toggle touch bar
+let lastTapTime = 0;
+document.getElementById('c').addEventListener('touchend', (e) => {
+  const now = Date.now();
+  if (now - lastTapTime < 300) {
+    e.preventDefault();
+    toggleTouchBar();
+  }
+  lastTapTime = now;
+});
+
+// Auto-show on touch devices
+if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
+  toggleTouchBar();
+}
+
 // Auto-gain: tracks recent peaks per band, normalizes to full 0–1 range
 const agc = {
   peakBass: 0.01, peakMid: 0.01, peakTreb: 0.01,
@@ -3212,7 +3315,7 @@ function render() {
 
   // FPS
   frameCount++;
-  if(now-lastFpsTime>500){fps=Math.round(frameCount/((now-lastFpsTime)/1000));frameCount=0;lastFpsTime=now;}
+  if(now-lastFpsTime>500){fps=Math.round(frameCount/((now-lastFpsTime)/1000));frameCount=0;lastFpsTime=now;updateTouchBarStates();}
   const trans = transitionTarget ? ' <span class="d">|</span> ~' : '';
   const autoTag = autoRandomInterval ? ' <span class="d">|</span> AUTO' : '';
   const chaosTag = chaosEnabled ? ' <span class="d">|</span> CHAOS' : '';
@@ -3876,6 +3979,7 @@ document.addEventListener('keydown', e => {
     case 'b': cycleBlend(); break;
     case 'q': cycleQuality(); break;
     case 'h': document.getElementById('hud').style.display = document.getElementById('hud').style.display === 'none' ? '' : 'none'; break;
+    case 'x': toggleTouchBar(); break;
     case 's': toggleAudioMonitor(); break;
     case 'g': toggleAudioReactMode(); break;
     case 't': toggleAttribution(); break;
