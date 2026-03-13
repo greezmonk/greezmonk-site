@@ -2133,6 +2133,16 @@ function buildAudioMonitor() {
     wrap.appendChild(outer); wrap.appendChild(lbl);
     mon.appendChild(wrap);
   }
+  // Mode label
+  const modeLabel = document.createElement('div');
+  modeLabel.id = 'am-mode';
+  modeLabel.style.cssText = 'writing-mode:vertical-lr;text-orientation:mixed;font:bold 8px "Courier New",monospace;color:var(--accent);letter-spacing:1px;margin-left:2px;display:flex;align-items:center;';
+  modeLabel.textContent = audioReactMode === 'split' ? 'S' : 'U';
+  mon.appendChild(modeLabel);
+}
+function updateAudioModeLabel() {
+  const el = document.getElementById('am-mode');
+  if (el) { el.textContent = audioReactMode === 'split' ? 'S' : 'U'; el.style.color = audioReactMode === 'split' ? 'var(--accent)' : 'var(--dim)'; }
 }
 buildAudioMonitor();
 
@@ -2202,9 +2212,9 @@ function getAudio(t) {
 let audioReactMode = 'split';
 function toggleAudioReactMode() {
   audioReactMode = audioReactMode === 'split' ? 'unified' : 'split';
-  const label = audioReactMode === 'split' ? 'SPLIT' : 'UNIFIED';
   const btn = document.getElementById('btn-audio-react');
-  if (btn) { btn.textContent = label; btn.style.color = audioReactMode === 'split' ? 'var(--accent)' : 'var(--dim)'; }
+  if (btn) { btn.textContent = audioReactMode === 'split' ? 'SPLIT' : 'UNIFIED'; btn.style.color = audioReactMode === 'split' ? 'var(--accent)' : 'var(--dim)'; }
+  updateAudioModeLabel();
 }
 
 const scalePulse = { w1: 0, w2: 0 };
