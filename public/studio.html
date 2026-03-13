@@ -170,7 +170,7 @@
       scroll-snap-align: start; position: relative; overflow: hidden;
       background: #000;
     }
-    #preview-wrap canvas { width: 100%; height: 100%; display: block; }
+    #preview-wrap canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
     #sidebar {
       flex: 0 0 100vw; width: 100vw; height: calc(100dvh - 40px);
       scroll-snap-align: start; overflow-y: auto; border-right: none;
@@ -1348,7 +1348,17 @@ function pasteConfig() {
 const canvas = document.getElementById('c');
 const gl = canvas.getContext('webgl2', { alpha: false, antialias: false, powerPreference: 'high-performance' });
 if (!gl) { document.body.innerHTML = '<p style="color:#f0a500;font:20px monospace;padding:40px">WebGL2 required</p>'; throw 'no gl'; }
-const useFloat = !!gl.getExtension('EXT_color_buffer_float');
+let useFloat = !!gl.getExtension('EXT_color_buffer_float');
+// Probe: actually test float FB rendering (some mobile GPUs lie about support)
+if (useFloat) {
+  const pt = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, pt);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, 2, 2, 0, gl.RGBA, gl.FLOAT, null);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  const pf = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, pf);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, pt, 0);
+  if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) useFloat = false;
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.deleteFramebuffer(pf); gl.deleteTexture(pt);
+}
 
 // Auto-hide cursor after 2s of no movement
 let cursorTimer = null;
@@ -2048,14 +2058,21 @@ let compFB,compTex;
 
 function mkFB(w,h,wrap) {
   const t=gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D,t);
-  useFloat ? gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA16F,w,h,0,gl.RGBA,gl.FLOAT,null)
-           : gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA8,w,h,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
+  if (useFloat) gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA16F,w,h,0,gl.RGBA,gl.FLOAT,null);
+  else gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA8,w,h,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
   gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
   gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
   gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S, wrap||gl.REPEAT);
   gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T, wrap||gl.REPEAT);
   const f=gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER,f);
   gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,t,0);
+  // Check framebuffer completeness — mobile GPUs often claim float support but fail
+  const status = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
+  if (status !== gl.FRAMEBUFFER_COMPLETE && useFloat) {
+    useFloat = false;
+    gl.deleteTexture(t); gl.deleteFramebuffer(f);
+    return mkFB(w, h, wrap); // retry with UNSIGNED_BYTE
+  }
   return {fb:f,tex:t};
 }
 
@@ -2074,7 +2091,7 @@ function initFBs() {
   if (cw < 2 || ch < 2) { cw = window.innerWidth; ch = window.innerHeight - 40; }
   const newW = Math.max(2, Math.floor(cw * dpr));
   const newH = Math.max(2, Math.floor(ch * dpr));
-  if (newW === canvas.width && newH === canvas.height) return; // no change
+  if (newW === canvas.width && newH === canvas.height && texA) return; // no change + FBs exist
   canvas.width = newW;
   canvas.height = newH;
   fbW=canvas.width; fbH=canvas.height;
@@ -3388,7 +3405,8 @@ function render() {
   const qTag = ` <span class="d">|</span> ${QUALITY_MODES[qualityIdx].name}`;
   const patTag = state.wave_pattern > 0 ? ` <span class="d">|</span> ${PATTERN_NAMES[state.wave_pattern].toUpperCase()}` : '';
   const blendTag = state.wave_blend > 0 ? ` <span class="d">|</span> ${BLEND_NAMES[state.wave_blend].toUpperCase()}` : '';
-  document.getElementById('hud').innerHTML=`${fps} <span class="d">fps</span> ${useMic?'<span class="d">|</span> MIC':''}${trans}${autoTag}${chaosTag}${libTag}${dualTag}${warpTag}${patTag}${blendTag}${qTag}`;
+  const mobileDbg = window.innerWidth < 769 ? ` <span class="d">|</span> ${canvas.width}x${canvas.height} ${useFloat?'F':'U'}` : '';
+  document.getElementById('hud').innerHTML=`${fps} <span class="d">fps</span> ${useMic?'<span class="d">|</span> MIC':''}${trans}${autoTag}${chaosTag}${libTag}${dualTag}${warpTag}${patTag}${blendTag}${qTag}${mobileDbg}`;
 
   requestAnimationFrame(render);
 }
