@@ -483,7 +483,7 @@ const DEFAULTS = {
   wave_r2: 1, wave_g2: 0, wave_b2: 0, wave_gradient: 0,
   wave_pattern: 0, wave_pattern_speed: 1, wave_blend: 1,
   bloom_strength: 0.3, bloom_threshold: 0.4,
-  audio_bass_gain: 1.74, audio_mid_gain: 1, audio_treb_gain: 1, audio_trigger: 0.45,
+  audio_bass_gain: 1.54, audio_mid_gain: 1.67, audio_treb_gain: 1.99, audio_trigger: 0.45,
   transition_speed: 0.003, auto_interval: 5,
 };
 
@@ -2239,10 +2239,12 @@ function toggleAudioReactMode() {
 
 const scalePulse = { w1: 0, w2: 0 };
 const wiggle = { w1x: 0, w1y: 0, w2x: 0, w2y: 0 };
+let w2MidRotation = 0; // accumulated rotation for wave2 driven by mid
 function updateScalePulse(audio) {
   if (audioReactMode === 'unified') {
     scalePulse.w1 = 0; scalePulse.w2 = 0;
     wiggle.w1x = 0; wiggle.w1y = 0; wiggle.w2x = 0; wiggle.w2y = 0;
+    w2MidRotation = 0;
     return;
   }
   const attack = 0.5, release = 0.88;
@@ -2255,7 +2257,7 @@ function updateScalePulse(audio) {
     wiggle.w1y += (Math.random() - 0.5) * audio.bass * 0.012;
   }
   wiggle.w1x *= wigDecay; wiggle.w1y *= wigDecay;
-  // Wave 2 driven by mid — scale swell + wiggle
+  // Wave 2 driven by mid — scale swell + wiggle + rotation
   const target2 = audio.mid > 0.35 ? (audio.mid - 0.35) * 0.4 : 0;
   scalePulse.w2 = target2 > scalePulse.w2 ? scalePulse.w2 + (target2 - scalePulse.w2) * attack : scalePulse.w2 * release;
   if (audio.mid > 0.4) {
@@ -2263,6 +2265,8 @@ function updateScalePulse(audio) {
     wiggle.w2y += (Math.random() - 0.5) * audio.mid * 0.008;
   }
   wiggle.w2x *= wigDecay; wiggle.w2y *= wigDecay;
+  // Mid drives wave2 rotation — spins faster with mid energy
+  w2MidRotation += audio.mid * 0.015;
 }
 
 // Bass peak detector — explosion on overflow
@@ -3085,12 +3089,13 @@ function render() {
     const isCombine = DUAL_MODES[dualIdx].name === 'COMBINE';
     if (isIndependent) {
       state.wave_mode = wave2.mode;
-      state.wave_mystery = wave2.mystery;
+      state.wave_mystery = wave2.mystery + (audioReactMode === 'split' ? w2MidRotation : 0);
       state.wave_scale = wave2.scale * (1 + scalePulse.w2 + bassPeak.energy * 0.4);
       state.wave_x = (isCombine ? state.wave_x : wave2.x) + wiggle.w2x;
       state.wave_y = (isCombine ? state.wave_y : wave2.y) + wiggle.w2y;
     } else {
       state.wave_mode = getSecondMode();
+      state.wave_mystery = state.wave_mystery + (audioReactMode === 'split' ? w2MidRotation : 0);
       state.wave_scale = state.wave_scale * (1 + scalePulse.w2 + bassPeak.energy * 0.4);
     }
     const wv2 = buildWaveVerts(wave, aspect);
