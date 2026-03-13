@@ -2135,6 +2135,20 @@ function buildAudioMonitor() {
     wrap.appendChild(outer); wrap.appendChild(lbl);
     mon.appendChild(wrap);
   }
+  // Peak overflow bar — left side
+  const peakWrap = document.createElement('div'); peakWrap.className = 'am-bar-wrap';
+  peakWrap.style.order = '-1'; // push to left
+  const peakOuter = document.createElement('div'); peakOuter.className = 'am-bar-outer';
+  peakOuter.style.width = '4px';
+  const peakFill = document.createElement('div'); peakFill.className = 'am-bar-fill';
+  peakFill.id = 'am-peak'; peakFill.style.background = '#f2a';
+  peakFill.style.boxShadow = '0 0 6px #f2a';
+  peakOuter.appendChild(peakFill);
+  const peakLbl = document.createElement('div'); peakLbl.className = 'am-bar-label';
+  peakLbl.textContent = 'PK'; peakLbl.style.color = '#f2a';
+  peakWrap.appendChild(peakOuter); peakWrap.appendChild(peakLbl);
+  mon.insertBefore(peakWrap, mon.firstChild);
+
   // Mode label
   const modeLabel = document.createElement('div');
   modeLabel.id = 'am-mode';
@@ -2162,6 +2176,12 @@ function updateAudioMonitor(audio) {
   document.getElementById('am-mid-thr').style.bottom = (thr * 100) + '%';
   document.getElementById('am-treb-thr').style.bottom = (thr * 100) + '%';
   document.getElementById('am-energy-thr').style.display = 'none';
+  // Peak overflow bar
+  const pkEl = document.getElementById('am-peak');
+  if (pkEl) {
+    pkEl.style.height = (bassPeak.energy * 100) + '%';
+    pkEl.style.boxShadow = bassPeak.flash > 0.1 ? '0 0 ' + (8 + bassPeak.flash * 12) + 'px #f2a' : '0 0 6px #f2a';
+  }
 }
 
 function toggleAudioMonitor() {
@@ -2243,6 +2263,21 @@ function updateScalePulse(audio) {
     wiggle.w2y += (Math.random() - 0.5) * audio.mid * 0.008;
   }
   wiggle.w2x *= wigDecay; wiggle.w2y *= wigDecay;
+}
+
+// Bass peak detector — explosion on overflow
+const bassPeak = { energy: 0, flash: 0, threshold: 0.85 };
+function updateBassPeak(audio) {
+  const decay = 0.92;
+  if (audio.bass > bassPeak.threshold) {
+    const overflow = (audio.bass - bassPeak.threshold) / (1 - bassPeak.threshold);
+    bassPeak.energy = Math.max(bassPeak.energy, overflow);
+    bassPeak.flash = 1;
+  }
+  bassPeak.energy *= decay;
+  bassPeak.flash *= 0.88;
+  if (bassPeak.energy < 0.005) bassPeak.energy = 0;
+  if (bassPeak.flash < 0.01) bassPeak.flash = 0;
 }
 
 let prevWave = null; // temporal smoothing buffer
@@ -2898,6 +2933,7 @@ function render() {
   const w=canvas.width, h=canvas.height, aspect=w/h;
   const audio=getAudio(t);
   updateScalePulse(audio);
+  updateBassPeak(audio);
   updateAudioMonitor(audio);
   stepChaos(audio);
   const wave=getWave(t);
@@ -2946,7 +2982,8 @@ function render() {
   let waveDriver = audio.bass; // default to bass, swapped for wave2
   function getLineWidth(driver) {
     const punch = driver > 0.6 ? (driver - 0.6) * 0.025 : 0;
-    return 0.008 + driver * 0.006 + punch;
+    const peakBoost = bassPeak.energy * 0.015;
+    return 0.008 + driver * 0.006 + punch + peakBoost;
   }
 
   // Helper: draw a wave shape (thick line or dots), with multi-stroke + gradient + pattern support
@@ -3012,7 +3049,7 @@ function render() {
   waveDriver = audio.bass;
   const savedScale1 = state.wave_scale;
   const savedX1 = state.wave_x, savedY1 = state.wave_y;
-  state.wave_scale = state.wave_scale * (1 + scalePulse.w1);
+  state.wave_scale = state.wave_scale * (1 + scalePulse.w1 + bassPeak.energy * 0.6);
   state.wave_x += wiggle.w1x;
   state.wave_y += wiggle.w1y;
 
@@ -3049,12 +3086,12 @@ function render() {
     if (isIndependent) {
       state.wave_mode = wave2.mode;
       state.wave_mystery = wave2.mystery;
-      state.wave_scale = wave2.scale * (1 + scalePulse.w2);
+      state.wave_scale = wave2.scale * (1 + scalePulse.w2 + bassPeak.energy * 0.4);
       state.wave_x = (isCombine ? state.wave_x : wave2.x) + wiggle.w2x;
       state.wave_y = (isCombine ? state.wave_y : wave2.y) + wiggle.w2y;
     } else {
       state.wave_mode = getSecondMode();
-      state.wave_scale = state.wave_scale * (1 + scalePulse.w2);
+      state.wave_scale = state.wave_scale * (1 + scalePulse.w2 + bassPeak.energy * 0.4);
     }
     const wv2 = buildWaveVerts(wave, aspect);
     state.wave_mode = origMode; state.wave_mystery = origMy;
