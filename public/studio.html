@@ -165,8 +165,22 @@
 
   #output-panel {
     grid-column: 1 / -1; grid-row: 3; background: var(--panel); border-top: 1px dashed var(--border);
-    display: grid; grid-template-columns: 1fr auto; height: 140px; min-height: 100px; max-height: 180px;
+    position: relative;
   }
+  #output-panel.collapsed #panel-body { display: none; }
+  #output-panel.collapsed { height: auto; min-height: 0; max-height: none; }
+  #output-panel:not(.collapsed) { height: 140px; min-height: 100px; max-height: 180px; }
+  #panel-body {
+    display: grid; grid-template-columns: 1fr auto; height: 100%;
+  }
+  #panel-collapse {
+    position: absolute; top: -14px; left: 50%; transform: translateX(-50%);
+    background: var(--panel); border: 1px dashed var(--border); border-bottom: none;
+    padding: 0 10px; cursor: pointer; font-size: 10px; color: var(--dim);
+    border-radius: 4px 4px 0 0; line-height: 14px; z-index: 10;
+  }
+  #panel-collapse:hover { color: var(--accent); }
+  #output-panel.collapsed #panel-collapse { top: -14px; }
   #milk-out {
     font: 10px 'Courier New', monospace; background: var(--bg); color: var(--text);
     border: none; padding: 6px 10px; resize: none; overflow-y: auto; outline: none;
@@ -177,9 +191,27 @@
     background: var(--accent); color: var(--bg); border: none; padding: 7px 14px; border-radius: 2px;
     cursor: pointer; font: bold 11px 'Courier New', monospace; text-transform: uppercase; letter-spacing: 1px;
   }
-  #copy-btn:hover { background: #f0c060; }
+  #copy-btn:hover, #paste-btn:hover { background: #f0c060; }
   #copy-btn.ok { background: #4a8; }
+  #paste-btn {
+    background: var(--border); color: var(--text); border: none; padding: 7px 14px; border-radius: 2px;
+    cursor: pointer; font: bold 11px 'Courier New', monospace; text-transform: uppercase; letter-spacing: 1px;
+  }
+  #paste-btn.ok { background: #4a8; color: var(--bg); }
+  #paste-btn.err { background: #a44; color: var(--bg); }
   #copy-label { font-size: 9px; color: var(--dim); text-transform: uppercase; letter-spacing: 1.5px; }
+
+  #audio-monitor {
+    position: absolute; bottom: 12px; left: 12px; z-index: 50;
+    display: flex; gap: 4px; align-items: flex-end;
+    background: rgba(0,0,0,0.3); border-radius: 4px; padding: 6px 8px;
+    font: 8px 'Courier New', monospace; color: var(--dim);
+  }
+  .am-bar-wrap { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+  .am-bar-outer { width: 10px; height: 50px; background: rgba(255,255,255,0.06); border-radius: 2px; position: relative; overflow: hidden; }
+  .am-bar-fill { position: absolute; bottom: 0; width: 100%; border-radius: 2px; transition: height 0.05s; }
+  .am-bar-label { font-size: 7px; letter-spacing: 0.5px; opacity: 0.6; }
+  .am-thr-line { position: absolute; width: 100%; height: 1px; background: rgba(255,200,50,0.6); pointer-events: none; }
 
   #help-overlay {
     display: none; position: fixed; inset: 0; z-index: 9999;
@@ -212,6 +244,7 @@
       <option value="">-- mic select --</option>
     </select>
     <button id="btn-mic" onclick="toggleMic()" title="Toggle microphone input (M)">mic: off</button>
+    <button id="btn-desktop" onclick="startDesktopAudio()" title="Capture desktop/tab audio — share a tab playing music">desktop</button>
     <button id="btn-fs" onclick="goFullscreen()" title="Enter fullscreen mode (F)">fullscreen</button>
   </div>
   <div class="presets">
@@ -242,6 +275,7 @@
 <div id="preview-wrap">
   <canvas id="c"></canvas>
   <div id="hud">--</div>
+  <div id="audio-monitor" style="display:none;"></div>
   <div id="attribution"></div>
 </div>
 
@@ -269,6 +303,7 @@
     <div class="help-row"><span class="help-key">F</span><span class="help-desc">fullscreen</span></div>
     <div class="help-row"><span class="help-key">M</span><span class="help-desc">toggle microphone</span></div>
     <div class="help-row"><span class="help-key">H</span><span class="help-desc">toggle HUD</span></div>
+    <div class="help-row"><span class="help-key">S</span><span class="help-desc">toggle audio monitor (bass/mid/treb/energy bars)</span></div>
     <div class="help-row"><span class="help-key">T</span><span class="help-desc">toggle title attribution</span></div>
     <h3>Shape Pool</h3>
     <div class="help-row"><span class="help-key">Shift+Click shape</span><span class="help-desc">toggle shape in auto/chaos pool</span></div>
@@ -282,10 +317,14 @@
 </div>
 
 <div id="output-panel">
-  <textarea id="milk-out" readonly rows="7"></textarea>
-  <div id="copy-col">
-    <span id="copy-label">.milk</span>
-    <button id="copy-btn" onclick="copyMilk()">Copy</button>
+  <div id="panel-collapse" onclick="toggleOutputPanel()" title="Collapse/expand config panel">&#x25BC;</div>
+  <div id="panel-body">
+    <textarea id="milk-out" readonly rows="7"></textarea>
+    <div id="copy-col">
+      <span id="copy-label">.milk</span>
+      <button id="copy-btn" onclick="copyMilk()">Copy</button>
+      <button id="paste-btn" onclick="pasteConfig()" title="Paste a JSON config from clipboard">Paste</button>
+    </div>
   </div>
 </div>
 
@@ -1194,6 +1233,37 @@ function copyMilk() {
   });
 }
 
+function toggleOutputPanel() {
+  const panel = document.getElementById('output-panel');
+  const arrow = document.getElementById('panel-collapse');
+  panel.classList.toggle('collapsed');
+  arrow.innerHTML = panel.classList.contains('collapsed') ? '&#x25B2;' : '&#x25BC;';
+}
+
+function pasteConfig() {
+  const btn = document.getElementById('paste-btn');
+  navigator.clipboard.readText().then(text => {
+    try {
+      const cfg = JSON.parse(text);
+      const keys = Object.keys(DEFAULTS);
+      let applied = 0;
+      for (const k of keys) {
+        if (k in cfg) { state[k] = cfg[k]; applied++; }
+      }
+      if (applied === 0) throw new Error('no valid keys');
+      syncUI(); updateMilk();
+      btn.textContent = 'Done!'; btn.classList.add('ok');
+      setTimeout(() => { btn.textContent = 'Paste'; btn.classList.remove('ok'); }, 1500);
+    } catch(e) {
+      btn.textContent = 'Error'; btn.classList.add('err');
+      setTimeout(() => { btn.textContent = 'Paste'; btn.classList.remove('err'); }, 1500);
+    }
+  }).catch(() => {
+    btn.textContent = 'Error'; btn.classList.add('err');
+    setTimeout(() => { btn.textContent = 'Paste'; btn.classList.remove('err'); }, 1500);
+  });
+}
+
 // =====================================================
 // WEBGL ENGINE
 // =====================================================
@@ -1992,13 +2062,98 @@ async function toggleMic() {
     if (currentStream) { currentStream.getTracks().forEach(t => t.stop()); currentStream = null; }
     document.getElementById('btn-mic').textContent = 'mic: off';
     document.getElementById('btn-mic').classList.remove('active');
+    document.getElementById('btn-desktop').classList.remove('active');
     return;
   }
   await startMic(selectedDeviceId || '');
 }
 
-// Populate mic list on load
-populateMicList();
+async function startDesktopAudio() {
+  // Use getDisplayMedia to capture tab/screen audio
+  if (!audioCtx) {
+    audioCtx = new AudioContext(); analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 1024; analyser.smoothingTimeConstant = 0.8;
+    audioTime = new Uint8Array(analyser.fftSize);
+    audioFreq = new Uint8Array(analyser.frequencyBinCount);
+  }
+  if (currentStream) { currentStream.getTracks().forEach(t => t.stop()); }
+  try {
+    currentStream = await navigator.mediaDevices.getDisplayMedia({
+      video: true, // required by API, we won't use it
+      audio: true,
+    });
+    // Stop the video track immediately — we only want audio
+    currentStream.getVideoTracks().forEach(t => t.stop());
+    const audioTracks = currentStream.getAudioTracks();
+    if (audioTracks.length === 0) {
+      console.warn('No audio track — make sure to check "Share audio" in the dialog');
+      return;
+    }
+    audioCtx.createMediaStreamSource(currentStream).connect(analyser);
+    useMic = true;
+    document.getElementById('btn-mic').textContent = 'mic: off';
+    document.getElementById('btn-mic').classList.remove('active');
+    document.getElementById('btn-desktop').classList.add('active');
+  } catch(e) { console.warn('Desktop audio denied or not supported', e); }
+}
+
+// Populate mic list on load — prefer Stereo Mix if available
+populateMicList().then(() => {
+  const sel = document.getElementById('mic-select');
+  for (const opt of sel.options) {
+    if (opt.textContent.toLowerCase().includes('stereo mix') || opt.textContent.toLowerCase().includes('what u hear')) {
+      opt.textContent = opt.textContent + ' (system audio)';
+      // Auto-select it as hint but don't start — user still clicks mic
+      break;
+    }
+  }
+});
+
+// Audio monitor overlay
+let audioMonitorVisible = false;
+function buildAudioMonitor() {
+  const mon = document.getElementById('audio-monitor');
+  const bars = [
+    { id: 'am-bass', label: 'BAS', color: '#e44' },
+    { id: 'am-mid',  label: 'MID', color: '#4c4' },
+    { id: 'am-treb', label: 'TRB', color: '#48f' },
+    { id: 'am-energy', label: 'NRG', color: '#fa0' },
+  ];
+  mon.innerHTML = '';
+  for (const b of bars) {
+    const wrap = document.createElement('div'); wrap.className = 'am-bar-wrap';
+    const outer = document.createElement('div'); outer.className = 'am-bar-outer';
+    const fill = document.createElement('div'); fill.className = 'am-bar-fill';
+    fill.id = b.id; fill.style.background = b.color;
+    const thr = document.createElement('div'); thr.className = 'am-thr-line'; thr.id = b.id + '-thr';
+    outer.appendChild(fill); outer.appendChild(thr);
+    const lbl = document.createElement('div'); lbl.className = 'am-bar-label'; lbl.textContent = b.label;
+    wrap.appendChild(outer); wrap.appendChild(lbl);
+    mon.appendChild(wrap);
+  }
+}
+buildAudioMonitor();
+
+function updateAudioMonitor(audio) {
+  if (!audioMonitorVisible) return;
+  const energy = audio.bass * 0.5 + audio.mid * 0.3 + audio.treb * 0.2;
+  document.getElementById('am-bass').style.height = (audio.bass * 100) + '%';
+  document.getElementById('am-mid').style.height = (audio.mid * 100) + '%';
+  document.getElementById('am-treb').style.height = (audio.treb * 100) + '%';
+  document.getElementById('am-energy').style.height = (energy * 100) + '%';
+  // Show trigger threshold line
+  const thr = state.audio_trigger;
+  const thrPct = (1 - thr) * 100;
+  document.getElementById('am-bass-thr').style.bottom = (thr * 100) + '%';
+  document.getElementById('am-mid-thr').style.bottom = (thr * 100) + '%';
+  document.getElementById('am-treb-thr').style.bottom = (thr * 100) + '%';
+  document.getElementById('am-energy-thr').style.display = 'none';
+}
+
+function toggleAudioMonitor() {
+  audioMonitorVisible = !audioMonitorVisible;
+  document.getElementById('audio-monitor').style.display = audioMonitorVisible ? 'flex' : 'none';
+}
 
 function getAudio(t) {
   let bass, mid, treb;
@@ -2677,6 +2832,7 @@ function render() {
   const now=performance.now(), t=(now-startTime)/1000;
   const w=canvas.width, h=canvas.height, aspect=w/h;
   const audio=getAudio(t);
+  updateAudioMonitor(audio);
   stepChaos(audio);
   const wave=getWave(t);
 
@@ -3558,6 +3714,7 @@ document.addEventListener('keydown', e => {
     case 'b': cycleBlend(); break;
     case 'q': cycleQuality(); break;
     case 'h': document.getElementById('hud').style.display = document.getElementById('hud').style.display === 'none' ? '' : 'none'; break;
+    case 's': toggleAudioMonitor(); break;
     case 't': toggleAttribution(); break;
     case ' ': paused=!paused; e.preventDefault(); break;
   }
