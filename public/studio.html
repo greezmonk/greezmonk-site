@@ -2911,13 +2911,19 @@ function randomize() {
     if (target.zoom < 0.85) target.zoom = 0.85;
     if (target.wave_a < 0.2) target.wave_a = 0.8;
     if (target.wave_scale < 0.7) target.wave_scale = 0.7;
-    // Strip post-processing from library presets — without per-frame equations
-    // these just cause retina death and visual noise
-    target.brighten = 0;
-    target.darken = 0;
-    target.solarize = 0;
-    target.invert = 0;
+    // Post-processing: randomize freely (user can deselect what they don't want)
+    target.wave_brighten = Math.random() > 0.8 ? 1 : 0;
+    target.brighten = Math.random() > 0.85 ? 1 : 0;
+    target.darken = Math.random() > 0.85 ? 1 : 0;
+    target.solarize = Math.random() > 0.9 ? 1 : 0;
+    target.invert = Math.random() > 0.85 ? 1 : 0;
     target.gamma = Math.max(0.8, Math.min(1.5, target.gamma || 1));
+    // Blend mode from pool
+    target.wave_blend = getPooledBlend();
+    target.wave_additive = target.wave_blend === 1 ? 1 : 0;
+    // Wave toggles
+    target.wave_dots = Math.random() > 0.7 ? 1 : 0;
+    target.wave_thick = Math.random() > 0.4 ? 1 : 0;
     // Kill harsh borders from Milkdrop presets
     target.ob_a = 0;
     target.ib_a = 0;
@@ -3175,7 +3181,7 @@ function stepChaos(audio) {
   // Treble triggers boolean flips — high treble = more frequent changes
   const flipChance = a.treb > 0.5 ? 300 : 600; // frames between flips
   if (chaosFrameCount % flipChance === 0) {
-    const bools = ['wave_dots','wave_thick'];
+    const bools = ['wave_dots','wave_thick','wave_brighten','brighten','darken','invert','solarize'];
     const pick = bools[Math.floor(Math.random() * bools.length)];
     state[pick] = state[pick] ? 0 : 1;
     // Occasionally shift blend mode
