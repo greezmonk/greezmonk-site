@@ -107,6 +107,8 @@
   .tog[id^="pat-"]:not(.pooled) { opacity: 0.35; }
   .tog[id^="blend-"].pooled { color: var(--text); }
   .tog[id^="blend-"]:not(.pooled) { opacity: 0.35; }
+  .tog.locked { border-color: #555; border-style: dotted; opacity: 0.5; }
+  .tog.locked.on { opacity: 0.8; }
   .wave-toggle { display: flex; gap: 4px; margin-bottom: 6px; }
   .wt-btn {
     flex: 1; padding: 5px 0; text-align: center;
@@ -303,6 +305,11 @@ let wave_mode2 = -1; // -1 = auto-pick
 let shapePool = [];
 let patternPool = [];
 let blendPool = [];
+// Toggle pool: which toggles auto/chaos is allowed to change
+// true = auto/chaos can randomize, false = locked to manual setting
+let togglePool = { wave_dots: true, wave_thick: true, wave_brighten: true, brighten: true, darken: true, solarize: true, invert: true };
+let togglePool2 = { wave_dots: true, wave_thick: true, wave_brighten: true, brighten: true, darken: true, solarize: true, invert: true };
+function activeTogglePool() { return editingWave2 ? togglePool2 : togglePool; }
 // Wave 2 gets its own independent pools
 let shapePool2 = [];
 let patternPool2 = [];
@@ -786,9 +793,29 @@ function mkToggles(keys) {
   const row = document.createElement('div'); row.className = 'toggle-row';
   for (const k of keys) {
     const b = document.createElement('button');
-    b.className = 'tog' + (state[k] ? ' on' : '');
+    const tp = activeTogglePool();
+    const poolable = tp.hasOwnProperty(k);
+    b.className = 'tog' + (state[k] ? ' on' : '') + (poolable && tp[k] ? ' pooled' : '') + (poolable && !tp[k] ? ' locked' : '');
     b.textContent = k.replace('wave_',''); b.id = `t-${k}`;
-    b.onclick = () => { state[k] = state[k] ? 0 : 1; b.classList.toggle('on'); onParamChange(); };
+    b.onclick = (e) => {
+      if (e.shiftKey && poolable) {
+        const p = activeTogglePool();
+        p[k] = !p[k];
+        b.classList.toggle('pooled', p[k]);
+        b.classList.toggle('locked', !p[k]);
+        e.preventDefault();
+        return;
+      }
+      state[k] = state[k] ? 0 : 1; b.classList.toggle('on'); onParamChange();
+    };
+    b.oncontextmenu = (e) => {
+      if (!poolable) return;
+      e.preventDefault();
+      const p = activeTogglePool();
+      p[k] = !p[k];
+      b.classList.toggle('pooled', p[k]);
+      b.classList.toggle('locked', !p[k]);
+    };
     row.appendChild(b);
   }
   d.appendChild(row); return d;
@@ -1005,7 +1032,13 @@ function syncUI() {
       const vl = document.getElementById(`v-${c.key}`);
       if (sl) { sl.value = state[c.key]; vl.textContent = Number(state[c.key]).toFixed(c.step<0.01?3:2); }
     } else if (c.type === 'toggles') {
-      for (const k of c.keys) { const b = document.getElementById(`t-${k}`); if(b) b.className = 'tog'+(state[k]?' on':''); }
+      for (const k of c.keys) {
+        const b = document.getElementById(`t-${k}`);
+        if (!b) continue;
+        const tp = activeTogglePool();
+        const poolable = tp.hasOwnProperty(k);
+        b.className = 'tog' + (state[k] ? ' on' : '') + (poolable && tp[k] ? ' pooled' : '') + (poolable && !tp[k] ? ' locked' : '');
+      }
     } else if (c.type === 'blendcycle') {
       for (let bi = 0; bi < BLEND_NAMES.length; bi++) {
         const bb2 = document.getElementById(`blend-${bi}`);
@@ -2911,19 +2944,19 @@ function randomize() {
     if (target.zoom < 0.85) target.zoom = 0.85;
     if (target.wave_a < 0.2) target.wave_a = 0.8;
     if (target.wave_scale < 0.7) target.wave_scale = 0.7;
-    // Post-processing: randomize freely (user can deselect what they don't want)
-    target.wave_brighten = Math.random() > 0.8 ? 1 : 0;
-    target.brighten = Math.random() > 0.85 ? 1 : 0;
-    target.darken = Math.random() > 0.85 ? 1 : 0;
-    target.solarize = Math.random() > 0.9 ? 1 : 0;
-    target.invert = Math.random() > 0.85 ? 1 : 0;
+    // Post-processing + wave toggles: only randomize if not locked
+    if (togglePool.wave_brighten) target.wave_brighten = Math.random() > 0.8 ? 1 : 0; else target.wave_brighten = state.wave_brighten;
+    if (togglePool.brighten) target.brighten = Math.random() > 0.85 ? 1 : 0; else target.brighten = state.brighten;
+    if (togglePool.darken) target.darken = Math.random() > 0.85 ? 1 : 0; else target.darken = state.darken;
+    if (togglePool.solarize) target.solarize = Math.random() > 0.9 ? 1 : 0; else target.solarize = state.solarize;
+    if (togglePool.invert) target.invert = Math.random() > 0.85 ? 1 : 0; else target.invert = state.invert;
     target.gamma = Math.max(0.8, Math.min(1.5, target.gamma || 1));
     // Blend mode from pool
     target.wave_blend = getPooledBlend();
     target.wave_additive = target.wave_blend === 1 ? 1 : 0;
-    // Wave toggles
-    target.wave_dots = Math.random() > 0.7 ? 1 : 0;
-    target.wave_thick = Math.random() > 0.4 ? 1 : 0;
+    // Wave toggles: only randomize if not locked
+    if (togglePool.wave_dots) target.wave_dots = Math.random() > 0.7 ? 1 : 0; else target.wave_dots = state.wave_dots;
+    if (togglePool.wave_thick) target.wave_thick = Math.random() > 0.4 ? 1 : 0; else target.wave_thick = state.wave_thick;
     // Kill harsh borders from Milkdrop presets
     target.ob_a = 0;
     target.ib_a = 0;
@@ -2985,15 +3018,15 @@ function randomize() {
     target.wave_x = 0.3 + Math.random() * 0.4;
     target.wave_y = 0.3 + Math.random() * 0.4;
     target.wave_mystery = (Math.random() - 0.5) * 2;
-    target.wave_dots = Math.random() > 0.7 ? 1 : 0;
-    target.wave_thick = Math.random() > 0.4 ? 1 : 0;
+    if (togglePool.wave_dots) target.wave_dots = Math.random() > 0.7 ? 1 : 0; else target.wave_dots = state.wave_dots;
+    if (togglePool.wave_thick) target.wave_thick = Math.random() > 0.4 ? 1 : 0; else target.wave_thick = state.wave_thick;
     target.wave_blend = getPooledBlend();
     target.wave_additive = target.wave_blend === 1 ? 1 : 0;
-    target.wave_brighten = Math.random() > 0.8 ? 1 : 0;
-    target.brighten = Math.random() > 0.85 ? 1 : 0;
-    target.invert = Math.random() > 0.85 ? 1 : 0;
-    target.solarize = Math.random() > 0.9 ? 1 : 0;
-    target.darken = Math.random() > 0.85 ? 1 : 0;
+    if (togglePool.wave_brighten) target.wave_brighten = Math.random() > 0.8 ? 1 : 0; else target.wave_brighten = state.wave_brighten;
+    if (togglePool.brighten) target.brighten = Math.random() > 0.85 ? 1 : 0; else target.brighten = state.brighten;
+    if (togglePool.invert) target.invert = Math.random() > 0.85 ? 1 : 0; else target.invert = state.invert;
+    if (togglePool.solarize) target.solarize = Math.random() > 0.9 ? 1 : 0; else target.solarize = state.solarize;
+    if (togglePool.darken) target.darken = Math.random() > 0.85 ? 1 : 0; else target.darken = state.darken;
     target.zoom = 0.85 + Math.random() * 0.25;
     target.rot = (Math.random() - 0.5) * 0.08;
     target.warp = Math.random() * 1.5;
@@ -3181,9 +3214,11 @@ function stepChaos(audio) {
   // Treble triggers boolean flips — high treble = more frequent changes
   const flipChance = a.treb > 0.5 ? 300 : 600; // frames between flips
   if (chaosFrameCount % flipChance === 0) {
-    const bools = ['wave_dots','wave_thick','wave_brighten','brighten','darken','invert','solarize'];
-    const pick = bools[Math.floor(Math.random() * bools.length)];
-    state[pick] = state[pick] ? 0 : 1;
+    const bools = ['wave_dots','wave_thick','wave_brighten','brighten','darken','invert','solarize'].filter(k => togglePool[k]);
+    if (bools.length > 0) {
+      const pick = bools[Math.floor(Math.random() * bools.length)];
+      state[pick] = state[pick] ? 0 : 1;
+    }
     // Occasionally shift blend mode
     if (Math.random() < 0.3) {
       state.wave_blend = getPooledBlend();
@@ -3338,6 +3373,8 @@ function saveStartup() {
     shapePool2: [...shapePool2],
     patternPool2: [...patternPool2],
     blendPool2: [...blendPool2],
+    togglePool: { ...togglePool },
+    togglePool2: { ...togglePool2 },
     dualIdx: dualIdx,
     autoOn: autoRandomInterval !== null,
     chaosOn: chaosEnabled,
@@ -3361,6 +3398,8 @@ function loadStartup() {
     if (config.shapePool2) config.shapePool2.forEach((v, i) => { if (i < shapePool2.length) shapePool2[i] = v; });
     if (config.patternPool2) config.patternPool2.forEach((v, i) => { if (i < patternPool2.length) patternPool2[i] = v; });
     if (config.blendPool2) config.blendPool2.forEach((v, i) => { if (i < blendPool2.length) blendPool2[i] = v; });
+    if (config.togglePool) Object.assign(togglePool, config.togglePool);
+    if (config.togglePool2) Object.assign(togglePool2, config.togglePool2);
     if (config.dualIdx !== undefined) dualIdx = config.dualIdx;
     return config;
   } catch(e) { return false; }
