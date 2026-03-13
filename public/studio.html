@@ -2948,6 +2948,12 @@ function render() {
   else if(currentPresetName==='deep_keel'){const p1=t*.0211,p2=t*.0347,p3=t*.0153,p4=t*.0089;dZ=.9993+.001*Math.sin(p1)+.001*audio.bass;dR=.006*Math.sin(p2)+.004*Math.cos(p4);dCx=.5+.08*Math.sin(p1)+.06*Math.cos(p3);dCy=.5+.1*Math.cos(p2)+.05*Math.sin(p4);dW=.15+.2*Math.sin(p3)+.1*audio.mid;dD=.983+.012*(1-audio.bass*.3);}
   else if(currentPresetName==='metheus'){const p1=t*.0617,p2=t*.0431,p3=t*.0829,p4=t*.0173;dZ=.996+.005*Math.sin(p1)+.004*audio.bass;dR=.015*Math.sin(p2)+.01*audio.mid*Math.sin(p3);dCx=.5+.06*Math.sin(p1)+.04*audio.bass*Math.cos(p3);dCy=.5+.06*Math.cos(p2)+.04*audio.bass*Math.sin(p4);dW=.4+.3*Math.sin(p3)+.25*audio.mid;dD=.96+.025*(1-audio.bass*.5);}
 
+  // Audio-reactive warp: bass intensifies warp, mid adds rotation
+  dW += audio.bass * 0.08 + bassPeak.energy * 0.15;
+  dR += audio.mid * 0.004;
+  // Ambient rotation — nothing ever truly still
+  dR += 0.0008 * Math.sin(t * 0.13) + 0.0005;
+
   // Pass 1: Warp (mesh)
   stepWarpMode();
   gl.bindFramebuffer(gl.FRAMEBUFFER,writeFB); gl.viewport(0,0,w,h);
@@ -2993,6 +2999,10 @@ function render() {
   // Helper: draw a wave shape (thick line or dots), with multi-stroke + gradient + pattern support
   function drawWave(waveData, r, g, b, a, useDots, widthMul, r2, g2, b2, gradient, pattern, patSpeed) {
     const baseWidth = getLineWidth(waveDriver);
+    // Apply color temperature tint
+    const [tr, tg, tb] = tint(r, g, b);
+    const [tr2, tg2, tb2] = tint(r2||r, g2||g, b2||b);
+    r = tr; g = tg; b = tb; r2 = tr2; g2 = tg2; b2 = tb2;
     const verts = waveData.verts || waveData;
     const strokes = waveData.strokes || null;
     if (useDots) {
@@ -3042,6 +3052,16 @@ function render() {
       }
     }
     gl.bindFramebuffer(gl.FRAMEBUFFER, writeFB);
+  }
+
+  // Color temperature: bass warms (toward red/amber), treble cools (toward blue)
+  const warmth = audio.bass * 0.12 - audio.treb * 0.08;
+  function tint(r, g, b) {
+    return [
+      Math.min(1, Math.max(0, r + warmth * 0.5)),
+      Math.min(1, Math.max(0, g + warmth * 0.1)),
+      Math.min(1, Math.max(0, b - warmth * 0.4)),
+    ];
   }
 
   // If transitioning between different wave modes, draw both with alpha crossfade
