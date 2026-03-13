@@ -349,16 +349,16 @@ const wave2 = {
   mode: 8, r: 0.4, g: 0.8, b: 1.0, a: 0.8,
   x: 0.5, y: 0.5, mystery: 0.5, scale: 1.2, dots: 0,
   thick: 1, additive: 1, brighten: 0, smoothing: 0.75,
-  r2: 1, g2: 0, b2: 0, gradient: 0, pattern: 0, patSpeed: 1,
+  r2: 1, g2: 0, b2: 0, gradient: 0, pattern: 0, patSpeed: 1, blend: 1,
 };
 // Wave2 transition system — smooth morph like wave1
 const wave2Target = { mode: 8, r: 0.4, g: 0.8, b: 1.0, a: 0.8, x: 0.5, y: 0.5, mystery: 0.5, scale: 1.2, dots: 0,
-  thick: 1, additive: 1, brighten: 0, smoothing: 0.75, r2: 1, g2: 0, b2: 0, gradient: 0, pattern: 0, patSpeed: 1 };
+  thick: 1, additive: 1, brighten: 0, smoothing: 0.75, r2: 1, g2: 0, b2: 0, gradient: 0, pattern: 0, patSpeed: 1, blend: 1 };
 let wave2Transitioning = false;
 let wave2TransProgress = 0;
 let wave2From = {};
 const WAVE2_LERP_KEYS = ['r','g','b','a','x','y','mystery','scale','smoothing','r2','g2','b2','gradient','patSpeed'];
-const WAVE2_SNAP_KEYS = ['mode','dots','thick','additive','brighten','pattern'];
+const WAVE2_SNAP_KEYS = ['mode','dots','thick','additive','brighten','pattern','blend'];
 
 function randomizeWave2() {
   // Stash current as "from" for lerp
@@ -376,7 +376,8 @@ function randomizeWave2() {
   wave2Target.scale = 0.5 + Math.random() * 2.5;
   wave2Target.dots = Math.random() > 0.8 ? 1 : 0;
   wave2Target.thick = Math.random() > 0.4 ? 1 : 0;
-  wave2Target.additive = Math.random() > 0.4 ? 1 : 0;
+  wave2Target.blend = getPooledBlend(true);
+  wave2Target.additive = wave2Target.blend === 1 ? 1 : 0;
   wave2Target.brighten = 0;
   wave2Target.smoothing = Math.random();
   // Gradient for wave2
@@ -2500,12 +2501,14 @@ function render() {
   }
   gl.enable(gl.BLEND);
   // Blend modes: 0=normal, 1=additive, 2=screen, 3=subtract, 4=multiply
-  const bm = state.wave_blend;
-  if (bm === 1) { gl.blendFunc(gl.SRC_ALPHA, gl.ONE); gl.blendEquation(gl.FUNC_ADD); }
-  else if (bm === 2) { gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_COLOR); gl.blendEquation(gl.FUNC_ADD); } // screen
-  else if (bm === 3) { gl.blendFunc(gl.SRC_ALPHA, gl.ONE); gl.blendEquation(gl.FUNC_REVERSE_SUBTRACT); } // subtract
-  else if (bm === 4) { gl.blendFunc(gl.DST_COLOR, gl.ZERO); gl.blendEquation(gl.FUNC_ADD); } // multiply
-  else { gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); gl.blendEquation(gl.FUNC_ADD); } // normal
+  function setBlendMode(bm) {
+    if (bm === 1) { gl.blendFunc(gl.SRC_ALPHA, gl.ONE); gl.blendEquation(gl.FUNC_ADD); }
+    else if (bm === 2) { gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_COLOR); gl.blendEquation(gl.FUNC_ADD); }
+    else if (bm === 3) { gl.blendFunc(gl.SRC_ALPHA, gl.ONE); gl.blendEquation(gl.FUNC_REVERSE_SUBTRACT); }
+    else if (bm === 4) { gl.blendFunc(gl.DST_COLOR, gl.ZERO); gl.blendEquation(gl.FUNC_ADD); }
+    else { gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); gl.blendEquation(gl.FUNC_ADD); }
+  }
+  setBlendMode(state.wave_blend);
 
   // Base line width in clip space — bass punches width harder
   const bassPunch = audio.bass > 0.6 ? (audio.bass - 0.6) * 0.025 : 0; // extra kick on hard hits
@@ -2605,7 +2608,9 @@ function render() {
     state.wave_mode = origMode; state.wave_mystery = origMy;
     state.wave_scale = origSc; state.wave_x = origX; state.wave_y = origY;
     if (isSplit) {
+      setBlendMode(wave2.blend !== undefined ? wave2.blend : 1);
       drawWave(wv2, wave2.r, wave2.g, wave2.b, wave2.a * dualFade, wave2.dots, 0.8, wave2.r2, wave2.g2, wave2.b2, wave2.gradient, wave2.pattern||0, wave2.patSpeed||1);
+      setBlendMode(state.wave_blend); // restore wave1 blend
     } else {
       drawWave(wv2, state.wave_r, state.wave_g, state.wave_b, state.wave_a * 0.7 * dualFade, state.wave_dots, 0.8, state.wave_r2, state.wave_g2, state.wave_b2, state.wave_gradient, state.wave_pattern, state.wave_pattern_speed);
     }
@@ -3217,8 +3222,16 @@ function stepChaos(audio) {
     wave2.b = Math.max(0.1, Math.min(1, wave2.b));
     // Occasionally change wave2 mode (~every 12 seconds)
     if (chaosFrameCount % 720 === 0 && Math.random() < 0.5) {
-      wave2.mode = getPooledShape();
+      wave2.mode = getPooledShape(undefined, true);
       wave2.dots = Math.random() > 0.8 ? 1 : 0;
+      if (Math.random() < 0.3) {
+        wave2.blend = getPooledBlend(true);
+        wave2.additive = wave2.blend === 1 ? 1 : 0;
+      }
+      if (Math.random() < 0.4) {
+        wave2.pattern = getPooledPattern(true, true);
+        wave2.patSpeed = 0.5 + Math.random() * 3;
+      }
     }
   }
 
