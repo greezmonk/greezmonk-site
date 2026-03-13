@@ -3582,12 +3582,13 @@ function randomize() {
 
 // Keys that should snap (integers/booleans), not lerp
 const SNAP_KEYS = new Set(['wave_mode','wave_dots','wave_thick','wave_additive','wave_brighten','wave_pattern','wave_blend','brighten','darken','solarize','invert']);
+const SKIP_TRANSITION_KEYS = new Set(['audio_bass_gain','audio_mid_gain','audio_treb_gain','audio_trigger','transition_speed','auto_interval']);
 
 function stepTransition() {
   if (!transitionTarget) return;
   transitionProgress += state.transition_speed;
   if (transitionProgress >= 1) {
-    Object.assign(state, transitionTarget);
+    for (const k of Object.keys(transitionTarget)) { if (!SKIP_TRANSITION_KEYS.has(k)) state[k] = transitionTarget[k]; }
     transitionTarget = null; transitionFrom = null;
     syncUI(); updateMilk();
     return;
@@ -3596,6 +3597,7 @@ function stepTransition() {
   const ease = t < 0.5 ? 2*t*t : 1 - Math.pow(-2*t+2, 2)/2; // ease in-out
   for (const k of Object.keys(transitionTarget)) {
     if (k.startsWith('_')) continue;
+    if (SKIP_TRANSITION_KEYS.has(k)) continue;
     if (SNAP_KEYS.has(k)) {
       state[k] = ease > 0.5 ? transitionTarget[k] : (transitionFrom ? transitionFrom[k] : state[k]);
     } else if (typeof transitionTarget[k] === 'number') {
