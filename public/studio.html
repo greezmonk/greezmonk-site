@@ -3819,28 +3819,35 @@ function render() {
     }
   }
 
-  // Ghost Wave 3 (G3) — always draws with multiply/subtract to eat light
+  // Ghost Wave 3 (G3) — shadow scavenger
+  // Always on during invert (eats white-out), 5% random chance otherwise (surprise shadow)
   if (g3Enabled) {
-    // Cycle G3 shape independently using wave1's pool
     const now_g3 = performance.now();
+    // Cycle shape every 4s
     if (now_g3 - g3LastShapeChange > G3_SHAPE_INTERVAL) {
-      g3Shape = getPooledShape('random', false); // uses wave1's shapePool
+      g3Shape = getPooledShape('random', false);
       g3LastShapeChange = now_g3;
+      // 5% chance to draw this cycle when not inverted
+      g3Intensity = Math.random() < 0.05 ? 1 : 0;
     }
 
-    const origMode = state.wave_mode, origMy = state.wave_mystery;
-    const origSc = state.wave_scale;
-    state.wave_mode = g3Shape;
-    state.wave_mystery = (now_g3 * 0.001) + audio.treb * 0.5;
-    state.wave_scale = Math.max(state.wave_scale * (1.1 + audio.bass * 0.2), G3_MIN_SCALE);
-    const wvG3 = buildWaveVerts(wave, aspect);
-    state.wave_mode = origMode; state.wave_mystery = origMy;
-    state.wave_scale = origSc;
+    const shouldDraw = state.invert || g3Intensity > 0;
+    if (shouldDraw) {
+      const origMode = state.wave_mode, origMy = state.wave_mystery;
+      const origSc = state.wave_scale;
+      state.wave_mode = g3Shape;
+      state.wave_mystery = (now_g3 * 0.001) + audio.treb * 0.5;
+      state.wave_scale = Math.max(state.wave_scale * (1.1 + audio.bass * 0.2), G3_MIN_SCALE);
+      const wvG3 = buildWaveVerts(wave, aspect);
+      state.wave_mode = origMode; state.wave_mystery = origMy;
+      state.wave_scale = origSc;
 
-    // Multiply blend — darkens whatever is under the line
-    gl.blendFunc(gl.DST_COLOR, gl.ZERO); gl.blendEquation(gl.FUNC_ADD);
-    drawWave(wvG3, 0.15, 0.05, 0.2, 0.5, false, 1.2, 0.05, 0.02, 0.1, 0, 0, 1);
-    setBlendMode(state.wave_blend);
+      // Multiply blend — darkens whatever is under the line
+      gl.blendFunc(gl.DST_COLOR, gl.ZERO); gl.blendEquation(gl.FUNC_ADD);
+      const g3a = state.invert ? 0.6 : 0.35; // stronger during invert
+      drawWave(wvG3, 0.15, 0.05, 0.2, g3a, false, 1.2, 0.05, 0.02, 0.1, 0, 0, 1);
+      setBlendMode(state.wave_blend);
+    }
   }
 
   // Reset driver to bass for glow pass (wave1's glow)
