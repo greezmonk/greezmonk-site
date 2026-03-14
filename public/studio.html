@@ -3820,7 +3820,7 @@ function render() {
   }
 
   // Ghost Wave 3 (G3) — shadow scavenger
-  // Always on during invert (eats white-out), 5% random chance otherwise (surprise shadow)
+  // Three triggers: invert (always), brightness sensor (white-out), 5% random (surprise)
   if (g3Enabled) {
     const now_g3 = performance.now();
     // Cycle shape every 4s
@@ -3831,7 +3831,14 @@ function render() {
       g3Intensity = Math.random() < 0.05 ? 1 : 0;
     }
 
-    const shouldDraw = state.invert || g3Intensity > 0;
+    // Brightness sensor — sample center pixel
+    const samplePx = new Uint8Array(4);
+    gl.readPixels(Math.floor(w/2), Math.floor(h/2), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, samplePx);
+    const lum = (samplePx[0] * 0.299 + samplePx[1] * 0.587 + samplePx[2] * 0.114) / 255;
+    g3Brightness = g3Brightness * 0.92 + lum * 0.08;
+    const whiteOut = g3Brightness > G3_THRESHOLD;
+
+    const shouldDraw = state.invert || whiteOut || g3Intensity > 0;
     if (shouldDraw) {
       const origMode = state.wave_mode, origMy = state.wave_mystery;
       const origSc = state.wave_scale;
@@ -3844,7 +3851,8 @@ function render() {
 
       // Multiply blend — darkens whatever is under the line
       gl.blendFunc(gl.DST_COLOR, gl.ZERO); gl.blendEquation(gl.FUNC_ADD);
-      const g3a = state.invert ? 0.6 : 0.35; // stronger during invert
+      // Alpha scales with trigger: invert/white-out = strong, random surprise = subtle
+      const g3a = (state.invert || whiteOut) ? 0.5 + g3Brightness * 0.3 : 0.35;
       drawWave(wvG3, 0.15, 0.05, 0.2, g3a, false, 1.2, 0.05, 0.02, 0.1, 0, 0, 1);
       setBlendMode(state.wave_blend);
     }
