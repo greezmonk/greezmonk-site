@@ -3812,7 +3812,7 @@ function randomize() {
     if (togglePool.brighten) target.brighten = Math.random() > 0.85 ? 1 : 0; else target.brighten = state.brighten;
     if (togglePool.darken) target.darken = Math.random() > 0.85 ? 1 : 0; else target.darken = state.darken;
     if (togglePool.solarize) target.solarize = Math.random() > 0.9 ? 1 : 0; else target.solarize = state.solarize;
-    if (togglePool.invert) target.invert = Math.random() > 0.85 ? 1 : 0; else target.invert = state.invert;
+    if (togglePool.invert) target.invert = Math.random() > 0.95 ? 1 : 0; else target.invert = state.invert;
     target.gamma = Math.max(0.8, Math.min(1.5, target.gamma || 1));
     // Blend mode from pool
     target.wave_blend = getPooledBlend();
@@ -3887,7 +3887,7 @@ function randomize() {
     target.wave_additive = target.wave_blend === 1 ? 1 : 0;
     if (togglePool.wave_brighten) target.wave_brighten = Math.random() > 0.8 ? 1 : 0; else target.wave_brighten = state.wave_brighten;
     if (togglePool.brighten) target.brighten = Math.random() > 0.85 ? 1 : 0; else target.brighten = state.brighten;
-    if (togglePool.invert) target.invert = Math.random() > 0.85 ? 1 : 0; else target.invert = state.invert;
+    if (togglePool.invert) target.invert = Math.random() > 0.95 ? 1 : 0; else target.invert = state.invert;
     if (togglePool.solarize) target.solarize = Math.random() > 0.9 ? 1 : 0; else target.solarize = state.solarize;
     if (togglePool.darken) target.darken = Math.random() > 0.85 ? 1 : 0; else target.darken = state.darken;
     target.zoom = 0.85 + Math.random() * 0.25;
