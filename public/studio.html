@@ -872,7 +872,7 @@ const SHAPE_CATEGORIES = [
   { name: 'Metch', shapes: [39,40,41] },
 ];
 const TOTAL_SHAPES = WAVE_NAMES.length;
-const PATTERN_NAMES = ['gradient','rainbow','stripes','pulse','fire','frequency','bounce','christmas','neon','plasma','lightning','ocean','aurora','lava','stardust','morse','fireflies'];
+const PATTERN_NAMES = ['gradient','rainbow','stripes','pulse','fire','frequency','bounce','christmas','neon','plasma','lightning','ocean','aurora','lava','stardust','morse','fireflies','prism','glitch','ember','frost','nebula','toxic','hologram','bloodstream','signal','cascade'];
 const BLEND_NAMES = ['normal','additive','screen','subtract','multiply'];
 const TOTAL_PATTERNS = PATTERN_NAMES.length;
 // Initialize pools — all enabled by default
@@ -1657,7 +1657,7 @@ uniform float u_glow;
 uniform float u_bass;      // 0-1 primary driver energy (bass for shape1, mid for shape2)
 uniform float u_mid;       // 0-1 mid energy for secondary reactive effects
 uniform float u_time;      // seconds since start
-uniform int u_pattern;     // 0-13: gradient, rainbow, stripes, pulse, fire, frequency, bounce, christmas, neon, plasma, lightning, ocean, aurora, lava
+uniform int u_pattern;     // 0-26: gradient, rainbow, stripes, pulse, fire, frequency, bounce, christmas, neon, plasma, lightning, ocean, aurora, lava, stardust, morse, fireflies, prism, glitch, ember, frost, nebula, toxic, hologram, bloodstream, signal, cascade
 uniform float u_patspeed;  // pattern animation speed multiplier
 in float v_edge;
 in float v_t;
@@ -1836,6 +1836,149 @@ vec3 patternColor(float t, float bass, float time) {
     fly *= 1.0 + bass * 1.5; // bass makes them flare
     float hue = fract(t + time * spd * 0.1 + n1 * 0.5);
     return hsv2rgb(vec3(hue, 0.3, 1.0)) * fly;
+  }
+  // 17: Prism — white light splitting into spectral bands, bass spreads them apart
+  if (u_pattern == 17) {
+    float spread = 0.15 + bass * 0.35;
+    float center = fract(time * spd * 0.1);
+    float dist = abs(t - center);
+    float hue = fract(dist / spread);
+    float bright = smoothstep(spread * 1.2, spread * 0.3, dist);
+    float sparkle = 0.8 + 0.2 * sin(t * 80.0 + time * 10.0);
+    return hsv2rgb(vec3(hue, 0.7 + bright * 0.3, bright * sparkle));
+  }
+  // 18: Glitch — digital corruption, channel splits, random block offsets
+  if (u_pattern == 18) {
+    float block = floor(t * 15.0);
+    float tick = floor(time * spd * 6.0);
+    float n = fract(sin(block * 43.7 + tick * 17.3) * 4375.5);
+    float corrupt = step(0.6 - bass * 0.3, n);
+    float shift = (n - 0.5) * 0.4 * corrupt;
+    float r = sin((t + shift * 1.0) * 25.0 + time * 3.0) * 0.5 + 0.5;
+    float g = sin((t + shift * 0.5) * 25.0 + time * 3.7) * 0.5 + 0.5;
+    float b = sin((t - shift * 0.7) * 25.0 + time * 2.3) * 0.5 + 0.5;
+    vec3 clean = mix(c1, c2, t);
+    vec3 broken = vec3(r, g, b) * (1.0 + bass * 0.5);
+    return mix(clean, broken, corrupt * 0.8 + 0.2);
+  }
+  // 19: Ember — mostly dark with traveling bright sparks that flare on bass
+  if (u_pattern == 19) {
+    float n1 = fract(sin(t * 173.7) * 43758.5);
+    float n2 = fract(sin(t * 419.3) * 28461.7);
+    float drift = fract(n1 + time * spd * (0.3 + n2 * 0.7));
+    float spark = pow(max(sin(drift * 6.28318), 0.0), 20.0);
+    spark *= 0.6 + bass * 1.5;
+    float glow = spark * 0.3 * (1.0 - abs(drift - 0.5) * 2.0);
+    vec3 dark = vec3(0.05, 0.01, 0.0);
+    vec3 hot = vec3(1.0, 0.5, 0.05);
+    vec3 white = vec3(1.0, 0.9, 0.7);
+    vec3 col = mix(dark, hot, glow + spark * 0.3);
+    return mix(col, white, spark * 0.5);
+  }
+  // 20: Frost — crystalline ice, sharp jagged whites and pale blues
+  if (u_pattern == 20) {
+    float crystal = fract(sin(t * 500.0 + floor(time * spd * 2.0) * 7.1) * 43758.5);
+    float crack = step(0.85 - bass * 0.15, crystal);
+    float ice = sin(t * 12.0 + sin(t * 30.0) * 0.5 - time * spd * 0.4) * 0.5 + 0.5;
+    ice = ice * ice;
+    float shimmer = sin(t * 200.0 + time * spd * 15.0) * 0.15 * crack;
+    vec3 deep = vec3(0.1, 0.15, 0.3);
+    vec3 ice_blue = vec3(0.5, 0.75, 0.95);
+    vec3 white = vec3(0.9, 0.95, 1.0);
+    vec3 col = mix(deep, ice_blue, ice);
+    col = mix(col, white, crack * (0.7 + shimmer));
+    col += bass * 0.15;
+    return min(col, vec3(1.0));
+  }
+  // 21: Nebula — deep space purples/pinks/blues with star pops on bass
+  if (u_pattern == 21) {
+    float cloud1 = sin(t * 5.0 + time * spd * 0.3) * 0.5 + 0.5;
+    float cloud2 = sin(t * 8.3 - time * spd * 0.5 + 2.0) * 0.5 + 0.5;
+    float cloud = cloud1 * cloud2;
+    float hue = fract(0.75 + cloud * 0.15 + t * 0.05 + time * spd * 0.01);
+    float sat = 0.5 + cloud * 0.4;
+    float val = 0.15 + cloud * 0.5;
+    vec3 col = hsv2rgb(vec3(hue, sat, val));
+    // Star pops
+    float starN = fract(sin(t * 777.7 + floor(time * spd * 4.0) * 33.3) * 43758.5);
+    float star = step(0.93 - bass * 0.12, starN);
+    col += star * vec3(0.8, 0.7, 1.0) * (1.0 + bass);
+    return min(col, vec3(1.0));
+  }
+  // 22: Toxic — acid green with dark pulsing veins
+  if (u_pattern == 22) {
+    float vein1 = sin(t * 15.0 + time * spd * 2.0);
+    float vein2 = sin(t * 23.0 - time * spd * 1.3 + 1.0);
+    float vein = min(abs(vein1), abs(vein2));
+    vein = smoothstep(0.0, 0.3, vein);
+    float pulse = 0.7 + 0.3 * sin(t * 3.0 + time * spd * 1.5);
+    float toxicity = vein * pulse + bass * 0.3;
+    vec3 dark = vec3(0.02, 0.05, 0.0);
+    vec3 acid = vec3(0.3, 1.0, 0.1);
+    vec3 bright = vec3(0.6, 1.0, 0.3);
+    vec3 col = mix(dark, acid, toxicity * 0.8);
+    col = mix(col, bright, bass * bass * 0.6);
+    return col;
+  }
+  // 23: Hologram — iridescent shimmer, cyan/magenta/yellow like tilting a holographic card
+  if (u_pattern == 23) {
+    float angle = t * 6.28318 + time * spd * 0.8;
+    float tilt = sin(angle) * 0.5 + 0.5;
+    float shift = sin(angle * 2.3 + 1.0) * 0.5 + 0.5;
+    float hue = fract(tilt * 0.6 + shift * 0.3 + time * spd * 0.15);
+    float iridescence = abs(sin(t * 40.0 + time * spd * 3.0)) * 0.3;
+    float sat = 0.5 + iridescence + bass * 0.2;
+    float val = 0.6 + tilt * 0.3 + bass * 0.2;
+    vec3 col = hsv2rgb(vec3(hue, sat, val));
+    // Scan line effect
+    float scan = sin(t * 80.0 - time * spd * 5.0) * 0.5 + 0.5;
+    scan = step(0.7, scan) * 0.15;
+    col += scan;
+    return min(col, vec3(1.0));
+  }
+  // 24: Bloodstream — deep crimson with bright traveling cells
+  if (u_pattern == 24) {
+    float flow = fract(t * 3.0 - time * spd * 0.8);
+    float n = fract(sin(t * 311.7) * 43758.5);
+    float cell = fract(n + time * spd * (0.5 + n * 0.5));
+    cell = pow(max(sin(cell * 6.28318), 0.0), 8.0);
+    float pulse = 0.8 + 0.2 * sin(time * spd * 3.0);
+    cell *= pulse + bass * 1.0;
+    vec3 dark = vec3(0.15, 0.0, 0.0);
+    vec3 blood = vec3(0.5, 0.02, 0.02);
+    vec3 bright = vec3(1.0, 0.15, 0.1);
+    vec3 col = mix(dark, blood, flow * 0.6 + 0.3);
+    col = mix(col, bright, cell * 0.7);
+    return col;
+  }
+  // 25: Signal — clean radio sine modulation with noise bursts on bass
+  if (u_pattern == 25) {
+    float carrier = sin(t * 20.0 - time * spd * 2.0) * 0.5 + 0.5;
+    carrier = carrier * carrier;
+    float modulation = sin(t * 3.0 + time * spd * 0.5) * 0.5 + 0.5;
+    float signal = carrier * modulation;
+    // Noise burst on bass hits
+    float noiseT = fract(sin(t * 999.1 + floor(time * spd * 10.0) * 71.7) * 43758.5);
+    float burst = bass * bass * noiseT;
+    signal = mix(signal, signal + burst * 0.8, step(0.5, bass));
+    vec3 col = mix(c1 * 0.2, c2, signal);
+    col += vec3(0.1, 0.3, 0.1) * signal * 0.3; // subtle green monitor tint
+    return min(col, vec3(1.0));
+  }
+  // 26: Cascade — segments of color pouring down, accelerating and pooling
+  if (u_pattern == 26) {
+    float fall = fract(t * 5.0 - time * spd * 1.5);
+    fall = fall * fall; // accelerate — slow at top, fast at bottom
+    float layer1 = sin(fall * 6.28318 * 2.0) * 0.5 + 0.5;
+    float layer2 = sin((t * 8.0 - time * spd * 2.5) * 3.0 + 1.5) * 0.5 + 0.5;
+    float pool = smoothstep(0.7, 1.0, t) * 0.4; // color pools at the end
+    float energy = layer1 * 0.5 + layer2 * 0.5 + pool;
+    energy = clamp(energy + bass * 0.3, 0.0, 1.0);
+    float hue = fract(0.55 + energy * 0.15 + time * spd * 0.03);
+    float sat = 0.6 + energy * 0.3;
+    vec3 col = hsv2rgb(vec3(hue, sat, energy * 0.8 + 0.15));
+    col = mix(col, c1, 0.2); // tint with user color
+    return col;
   }
   return c1; // fallback
 }
