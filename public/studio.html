@@ -1345,18 +1345,7 @@ function pasteConfig() {
 // =====================================================
 // WEBGL ENGINE
 // =====================================================
-// Mobile debug: checkpoint tracker + error catcher
-const _mDbg = [];
-let _mDbgEl = null;
-function mDbg(msg) { _mDbg.push(msg); if (_mDbgEl) _mDbgEl.textContent = _mDbg.join('\n'); }
-window.addEventListener('error', (e) => mDbg(`ERR: ${e.message} @line ${e.lineno}`));
-window.addEventListener('unhandledrejection', (e) => mDbg(`REJECT: ${e.reason}`));
-if (window.innerWidth < 769) {
-  _mDbgEl = document.createElement('div');
-  _mDbgEl.style.cssText = 'position:fixed;top:50px;left:8px;right:8px;z-index:9999;font:10px monospace;color:#0f0;background:rgba(0,0,0,0.85);padding:8px;border-radius:4px;white-space:pre-wrap;pointer-events:none;max-height:50vh;overflow:hidden;';
-  document.body.appendChild(_mDbgEl);
-  mDbg('debug init');
-}
+function mDbg() {} // debug removed
 const canvas = document.getElementById('c');
 const gl = canvas.getContext('webgl2', { alpha: false, antialias: false, powerPreference: 'high-performance' });
 if (!gl) { document.body.innerHTML = '<p style="color:#f0a500;font:20px monospace;padding:40px">WebGL2 required</p>'; throw 'no gl'; }
