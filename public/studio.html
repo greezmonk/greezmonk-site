@@ -872,7 +872,7 @@ const SHAPE_CATEGORIES = [
   { name: 'Metch', shapes: [39,40,41] },
 ];
 const TOTAL_SHAPES = WAVE_NAMES.length;
-const PATTERN_NAMES = ['gradient','rainbow','stripes','pulse','fire','frequency','bounce','christmas','neon','plasma','lightning','ocean','aurora','lava','stardust','morse','fireflies','prism','glitch','ember','frost','nebula','toxic','hologram','bloodstream','signal','cascade'];
+const PATTERN_NAMES = ['gradient','rainbow','stripes','pulse','fire','frequency','bounce','christmas','neon','plasma','lightning','ocean','aurora','lava','stardust','morse','fireflies','prism','glitch','ember','frost','nebula','toxic','hologram','bloodstream','signal','cascade','void','x-ray','shadow','ghost','portal','shatter','breath','eclipse','mirage','phase'];
 const BLEND_NAMES = ['normal','additive','screen','subtract','multiply'];
 const TOTAL_PATTERNS = PATTERN_NAMES.length;
 // Initialize pools — all enabled by default
@@ -1657,8 +1657,10 @@ uniform float u_glow;
 uniform float u_bass;      // 0-1 primary driver energy (bass for shape1, mid for shape2)
 uniform float u_mid;       // 0-1 mid energy for secondary reactive effects
 uniform float u_time;      // seconds since start
-uniform int u_pattern;     // 0-26: gradient, rainbow, stripes, pulse, fire, frequency, bounce, christmas, neon, plasma, lightning, ocean, aurora, lava, stardust, morse, fireflies, prism, glitch, ember, frost, nebula, toxic, hologram, bloodstream, signal, cascade
+uniform int u_pattern;     // 0-36 line color patterns
 uniform float u_patspeed;  // pattern animation speed multiplier
+uniform sampler2D u_bg;    // previous frame for compositing patterns
+uniform vec2 u_resolution; // canvas size in pixels
 in float v_edge;
 in float v_t;
 
@@ -1667,6 +1669,15 @@ vec3 hsv2rgb(vec3 c) {
   vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
   return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
 }
+
+vec3 getBg() {
+  return texture(u_bg, gl_FragCoord.xy / u_resolution).rgb;
+}
+
+// Compositing patterns (27+) set these globals
+float patAlpha = 1.0;    // alpha modifier: 0.0 = invisible, 1.0 = normal
+vec3 patBgMix = vec3(0.0); // background compositing: added to final color in main()
+float patBgBlend = 0.0;    // how much patBgMix replaces normal color (0 = none, 1 = full)
 
 vec3 patternColor(float t, float bass, float time) {
   vec3 c1 = u_col.rgb;
@@ -1980,6 +1991,142 @@ vec3 patternColor(float t, float bass, float time) {
     col = mix(col, c1, 0.2); // tint with user color
     return col;
   }
+  // --- COMPOSITING PATTERNS (27-36) — use getBg(), patAlpha, patBgMix, patBgBlend ---
+
+  // 27: Void — sections of the line breathe in and out of existence
+  if (u_pattern == 27) {
+    float breath = sin(t * 8.0 + time * spd * 1.5) * 0.5 + 0.5;
+    float hole = sin(t * 20.0 - time * spd * 3.0) * 0.5 + 0.5;
+    hole = smoothstep(0.3, 0.7, hole);
+    patAlpha = breath * hole + bass * 0.3;
+    patAlpha = clamp(patAlpha, 0.0, 1.0);
+    float hue = fract(t * 0.5 + time * spd * 0.05);
+    return hsv2rgb(vec3(hue, 0.6, 0.8 + bass * 0.2));
+  }
+  // 28: X-Ray — inverts the background behind the line, negative film effect
+  if (u_pattern == 28) {
+    vec3 bg = getBg();
+    vec3 inverted = 1.0 - bg;
+    float edge = sin(t * 12.0 - time * spd * 1.0) * 0.5 + 0.5;
+    float strength = 0.7 + bass * 0.3;
+    patBgMix = mix(inverted, inverted * vec3(0.7, 0.85, 1.0), 0.3); // cool tint
+    patBgBlend = strength * edge;
+    return mix(c1, vec3(0.8, 0.9, 1.0), edge * 0.5);
+  }
+  // 29: Shadow — darkens/multiplies whatever is behind the line
+  if (u_pattern == 29) {
+    vec3 bg = getBg();
+    float wave = sin(t * 6.0 + time * spd * 0.8) * 0.5 + 0.5;
+    float depth = 0.3 + wave * 0.5 + bass * 0.2;
+    patBgMix = bg * (1.0 - depth * 0.7); // darken the background
+    patBgBlend = 0.6 + wave * 0.3;
+    return vec3(0.0); // line itself is dark
+  }
+  // 30: Ghost — fading translucent with background showing through
+  if (u_pattern == 30) {
+    vec3 bg = getBg();
+    float phase = sin(t * 4.0 + time * spd * 0.6) * 0.5 + 0.5;
+    float flicker = fract(sin(t * 77.7 + floor(time * spd * 8.0) * 13.1) * 43758.5);
+    patAlpha = phase * 0.6 + 0.1;
+    patAlpha *= 1.0 - step(0.92, flicker) * 0.5; // random flicker holes
+    patAlpha = clamp(patAlpha + bass * 0.2, 0.0, 1.0);
+    vec3 ghostCol = mix(c1, vec3(1.0), 0.4); // washed out
+    patBgMix = mix(bg, ghostCol, 0.3);
+    patBgBlend = (1.0 - phase) * 0.4;
+    return ghostCol;
+  }
+  // 31: Portal — sections invert bg, sections normal, dimensional rift
+  if (u_pattern == 31) {
+    vec3 bg = getBg();
+    float rift = sin(t * 10.0 + time * spd * 1.5);
+    float isPortal = step(0.0, rift); // half inverted, half normal
+    float edge_glow = 1.0 - abs(rift); // bright at the boundary
+    edge_glow = pow(edge_glow, 4.0) * (1.5 + bass * 2.0);
+    vec3 normal = mix(c1, c2, t);
+    vec3 inverted = 1.0 - bg;
+    patBgMix = inverted;
+    patBgBlend = isPortal * 0.8;
+    vec3 col = mix(normal, vec3(0.5, 0.2, 1.0), isPortal * 0.5); // purple in portal zones
+    col += edge_glow * vec3(0.3, 0.1, 0.8); // purple edge glow
+    return min(col, vec3(1.0));
+  }
+  // 32: Shatter — fragments break away with alpha holes, bg inversion on edges
+  if (u_pattern == 32) {
+    vec3 bg = getBg();
+    float block = floor(t * 20.0);
+    float tick = floor(time * spd * 3.0);
+    float n = fract(sin(block * 127.1 + tick * 311.7) * 43758.5);
+    float shattered = step(0.5 - bass * 0.3, n); // more shatters on bass
+    float fragPos = fract(sin(block * 43.7) * 7291.3);
+    patAlpha = mix(1.0, fragPos, shattered * 0.8);
+    // Invert bg at shard edges
+    float edge_zone = abs(fract(t * 20.0) - 0.5) * 2.0;
+    float atEdge = 1.0 - smoothstep(0.0, 0.15, edge_zone);
+    patBgMix = (1.0 - bg) * vec3(1.0, 0.7, 0.5); // warm invert
+    patBgBlend = atEdge * shattered * 0.7;
+    vec3 col = mix(c1, c2, fragPos);
+    col *= 0.5 + shattered * 0.8;
+    return col;
+  }
+  // 33: Breath — whole line slowly breathes alpha, deep inhale/exhale
+  if (u_pattern == 33) {
+    float inhale = sin(time * spd * 0.5) * 0.5 + 0.5; // slow 2s cycle
+    float wave = sin(t * 3.0 + time * spd * 0.3) * 0.3;
+    patAlpha = inhale + wave + bass * 0.3;
+    patAlpha = clamp(patAlpha * 0.8 + 0.1, 0.05, 1.0); // never fully gone
+    // Color shifts with breath — warm on inhale, cool on exhale
+    float hue = fract(0.05 + inhale * 0.15 - (1.0 - inhale) * 0.1);
+    float sat = 0.6 + inhale * 0.3;
+    float val = 0.5 + inhale * 0.5;
+    return hsv2rgb(vec3(hue, sat, val));
+  }
+  // 34: Eclipse — dark core subtracts from bg, bright corona around it
+  if (u_pattern == 34) {
+    vec3 bg = getBg();
+    float center = fract(time * spd * 0.08); // slowly drifts along line
+    float dist = abs(t - center);
+    float core = 1.0 - smoothstep(0.0, 0.1 + bass * 0.05, dist);
+    float corona = smoothstep(0.05, 0.15 + bass * 0.1, dist) * (1.0 - smoothstep(0.15, 0.35, dist));
+    corona = corona * (1.5 + bass * 2.0);
+    // Core subtracts from background
+    patBgMix = bg * (1.0 - core * 0.9); // darken to near-black
+    patBgBlend = core * 0.8;
+    // Corona is bright hot
+    vec3 hot = vec3(1.0, 0.6, 0.1) * corona;
+    vec3 rim = vec3(1.0, 0.3, 0.05) * core * 0.3;
+    return min(hot + rim, vec3(1.0));
+  }
+  // 35: Mirage — samples bg at offset position, creates heat-shimmer distortion
+  if (u_pattern == 35) {
+    float wobble = sin(t * 30.0 + time * spd * 4.0) * (0.005 + bass * 0.01);
+    float drift = sin(t * 8.0 - time * spd * 1.0) * 0.003;
+    vec2 uv = gl_FragCoord.xy / u_resolution;
+    vec3 shifted = texture(u_bg, uv + vec2(wobble, drift)).rgb;
+    vec3 bg = getBg();
+    float shimmer = abs(sin(t * 50.0 + time * spd * 6.0)) * 0.3;
+    patBgMix = shifted + shimmer * vec3(0.2, 0.15, 0.05); // warm shimmer
+    patBgBlend = 0.7 + bass * 0.2;
+    patAlpha = 0.8 + shimmer * 0.5;
+    return mix(c1, vec3(1.0, 0.95, 0.8), shimmer);
+  }
+  // 36: Phase — alternates between additive bright and subtractive dark sections
+  if (u_pattern == 36) {
+    vec3 bg = getBg();
+    float zone = sin(t * 8.0 - time * spd * 1.5);
+    float isAdd = step(0.0, zone); // positive = additive, negative = subtractive
+    float intensity = abs(zone);
+    intensity = intensity * (0.7 + bass * 0.5);
+    // Additive: bright glow
+    vec3 addCol = mix(c1, c2, t) * (1.0 + intensity);
+    // Subtractive: darken background
+    vec3 subCol = bg * (1.0 - intensity * 0.6);
+    patBgMix = subCol;
+    patBgBlend = (1.0 - isAdd) * 0.7;
+    vec3 col = mix(vec3(0.0), addCol, isAdd);
+    col += (1.0 - isAdd) * c1 * 0.2; // subtle color in dark zones
+    return min(col, vec3(1.0));
+  }
+
   return c1; // fallback
 }
 
@@ -1989,7 +2136,15 @@ void main() {
   float glow = 1.0 - smoothstep(0.1, 1.0, d);
   float alpha = core + glow * u_glow * 0.6;
   alpha = clamp(alpha, 0.0, 1.0);
+  // Reset compositing globals before pattern call
+  patAlpha = 1.0; patBgMix = vec3(0.0); patBgBlend = 0.0;
   vec3 baseCol = patternColor(v_t, u_bass, u_time);
+  // Apply pattern alpha modifier
+  alpha *= patAlpha;
+  // Apply background compositing
+  if (patBgBlend > 0.0) {
+    baseCol = mix(baseCol, patBgMix, patBgBlend);
+  }
   // Bass boosts brightness — kept subtle to prevent white-out accumulation
   float bassBright = 1.0 + u_bass * 0.25;
   float brightness = mix(bassBright, 0.6, d * d);
@@ -2075,7 +2230,7 @@ const bloomBlendP = mkProg(QUAD_VS, BLOOM_BLEND_FS);
 function uL(p,n) { return gl.getUniformLocation(p,n); }
 const wU={}; ['u_prev','u_time','u_zoom','u_rot','u_warp','u_cx','u_cy','u_dx','u_dy','u_sx','u_sy','u_decay','u_warp_mode','u_warp_blend'].forEach(n=>wU[n]=uL(warpP,n));
 const cU={}; ['u_tex','u_gamma','u_darken','u_brighten','u_solarize','u_invert','u_obSize','u_obCol'].forEach(n=>cU[n]=uL(compP,n));
-const vU={}; ['u_col','u_col2','u_gradient','u_width','u_glow','u_bass','u_mid','u_time','u_pattern','u_patspeed'].forEach(n=>vU[n]=uL(waveP,n));
+const vU={}; ['u_col','u_col2','u_gradient','u_width','u_glow','u_bass','u_mid','u_time','u_pattern','u_patspeed','u_bg','u_resolution'].forEach(n=>vU[n]=uL(waveP,n));
 const vUL={}; ['u_col'].forEach(n=>vUL[n]=uL(waveLegacyP,n));
 const beU={}; ['u_tex','u_threshold'].forEach(n=>beU[n]=uL(bloomExtP,n));
 const bbU={}; ['u_tex','u_dir'].forEach(n=>bbU[n]=uL(bloomBlurP,n));
@@ -3517,6 +3672,11 @@ function render() {
       gl.uniform1f(vU.u_time, t);
       gl.uniform1i(vU.u_pattern, pattern||0);
       gl.uniform1f(vU.u_patspeed, patSpeed!==undefined?patSpeed:1);
+      // Bind previous frame for compositing patterns
+      gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, readTex);
+      gl.uniform1i(vU.u_bg, 1);
+      gl.uniform2f(vU.u_resolution, w, h);
+      gl.activeTexture(gl.TEXTURE0);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, WAVE_N * 2);
     } else {
       gl.useProgram(waveP);
@@ -3531,6 +3691,11 @@ function render() {
       gl.uniform1f(vU.u_time, t);
       gl.uniform1i(vU.u_pattern, pattern||0);
       gl.uniform1f(vU.u_patspeed, patSpeed!==undefined?patSpeed:1);
+      // Bind previous frame for compositing patterns
+      gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, readTex);
+      gl.uniform1i(vU.u_bg, 1);
+      gl.uniform2f(vU.u_resolution, w, h);
+      gl.activeTexture(gl.TEXTURE0);
       for (const stroke of strokes) {
         const [start, count, closed] = stroke;
         if (count < 2) continue;
