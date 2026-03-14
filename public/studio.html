@@ -2306,6 +2306,10 @@ function toggleAudioMonitor() {
 }
 
 // Touch control bar — on-screen buttons for keyboard shortcuts
+// Hoist these declarations — touch bar isActive() callbacks reference them on mobile auto-show
+let autoRandomInterval = null;
+let chaosEnabled = false;
+let editingWave2 = false;
 let touchBarVisible = false;
 const TOUCH_BUTTONS = [
   { label: 'R', tip: 'Random', fn: () => { randomize(); if (dualIdx > 0) randomizeWave2(); } },
@@ -2988,7 +2992,6 @@ let dualFadeTarget = 0;
 const DUAL_FADE_SPEED = 0.008; // ~125 frames to full fade = ~2s at 60fps
 
 // Wave2 editing — swap UI controls between shape 1 and shape 2
-let editingWave2 = false;
 const WAVE2_KEYS = ['wave_mode','wave_r','wave_g','wave_b','wave_a','wave_x','wave_y','wave_mystery','wave_dots','wave_thick','wave_additive','wave_brighten','wave_scale','wave_smoothing','wave_r2','wave_g2','wave_b2','wave_gradient','wave_pattern','wave_pattern_speed','wave_blend'];
 // Map: wave2 property name → state key name
 const WAVE2_MAP = {
@@ -3849,8 +3852,6 @@ function stepTransition() {
 // =====================================================
 // AUTO-RANDOM
 // =====================================================
-let autoRandomInterval = null;
-
 function toggleAutoRandom() {
   if (autoRandomInterval) {
     clearInterval(autoRandomInterval);
@@ -3876,7 +3877,6 @@ function restartAutoIfRunning() {
 // =====================================================
 // CHAOS MODE — slow Brownian drift on parameters
 // =====================================================
-let chaosEnabled = false;
 const CHAOS_SPEED = 0.0008; // base drift per frame
 
 const CHAOS_PARAMS = {
