@@ -74,6 +74,22 @@
   #mic-select:hover { border-color: var(--accent-dim); color: var(--text); }
   #mic-select option { background: var(--panel); color: var(--text); }
 
+  #player-bar {
+    display: flex; align-items: center; gap: 4px; width: 100%;
+    padding: 2px 0; margin-top: -2px;
+  }
+  #player-bar button {
+    background: var(--input-bg); border: 1px dashed var(--border); color: var(--dim);
+    padding: 2px 8px; border-radius: 2px; cursor: pointer;
+    font: 10px 'Courier New', monospace;
+  }
+  #player-bar button:hover { border-color: var(--accent-dim); color: var(--text); }
+  #player-track {
+    font: 10px 'Courier New', monospace; color: var(--accent);
+    flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    max-width: 300px;
+  }
+
   #mobile-swipe {
     display: contents; /* invisible on desktop — children participate in grid directly */
   }
@@ -317,7 +333,16 @@
     </select>
     <button id="btn-mic" onclick="toggleMic()" title="Toggle microphone input (M)">mic: off</button>
     <button id="btn-desktop" onclick="startDesktopAudio()" title="Capture desktop/tab audio — share a tab playing music">desktop</button>
+    <button id="btn-player" onclick="document.getElementById('load-audio').click()" title="Load audio files (mp3/wav) for clean playback">player</button>
+    <input type="file" id="load-audio" accept="audio/*" multiple style="display:none" onchange="loadAudioFiles(event)">
     <button id="btn-fs" onclick="goFullscreen()" title="Enter fullscreen mode (F)">fullscreen</button>
+  </div>
+  <div id="player-bar" style="display:none;">
+    <button onclick="playerPrev()" title="Previous track">&#9664;&#9664;</button>
+    <button id="btn-play" onclick="playerToggle()" title="Play/Pause">&#9654;</button>
+    <button onclick="playerNext()" title="Next track">&#9654;&#9654;</button>
+    <span id="player-track" title="Now playing">--</span>
+    <button onclick="playerStop()" title="Stop and close player">&#10005;</button>
   </div>
   <div class="presets">
     <button onclick="loadPreset('cyan_vscope')" id="pre-cyan_vscope">Cyan V-Scope</button>
@@ -2168,6 +2193,8 @@ async function startMic(deviceId) {
 }
 
 async function toggleMic() {
+  // Stop player if active
+  if (playerActive) playerStop();
   if (useMic) {
     useMic = false;
     if (currentStream) { currentStream.getTracks().forEach(t => t.stop()); currentStream = null; }
@@ -2214,6 +2241,112 @@ async function startDesktopAudio() {
     if (e.name === 'NotAllowedError') alert('Permission denied. Tap the ♪ button and allow screen sharing with audio.');
     else alert('System audio failed: ' + e.message);
   }
+}
+
+// =====================================================
+// BUILT-IN AUDIO PLAYER
+// =====================================================
+let playerAudio = null;       // <audio> element
+let playerSource = null;      // MediaElementAudioSourceNode (can only create once per element)
+let playerFiles = [];         // array of File objects
+let playerIdx = 0;
+let playerActive = false;
+
+function ensureAudioCtx() {
+  if (!audioCtx) {
+    audioCtx = new AudioContext(); analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 1024; analyser.smoothingTimeConstant = 0.8;
+    audioTime = new Uint8Array(analyser.fftSize);
+    audioFreq = new Uint8Array(analyser.frequencyBinCount);
+  }
+}
+
+function loadAudioFiles(event) {
+  const files = Array.from(event.target.files);
+  if (!files.length) return;
+  playerFiles = files;
+  playerIdx = 0;
+  playerStartTrack(0);
+  event.target.value = '';
+}
+
+function playerStartTrack(idx) {
+  if (idx < 0 || idx >= playerFiles.length) return;
+  playerIdx = idx;
+  // Stop mic if running
+  if (useMic) {
+    useMic = false;
+    if (currentStream) { currentStream.getTracks().forEach(t => t.stop()); currentStream = null; }
+    document.getElementById('btn-mic').textContent = 'mic: off';
+    document.getElementById('btn-mic').classList.remove('active');
+    document.getElementById('btn-desktop').classList.remove('active');
+  }
+  ensureAudioCtx();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  // Create or reuse audio element
+  if (!playerAudio) {
+    playerAudio = new Audio();
+    playerAudio.crossOrigin = 'anonymous';
+    playerAudio.addEventListener('ended', () => {
+      if (playerIdx < playerFiles.length - 1) playerStartTrack(playerIdx + 1);
+      else { playerStartTrack(0); } // loop playlist
+    });
+  } else {
+    playerAudio.pause();
+  }
+  const file = playerFiles[idx];
+  playerAudio.src = URL.createObjectURL(file);
+  // Connect to analyser (only once — createMediaElementSource can only be called once per element)
+  if (!playerSource) {
+    playerSource = audioCtx.createMediaElementSource(playerAudio);
+    playerSource.connect(analyser);
+    playerSource.connect(audioCtx.destination); // also play through speakers
+  }
+  playerAudio.play();
+  playerActive = true;
+  useMic = true; // so getAudio reads from analyser
+  // Update UI
+  const name = file.name.replace(/\.[^.]+$/, '');
+  document.getElementById('player-track').textContent = name;
+  document.getElementById('player-bar').style.display = 'flex';
+  document.getElementById('btn-play').innerHTML = '&#9646;&#9646;'; // pause icon
+  document.getElementById('btn-player').classList.add('active');
+}
+
+function playerToggle() {
+  if (!playerAudio || !playerActive) return;
+  if (playerAudio.paused) {
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    playerAudio.play();
+    document.getElementById('btn-play').innerHTML = '&#9646;&#9646;';
+  } else {
+    playerAudio.pause();
+    document.getElementById('btn-play').innerHTML = '&#9654;';
+  }
+}
+
+function playerNext() {
+  if (!playerFiles.length) return;
+  playerStartTrack((playerIdx + 1) % playerFiles.length);
+}
+
+function playerPrev() {
+  if (!playerFiles.length) return;
+  // If more than 3s into track, restart; otherwise go back
+  if (playerAudio && playerAudio.currentTime > 3) {
+    playerAudio.currentTime = 0;
+  } else {
+    playerStartTrack((playerIdx - 1 + playerFiles.length) % playerFiles.length);
+  }
+}
+
+function playerStop() {
+  if (playerAudio) { playerAudio.pause(); playerAudio.currentTime = 0; }
+  playerActive = false;
+  useMic = false;
+  document.getElementById('player-bar').style.display = 'none';
+  document.getElementById('btn-player').classList.remove('active');
+  document.getElementById('player-track').textContent = '--';
 }
 
 // Populate mic list on load — prefer Stereo Mix if available
@@ -2325,7 +2458,7 @@ const TOUCH_BUTTONS = [
   { label: 'G', tip: 'Audio', fn: () => toggleAudioReactMode() },
   { label: 'Q', tip: 'Quality', fn: () => cycleQuality() },
   { label: 'M', tip: 'Mic', fn: () => toggleMic() },
-  { label: '♪', tip: 'System Audio', fn: () => startDesktopAudio() },
+  { label: '♪', tip: 'Load Music', fn: () => document.getElementById('load-audio').click(), isActive: () => playerActive },
   { label: 'S', tip: 'Monitor', fn: () => toggleAudioMonitor() },
   { label: 'F', tip: 'Full', fn: () => goFullscreen() },
   { label: 'H', tip: 'HUD', fn: () => { document.getElementById('hud').style.display = document.getElementById('hud').style.display === 'none' ? '' : 'none'; } },
