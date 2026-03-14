@@ -182,6 +182,7 @@
     #controls-stack {
       width: 48px; left: 8px; bottom: 8px; top: 8px;
     }
+    #audio-monitor { bottom: 8px; }
     #touch-btns { padding: 3px; }
     .tb { font-size: 11px; min-height: 20px; padding: 4px 0; }
   }
@@ -251,7 +252,8 @@
     display: flex; gap: 4px; align-items: flex-end;
     background: rgba(0,0,0,0.3); border-radius: 4px; padding: 6px 8px;
     font: 8px 'Courier New', monospace; color: var(--dim);
-    flex-shrink: 0;
+    position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%);
+    z-index: 50; pointer-events: auto;
   }
   .am-bar-wrap { display: flex; flex-direction: column; align-items: center; gap: 2px; }
   .am-bar-outer { width: 10px; height: 50px; background: rgba(255,255,255,0.06); border-radius: 2px; position: relative; overflow: hidden; }
@@ -348,8 +350,8 @@
   <div id="hud">--</div>
   <div id="controls-stack">
     <div id="touch-bar"><div id="touch-btns"></div></div>
-    <div id="audio-monitor" style="display:none;"></div>
   </div>
+  <div id="audio-monitor" style="display:none;"></div>
   <div id="attribution"></div>
 </div>
 <div id="sidebar"></div>
@@ -2345,11 +2347,7 @@ function toggleTouchBar() {
   touchBarVisible = !touchBarVisible;
   const bar = document.getElementById('touch-bar');
   bar.classList.toggle('show', touchBarVisible);
-  // Shift audio monitor right to make room
-  const mon = document.getElementById('audio-monitor');
-  if (touchBarVisible) {
-    updateTouchBarStates();
-  }
+  if (touchBarVisible) updateTouchBarStates();
 }
 
 mDbg('4:touch');
