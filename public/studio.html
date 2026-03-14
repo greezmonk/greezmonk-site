@@ -1636,10 +1636,9 @@ uniform sampler2D u_prev;
 uniform float u_decay;
 void main() {
   vec3 c = texture(u_prev, fract(v_uv)).rgb;
-  // Luminance-aware decay: bright pixels fade faster, dark pixels keep trails
+  // Luminance-aware decay: bright pixels fade slightly faster, dark pixels keep trails
   float lum = dot(c, vec3(0.299, 0.587, 0.114));
-  float fastDecay = u_decay * 0.92; // bright pixels decay ~8% faster
-  float d = mix(u_decay, fastDecay, lum * lum); // squared for smooth rolloff
+  float d = u_decay - lum * lum * 0.015; // very gentle: max 1.5% faster at pure white
   o = vec4(c * d, 1.0);
 }`;
 
