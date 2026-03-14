@@ -2153,6 +2153,7 @@ async function startMic(deviceId) {
   try {
     const constraints = deviceId ? {audio:{deviceId:{exact:deviceId}}} : {audio:true};
     currentStream = await navigator.mediaDevices.getUserMedia(constraints);
+    if (audioCtx.state === 'suspended') await audioCtx.resume();
     audioCtx.createMediaStreamSource(currentStream).connect(analyser);
     useMic = true;
     document.getElementById('btn-mic').textContent = 'mic: ON';
