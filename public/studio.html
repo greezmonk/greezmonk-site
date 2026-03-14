@@ -395,9 +395,10 @@
     <div class="help-row"><span class="help-key">D</span><span class="help-desc">cycle dual mode (single / dual / split / layer / combine)</span></div>
     <div class="help-row"><span class="help-key">E</span><span class="help-desc">toggle wave 2 editing (keyboard shortcut)</span></div>
     <div class="help-row"><span class="help-key">W</span><span class="help-desc">cycle warp mode (17 modes)</span></div>
-    <div class="help-row"><span class="help-key">P</span><span class="help-desc">cycle line pattern (17 modes)</span></div>
+    <div class="help-row"><span class="help-key">P</span><span class="help-desc">cycle line pattern (37 modes)</span></div>
     <div class="help-row"><span class="help-key">B</span><span class="help-desc">cycle blend mode (normal / additive / screen / subtract / multiply)</span></div>
     <div class="help-row"><span class="help-key">Q</span><span class="help-desc">cycle quality (perf / bal / ultra)</span></div>
+    <div class="help-row"><span class="help-key">3</span><span class="help-desc">toggle Ghost Wave 3 (anti-white-out scavenger)</span></div>
     <h3>Presets</h3>
     <div class="help-row"><span class="help-key">1-9</span><span class="help-desc">load built-in preset</span></div>
     <div class="help-row"><span class="help-key">Shift + 1-0</span><span class="help-desc">recall favorite slot</span></div>
@@ -447,6 +448,14 @@ const DUAL_MODES = [
 ];
 let dualIdx = 0;
 let wave_mode2 = -1; // -1 = auto-pick
+
+// Ghost Wave 3 (G3) — anti-white-out scavenger shape
+let g3Enabled = false;
+let g3Intensity = 0;       // 0-1, ramps up as canvas gets bright
+let g3Brightness = 0;      // tracked average canvas brightness
+const G3_THRESHOLD = 0.55; // brightness above this activates G3
+const G3_ATTACK = 0.08;    // how fast G3 ramps in
+const G3_RELEASE = 0.03;   // how fast G3 fades out
 
 // Shape pool — which shapes are included in auto/chaos rotation
 // Shape pool initialized after WAVE_NAMES is defined (see TOTAL_SHAPES)
@@ -2756,6 +2765,7 @@ const TOUCH_BUTTONS = [
   { label: 'P', tip: 'Pattern', fn: () => cyclePattern() },
   { label: 'B', tip: 'Blend', fn: () => cycleBlend() },
   { label: 'G', tip: 'Audio', fn: () => toggleAudioReactMode() },
+  { label: 'G3', tip: 'Ghost W3', fn: () => toggleG3(), isActive: () => g3Enabled },
   { label: 'Q', tip: 'Quality', fn: () => cycleQuality() },
   { label: 'M', tip: 'Mic', fn: () => toggleMic() },
   { label: '♪', tip: 'Load Music', fn: () => document.getElementById('load-audio').click(), isActive: () => playerActive },
@@ -3806,6 +3816,59 @@ function render() {
     }
   }
 
+  // Ghost Wave 3 (G3) — anti-white-out scavenger
+  if (g3Enabled) {
+    // Sample brightness from previous frame (readTex is already in GPU, just read a few pixels)
+    const sampleBuf = new Uint8Array(4 * 5);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, writeFB);
+    const cx = Math.floor(w/2), cy = Math.floor(h/2), qx = Math.floor(w/4), qy = Math.floor(h/4);
+    gl.readPixels(cx, cy, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(sampleBuf.buffer, 0, 4));
+    gl.readPixels(qx, qy, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(sampleBuf.buffer, 4, 4));
+    gl.readPixels(w-qx, qy, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(sampleBuf.buffer, 8, 4));
+    gl.readPixels(qx, h-qy, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(sampleBuf.buffer, 12, 4));
+    gl.readPixels(w-qx, h-qy, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(sampleBuf.buffer, 16, 4));
+    let bright = 0;
+    for (let i = 0; i < 5; i++) {
+      const r = sampleBuf[i*4], g = sampleBuf[i*4+1], b = sampleBuf[i*4+2];
+      bright += (r * 0.299 + g * 0.587 + b * 0.114) / 255;
+    }
+    g3Brightness = g3Brightness * 0.9 + (bright / 5) * 0.1; // smooth it
+
+    // Ramp intensity based on brightness
+    if (g3Brightness > G3_THRESHOLD) {
+      const excess = (g3Brightness - G3_THRESHOLD) / (1 - G3_THRESHOLD);
+      g3Intensity = Math.min(g3Intensity + G3_ATTACK * excess, 1);
+    } else {
+      g3Intensity = Math.max(g3Intensity - G3_RELEASE, 0);
+    }
+
+    // Draw G3 when active
+    if (g3Intensity > 0.02) {
+      const origMode = state.wave_mode, origMy = state.wave_mystery;
+      const origSc = state.wave_scale;
+      // G3 uses wave1's shape but slightly offset mystery for variation
+      state.wave_mystery += 0.3 + audio.treb * 0.5;
+      state.wave_scale *= 1.1 + audio.bass * 0.2;
+      const wvG3 = buildWaveVerts(wave, aspect);
+      state.wave_mode = origMode; state.wave_mystery = origMy;
+      state.wave_scale = origSc;
+
+      // Alternate between subtract and multiply based on brightness level
+      if (g3Brightness > 0.75) {
+        // Heavy white-out: use subtract to carve hard
+        gl.blendFunc(gl.SRC_ALPHA, gl.ONE); gl.blendEquation(gl.FUNC_REVERSE_SUBTRACT);
+      } else {
+        // Moderate: use multiply to darken gently
+        gl.blendFunc(gl.DST_COLOR, gl.ZERO); gl.blendEquation(gl.FUNC_ADD);
+      }
+      // Dark color with intensity-driven alpha
+      const g3a = g3Intensity * 0.6;
+      drawWave(wvG3, 0.15, 0.05, 0.2, g3a, false, 1.2, 0.05, 0.02, 0.1, 0, 0, 1);
+      // Restore blend
+      setBlendMode(state.wave_blend);
+    }
+  }
+
   // Reset driver to bass for glow pass (wave1's glow)
   waveDriver = audio.bass;
 
@@ -3882,6 +3945,7 @@ function render() {
   const trans = transitionTarget ? ' <span class="d">|</span> ~' : '';
   const autoTag = autoRandomInterval ? ' <span class="d">|</span> AUTO' : '';
   const chaosTag = chaosEnabled ? ' <span class="d">|</span> CHAOS' : '';
+  const g3Tag = g3Enabled ? ` <span class="d">|</span> G3${g3Intensity > 0.02 ? '<span style="color:#a0f">!</span>' : ''}` : '';
   const libTag = configLibrary.length ? ` <span class="d">|</span> LIB:${configLibrary.length}` : '';
   const editTag = editingWave2 ? ' <span style="color:#ff0">EDIT:W2</span>' : '';
   const dualTag = dualIdx > 0 ? ` <span class="d">|</span> ${DUAL_MODES[dualIdx].name}${editTag}` : '';
@@ -3889,7 +3953,7 @@ function render() {
   const qTag = ` <span class="d">|</span> ${QUALITY_MODES[qualityIdx].name}`;
   const patTag = state.wave_pattern > 0 ? ` <span class="d">|</span> ${PATTERN_NAMES[state.wave_pattern].toUpperCase()}` : '';
   const blendTag = state.wave_blend > 0 ? ` <span class="d">|</span> ${BLEND_NAMES[state.wave_blend].toUpperCase()}` : '';
-  document.getElementById('hud').innerHTML=`${fps} <span class="d">fps</span> ${useMic?'<span class="d">|</span> MIC':''}${trans}${autoTag}${chaosTag}${libTag}${dualTag}${warpTag}${patTag}${blendTag}${qTag}`;
+  document.getElementById('hud').innerHTML=`${fps} <span class="d">fps</span> ${useMic?'<span class="d">|</span> MIC':''}${trans}${autoTag}${chaosTag}${g3Tag}${libTag}${dualTag}${warpTag}${patTag}${blendTag}${qTag}`;
 
   requestAnimationFrame(render);
 }
@@ -4498,6 +4562,11 @@ function toggleChaos() {
   document.getElementById('btn-chaos').classList.toggle('active', chaosEnabled);
 }
 
+function toggleG3() {
+  g3Enabled = !g3Enabled;
+  if (!g3Enabled) { g3Intensity = 0; g3Brightness = 0; }
+}
+
 // =====================================================
 // KEYBOARD
 // =====================================================
@@ -4544,6 +4613,7 @@ document.addEventListener('keydown', e => {
     case 'x': toggleTouchBar(); break;
     case 's': toggleAudioMonitor(); break;
     case 'g': toggleAudioReactMode(); break;
+    case '3': toggleG3(); break;
     case 't': toggleAttribution(); break;
     case ' ': paused=!paused; e.preventDefault(); break;
   }
@@ -4578,6 +4648,7 @@ function saveStartup() {
     dualIdx: dualIdx,
     autoOn: autoRandomInterval !== null,
     chaosOn: chaosEnabled,
+    g3On: g3Enabled,
     audioReactMode: audioReactMode,
     monitorOff: !audioMonitorVisible,
     panelCollapsed: document.getElementById('output-panel').classList.contains('collapsed'),
@@ -4652,6 +4723,7 @@ syncUI();
 if (startupConfig) {
   if (startupConfig.autoOn) toggleAutoRandom();
   if (startupConfig.chaosOn) toggleChaos();
+  if (startupConfig.g3On) toggleG3();
   if (!startupConfig.monitorOff) toggleAudioMonitor();
   if (startupConfig.panelCollapsed !== false) toggleOutputPanel();
 } else {
