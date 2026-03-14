@@ -2828,6 +2828,11 @@ const agc = {
   rise: 0.15,     // peak rises fast to catch transients
 };
 
+// Treble ghost: synthesize treble from mid when mic can't hear high frequencies
+let trebGhostFrames = 0;  // frames treble has been near-zero
+let trebGhostActive = false;
+let trebGhostPhase = 0;
+
 function getAudio(t) {
   let bass, mid, treb;
   if (useMic && analyser) {
@@ -2859,6 +2864,21 @@ function getAudio(t) {
     bass = bass > thr ? (bass - thr) / (1 - thr) : 0;
     mid  = mid  > thr ? (mid  - thr) / (1 - thr) : 0;
     treb = treb > trebThr ? (treb - trebThr) / (1 - trebThr) : 0;
+  }
+  // Treble ghost: if treble is dead for ~2 seconds, synthesize from mid
+  if (treb < 0.02) {
+    trebGhostFrames++;
+    if (trebGhostFrames > 120) trebGhostActive = true; // ~2s at 60fps
+  } else {
+    trebGhostFrames = 0;
+    trebGhostActive = false;
+  }
+  if (trebGhostActive && mid > 0) {
+    trebGhostPhase += 0.07 + mid * 0.1;
+    // Derive treble from mid with phase offset and variation
+    const ghost = mid * (0.4 + 0.3 * Math.sin(trebGhostPhase)) *
+                  (0.6 + 0.4 * Math.sin(trebGhostPhase * 2.3 + 1.0));
+    treb = Math.min(Math.max(ghost, 0), 1);
   }
   return { bass, mid, treb };
 }
