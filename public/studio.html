@@ -1635,7 +1635,12 @@ in vec2 v_uv; out vec4 o;
 uniform sampler2D u_prev;
 uniform float u_decay;
 void main() {
-  o = vec4(texture(u_prev, fract(v_uv)).rgb * u_decay, 1.0);
+  vec3 c = texture(u_prev, fract(v_uv)).rgb;
+  // Luminance-aware decay: bright pixels fade faster, dark pixels keep trails
+  float lum = dot(c, vec3(0.299, 0.587, 0.114));
+  float fastDecay = u_decay * 0.92; // bright pixels decay ~8% faster
+  float d = mix(u_decay, fastDecay, lum * lum); // squared for smooth rolloff
+  o = vec4(c * d, 1.0);
 }`;
 
 // Legacy wave shader (for dots mode)
@@ -4207,7 +4212,7 @@ function randomize() {
     target.wave_mode = getPooledShape();
 
     // Safety clamps
-    if (target.decay > 0.975) target.decay = 0.97;
+    if (target.decay > 0.99) target.decay = 0.985;
     if (target.gamma > 2.5) target.gamma = 2.0;
     if (target.zoom > 1.15) target.zoom = 1.1;
     if (target.zoom < 0.85) target.zoom = 0.85;
@@ -4312,7 +4317,7 @@ function randomize() {
       target.sx = 0.9 + Math.random() * 0.2;
       target.sy = 0.9 + Math.random() * 0.2;
     }
-    target.decay = 0.92 + Math.random() * 0.045; // cap at 0.965 to prevent white-out
+    target.decay = 0.92 + Math.random() * 0.06; // 0.92-0.98 range
     target.wave_scale = 0.5 + Math.random() * 2.5;
     target.wave_smoothing = Math.random();
 
@@ -4429,7 +4434,7 @@ const CHAOS_PARAMS = {
   dy:    { min: -0.04, max: 0.04, drift: 0.5 },
   sx:    { min: 0.8, max: 2.8, drift: 0.4 },
   sy:    { min: 0.8, max: 2.8, drift: 0.4 },
-  decay: { min: 0.93, max: 0.965, drift: 0.3 },
+  decay: { min: 0.93, max: 0.985, drift: 0.3 },
   wave_r: { min: 0.1, max: 1, drift: 0.4 },
   wave_g: { min: 0.05, max: 1, drift: 0.4 },
   wave_b: { min: 0.05, max: 1, drift: 0.4 },
@@ -4550,13 +4555,10 @@ function stepChaos(audio) {
     }
   }
 
-  // White-out guard: decay caps to prevent stuck screens
-  // General hard cap — nothing above 0.975 from auto/chaos
-  if (state.decay > 0.975) state.decay = 0.97;
-  if ((state.brighten || state.wave_brighten) && state.decay > 0.96) state.decay = 0.955;
-  if (state.wave_additive && state.decay > 0.965) state.decay = 0.96;
-  // Double danger: additive + brighten
-  if (state.wave_additive && (state.brighten || state.wave_brighten) && state.decay > 0.95) state.decay = 0.945;
+  // White-out guard: soft caps for dangerous combos (luminance-aware decay handles most of it)
+  if ((state.brighten || state.wave_brighten) && state.decay > 0.97) state.decay = 0.965;
+  if (state.wave_additive && state.decay > 0.985) state.decay = 0.98;
+  if (state.wave_additive && (state.brighten || state.wave_brighten) && state.decay > 0.96) state.decay = 0.955;
 
   // Keep wave color saturated — at least one channel stays bright
   const maxC = Math.max(state.wave_r||0, state.wave_g||0, state.wave_b||0);
