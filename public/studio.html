@@ -3819,32 +3819,8 @@ function render() {
     }
   }
 
-  // Ghost Wave 3 (G3) — anti-white-out scavenger
+  // Ghost Wave 3 (G3) — always draws with multiply/subtract to eat light
   if (g3Enabled) {
-    // Sample brightness from previous frame (readTex is already in GPU, just read a few pixels)
-    const sampleBuf = new Uint8Array(4 * 5);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, writeFB);
-    const cx = Math.floor(w/2), cy = Math.floor(h/2), qx = Math.floor(w/4), qy = Math.floor(h/4);
-    gl.readPixels(cx, cy, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(sampleBuf.buffer, 0, 4));
-    gl.readPixels(qx, qy, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(sampleBuf.buffer, 4, 4));
-    gl.readPixels(w-qx, qy, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(sampleBuf.buffer, 8, 4));
-    gl.readPixels(qx, h-qy, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(sampleBuf.buffer, 12, 4));
-    gl.readPixels(w-qx, h-qy, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(sampleBuf.buffer, 16, 4));
-    let bright = 0;
-    for (let i = 0; i < 5; i++) {
-      const r = sampleBuf[i*4], g = sampleBuf[i*4+1], b = sampleBuf[i*4+2];
-      bright += (r * 0.299 + g * 0.587 + b * 0.114) / 255;
-    }
-    g3Brightness = g3Brightness * 0.9 + (bright / 5) * 0.1; // smooth it
-
-    // Ramp intensity based on brightness
-    if (g3Brightness > G3_THRESHOLD) {
-      const excess = (g3Brightness - G3_THRESHOLD) / (1 - G3_THRESHOLD);
-      g3Intensity = Math.min(g3Intensity + G3_ATTACK * excess, 1);
-    } else {
-      g3Intensity = Math.max(g3Intensity - G3_RELEASE, 0);
-    }
-
     // Cycle G3 shape independently using wave1's pool
     const now_g3 = performance.now();
     if (now_g3 - g3LastShapeChange > G3_SHAPE_INTERVAL) {
@@ -3852,31 +3828,19 @@ function render() {
       g3LastShapeChange = now_g3;
     }
 
-    // Draw G3 when active
-    if (g3Intensity > 0.02) {
-      const origMode = state.wave_mode, origMy = state.wave_mystery;
-      const origSc = state.wave_scale;
-      state.wave_mode = g3Shape;
-      state.wave_mystery = (now_g3 * 0.001) + audio.treb * 0.5; // slow drift + treble variation
-      state.wave_scale = Math.max(state.wave_scale * (1.1 + audio.bass * 0.2), G3_MIN_SCALE);
-      const wvG3 = buildWaveVerts(wave, aspect);
-      state.wave_mode = origMode; state.wave_mystery = origMy;
-      state.wave_scale = origSc;
+    const origMode = state.wave_mode, origMy = state.wave_mystery;
+    const origSc = state.wave_scale;
+    state.wave_mode = g3Shape;
+    state.wave_mystery = (now_g3 * 0.001) + audio.treb * 0.5;
+    state.wave_scale = Math.max(state.wave_scale * (1.1 + audio.bass * 0.2), G3_MIN_SCALE);
+    const wvG3 = buildWaveVerts(wave, aspect);
+    state.wave_mode = origMode; state.wave_mystery = origMy;
+    state.wave_scale = origSc;
 
-      // Alternate between subtract and multiply based on brightness level
-      if (g3Brightness > 0.75) {
-        // Heavy white-out: use subtract to carve hard
-        gl.blendFunc(gl.SRC_ALPHA, gl.ONE); gl.blendEquation(gl.FUNC_REVERSE_SUBTRACT);
-      } else {
-        // Moderate: use multiply to darken gently
-        gl.blendFunc(gl.DST_COLOR, gl.ZERO); gl.blendEquation(gl.FUNC_ADD);
-      }
-      // Dark color with intensity-driven alpha
-      const g3a = g3Intensity * 0.6;
-      drawWave(wvG3, 0.15, 0.05, 0.2, g3a, false, 1.2, 0.05, 0.02, 0.1, 0, 0, 1);
-      // Restore blend
-      setBlendMode(state.wave_blend);
-    }
+    // Multiply blend — darkens whatever is under the line
+    gl.blendFunc(gl.DST_COLOR, gl.ZERO); gl.blendEquation(gl.FUNC_ADD);
+    drawWave(wvG3, 0.15, 0.05, 0.2, 0.5, false, 1.2, 0.05, 0.02, 0.1, 0, 0, 1);
+    setBlendMode(state.wave_blend);
   }
 
   // Reset driver to bass for glow pass (wave1's glow)
