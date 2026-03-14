@@ -450,15 +450,15 @@ let wave_mode2 = -1; // -1 = auto-pick
 
 // Ghost Wave 3 (G3) — anti-white-out scavenger, on by default
 let g3Enabled = true;
-let g3Intensity = 0;       // 0-1, ramps up as canvas gets bright
-let g3Brightness = 0;      // tracked average canvas brightness
-const G3_THRESHOLD = 0.55; // brightness above this activates drawing
-const G3_ATTACK = 0.08;    // how fast G3 ramps in
-const G3_RELEASE = 0.03;   // how fast G3 fades out
+let g3Intensity = 0;       // random surprise flag
+let g3Brightness = 0;      // tracked average canvas brightness (smoothed)
+const G3_THRESHOLD = 0.4;  // brightness above this activates drawing
 let g3Shape = 0;           // current G3 shape index
 let g3LastShapeChange = 0; // timestamp of last shape change
 const G3_SHAPE_INTERVAL = 4000; // ms between random shape changes
 const G3_MIN_SCALE = 0.6;  // minimum 60% scale so it covers ground
+let g3DecayReduction = 0;  // how much to reduce decay (0-1)
+const G3_SAMPLE_BUF = new Uint8Array(4 * 9); // reuse buffer for 9 samples
 
 // Shape pool — which shapes are included in auto/chaos rotation
 // Shape pool initialized after WAVE_NAMES is defined (see TOTAL_SHAPES)
@@ -3623,6 +3623,8 @@ function render() {
 
   // Per-frame equations
   let dZ=state.zoom,dR=state.rot,dCx=state.cx,dCy=state.cy,dW=state.warp,dD=state.decay;
+  // G3 decay reduction — brightness sensor nudges decay down to fight white-out buildup
+  if (g3Enabled && g3DecayReduction > 0) dD = Math.max(dD - g3DecayReduction * 0.08, 0.9);
   if(currentPresetName==='slow_burn'){const p1=t*.0517,p2=t*.0313,p3=t*.0719;dZ=.998+.003*Math.sin(p1)+.002*audio.bass;dR=.012*Math.sin(p2)+.008*Math.cos(p3);dCx=.5+.12*Math.sin(p1)+.08*Math.cos(p3);dCy=.5+.12*Math.cos(p2)+.08*Math.sin(t*.0127);dW=.3+.35*Math.sin(p3)+.15*audio.mid;dD=.973+.018*(1-audio.bass*.4);}
   else if(currentPresetName==='deep_keel'){const p1=t*.0211,p2=t*.0347,p3=t*.0153,p4=t*.0089;dZ=.9993+.001*Math.sin(p1)+.001*audio.bass;dR=.006*Math.sin(p2)+.004*Math.cos(p4);dCx=.5+.08*Math.sin(p1)+.06*Math.cos(p3);dCy=.5+.1*Math.cos(p2)+.05*Math.sin(p4);dW=.15+.2*Math.sin(p3)+.1*audio.mid;dD=.983+.012*(1-audio.bass*.3);}
   else if(currentPresetName==='metheus'){const p1=t*.0617,p2=t*.0431,p3=t*.0829,p4=t*.0173;dZ=.996+.005*Math.sin(p1)+.004*audio.bass;dR=.015*Math.sin(p2)+.01*audio.mid*Math.sin(p3);dCx=.5+.06*Math.sin(p1)+.04*audio.bass*Math.cos(p3);dCy=.5+.06*Math.cos(p2)+.04*audio.bass*Math.sin(p4);dW=.4+.3*Math.sin(p3)+.25*audio.mid;dD=.96+.025*(1-audio.bass*.5);}
@@ -3827,16 +3829,31 @@ function render() {
     if (now_g3 - g3LastShapeChange > G3_SHAPE_INTERVAL) {
       g3Shape = getPooledShape('random', false);
       g3LastShapeChange = now_g3;
-      // 5% chance to draw this cycle when not inverted
       g3Intensity = Math.random() < 0.05 ? 1 : 0;
     }
 
-    // Brightness sensor — sample center pixel
-    const samplePx = new Uint8Array(4);
-    gl.readPixels(Math.floor(w/2), Math.floor(h/2), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, samplePx);
-    const lum = (samplePx[0] * 0.299 + samplePx[1] * 0.587 + samplePx[2] * 0.114) / 255;
-    g3Brightness = g3Brightness * 0.92 + lum * 0.08;
+    // Brightness sensor — 9-point grid across the canvas
+    const sx = [0.2, 0.5, 0.8], sy = [0.2, 0.5, 0.8];
+    let totalLum = 0;
+    for (let i = 0; i < 3; i++) {
+      for (let j = 0; j < 3; j++) {
+        const px = Math.floor(w * sx[i]), py = Math.floor(h * sy[j]);
+        const off = (i * 3 + j) * 4;
+        gl.readPixels(px, py, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(G3_SAMPLE_BUF.buffer, off, 4));
+        totalLum += (G3_SAMPLE_BUF[off] * 0.299 + G3_SAMPLE_BUF[off+1] * 0.587 + G3_SAMPLE_BUF[off+2] * 0.114) / 255;
+      }
+    }
+    const avgLum = totalLum / 9;
+    g3Brightness = g3Brightness * 0.88 + avgLum * 0.12; // responsive smoothing
     const whiteOut = g3Brightness > G3_THRESHOLD;
+
+    // Decay reduction — ramp up when bright, release when dim
+    if (whiteOut) {
+      const excess = (g3Brightness - G3_THRESHOLD) / (1 - G3_THRESHOLD);
+      g3DecayReduction = Math.min(g3DecayReduction + 0.05, excess);
+    } else {
+      g3DecayReduction = Math.max(g3DecayReduction - 0.02, 0);
+    }
 
     const shouldDraw = state.invert || whiteOut || g3Intensity > 0;
     if (shouldDraw) {
@@ -3849,11 +3866,17 @@ function render() {
       state.wave_mode = origMode; state.wave_mystery = origMy;
       state.wave_scale = origSc;
 
-      // Multiply blend — darkens whatever is under the line
-      gl.blendFunc(gl.DST_COLOR, gl.ZERO); gl.blendEquation(gl.FUNC_ADD);
-      // Alpha scales with trigger: invert/white-out = strong, random surprise = subtle
-      const g3a = (state.invert || whiteOut) ? 0.5 + g3Brightness * 0.3 : 0.35;
-      drawWave(wvG3, 0.15, 0.05, 0.2, g3a, false, 1.2, 0.05, 0.02, 0.1, 0, 0, 1);
+      if (whiteOut && !state.invert) {
+        // Subtract blend — actively removes light from the canvas
+        gl.blendFunc(gl.SRC_ALPHA, gl.ONE); gl.blendEquation(gl.FUNC_REVERSE_SUBTRACT);
+        const g3a = 0.4 + g3Brightness * 0.4;
+        drawWave(wvG3, 0.3, 0.2, 0.35, g3a, false, 1.2, 0.15, 0.1, 0.2, 0, 0, 1);
+      } else {
+        // Multiply blend — darkens for invert and random surprise
+        gl.blendFunc(gl.DST_COLOR, gl.ZERO); gl.blendEquation(gl.FUNC_ADD);
+        const g3a = state.invert ? 0.5 + g3Brightness * 0.3 : 0.35;
+        drawWave(wvG3, 0.15, 0.05, 0.2, g3a, false, 1.2, 0.05, 0.02, 0.1, 0, 0, 1);
+      }
       setBlendMode(state.wave_blend);
     }
   }
