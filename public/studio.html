@@ -450,12 +450,15 @@ let dualIdx = 0;
 let wave_mode2 = -1; // -1 = auto-pick
 
 // Ghost Wave 3 (G3) — anti-white-out scavenger shape
-let g3Enabled = false;
+let g3Enabled = true;      // on by default
 let g3Intensity = 0;       // 0-1, ramps up as canvas gets bright
 let g3Brightness = 0;      // tracked average canvas brightness
 const G3_THRESHOLD = 0.55; // brightness above this activates G3
 const G3_ATTACK = 0.08;    // how fast G3 ramps in
 const G3_RELEASE = 0.03;   // how fast G3 fades out
+let g3Shape = 0;           // current G3 shape index
+let g3LastShapeChange = 0; // timestamp of last shape change
+const G3_SHAPE_INTERVAL = 4000; // ms between random shape changes
 
 // Shape pool — which shapes are included in auto/chaos rotation
 // Shape pool initialized after WAVE_NAMES is defined (see TOTAL_SHAPES)
@@ -3842,13 +3845,20 @@ function render() {
       g3Intensity = Math.max(g3Intensity - G3_RELEASE, 0);
     }
 
+    // Cycle G3 shape independently using wave1's pool
+    const now_g3 = performance.now();
+    if (now_g3 - g3LastShapeChange > G3_SHAPE_INTERVAL) {
+      g3Shape = getPooledShape('random', false); // uses wave1's shapePool
+      g3LastShapeChange = now_g3;
+    }
+
     // Draw G3 when active
     if (g3Intensity > 0.02) {
       const origMode = state.wave_mode, origMy = state.wave_mystery;
       const origSc = state.wave_scale;
-      // G3 uses wave1's shape but slightly offset mystery for variation
-      state.wave_mystery += 0.3 + audio.treb * 0.5;
-      state.wave_scale *= 1.1 + audio.bass * 0.2;
+      state.wave_mode = g3Shape;
+      state.wave_mystery = (now_g3 * 0.001) + audio.treb * 0.5; // slow drift + treble variation
+      state.wave_scale = state.wave_scale * (1.1 + audio.bass * 0.2);
       const wvG3 = buildWaveVerts(wave, aspect);
       state.wave_mode = origMode; state.wave_mystery = origMy;
       state.wave_scale = origSc;
@@ -4723,7 +4733,7 @@ syncUI();
 if (startupConfig) {
   if (startupConfig.autoOn) toggleAutoRandom();
   if (startupConfig.chaosOn) toggleChaos();
-  if (startupConfig.g3On) toggleG3();
+  if (startupConfig.g3On === false) toggleG3(); // G3 on by default, toggle OFF if saved as off
   if (!startupConfig.monitorOff) toggleAudioMonitor();
   if (startupConfig.panelCollapsed !== false) toggleOutputPanel();
 } else {
