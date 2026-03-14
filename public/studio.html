@@ -2176,13 +2176,18 @@ async function toggleMic() {
 }
 
 async function startDesktopAudio() {
-  // Use getDisplayMedia to capture tab/screen audio
+  // Use getDisplayMedia to capture system/tab audio
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+    alert('System audio capture not supported on this device. Use mic instead.');
+    return;
+  }
   if (!audioCtx) {
     audioCtx = new AudioContext(); analyser = audioCtx.createAnalyser();
     analyser.fftSize = 1024; analyser.smoothingTimeConstant = 0.8;
     audioTime = new Uint8Array(analyser.fftSize);
     audioFreq = new Uint8Array(analyser.frequencyBinCount);
   }
+  if (audioCtx.state === 'suspended') await audioCtx.resume();
   if (currentStream) { currentStream.getTracks().forEach(t => t.stop()); }
   try {
     currentStream = await navigator.mediaDevices.getDisplayMedia({
@@ -2193,7 +2198,7 @@ async function startDesktopAudio() {
     currentStream.getVideoTracks().forEach(t => t.stop());
     const audioTracks = currentStream.getAudioTracks();
     if (audioTracks.length === 0) {
-      console.warn('No audio track — make sure to check "Share audio" in the dialog');
+      alert('No audio track received. Make sure to check "Share audio" in the dialog.');
       return;
     }
     audioCtx.createMediaStreamSource(currentStream).connect(analyser);
@@ -2201,7 +2206,10 @@ async function startDesktopAudio() {
     document.getElementById('btn-mic').textContent = 'mic: off';
     document.getElementById('btn-mic').classList.remove('active');
     document.getElementById('btn-desktop').classList.add('active');
-  } catch(e) { console.warn('Desktop audio denied or not supported', e); }
+  } catch(e) {
+    if (e.name === 'NotAllowedError') alert('Permission denied. Tap the ♪ button and allow screen sharing with audio.');
+    else alert('System audio failed: ' + e.message);
+  }
 }
 
 // Populate mic list on load — prefer Stereo Mix if available
