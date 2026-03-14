@@ -2832,7 +2832,7 @@ function getAudio(t) {
   let bass, mid, treb;
   if (useMic && analyser) {
     analyser.getByteFrequencyData(audioFreq);
-    const n=audioFreq.length, bE=Math.floor(n*.08), mE=Math.floor(n*.25), tE=Math.floor(n*.55);
+    const n=audioFreq.length, bE=Math.floor(n*.08), mE=Math.floor(n*.18), tE=Math.floor(n*.45);
     let b=0,m=0,tr=0;
     for(let i=0;i<bE;i++)b+=audioFreq[i]; for(let i=bE;i<mE;i++)m+=audioFreq[i]; for(let i=mE;i<tE;i++)tr+=audioFreq[i];
     bass=b/(bE*255); mid=m/((mE-bE)*255); treb=tr/((tE-mE)*255);
