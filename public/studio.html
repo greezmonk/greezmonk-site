@@ -1345,39 +1345,17 @@ function pasteConfig() {
 // =====================================================
 // WEBGL ENGINE
 // =====================================================
-// Mobile debug: catch any JS errors and show on screen
-const _mobileDbgLog = [];
-window.addEventListener('error', (e) => {
-  _mobileDbgLog.push(`JS:${e.message}@${e.lineno}`);
-  const d = document.getElementById('mobile-debug');
-  if (d) d.textContent = _mobileDbgLog.join('\n');
-});
-// Create a visible debug panel on mobile that shows over the black canvas
+// Mobile debug: checkpoint tracker + error catcher
+const _mDbg = [];
+let _mDbgEl = null;
+function mDbg(msg) { _mDbg.push(msg); if (_mDbgEl) _mDbgEl.textContent = _mDbg.join('\n'); }
+window.addEventListener('error', (e) => mDbg(`ERR: ${e.message} @line ${e.lineno}`));
+window.addEventListener('unhandledrejection', (e) => mDbg(`REJECT: ${e.reason}`));
 if (window.innerWidth < 769) {
-  const dbg = document.createElement('div');
-  dbg.id = 'mobile-debug';
-  dbg.style.cssText = 'position:fixed;top:50px;left:8px;right:8px;z-index:9999;font:10px monospace;color:#0f0;background:rgba(0,0,0,0.85);padding:8px;border-radius:4px;white-space:pre-wrap;pointer-events:none;max-height:40vh;overflow:hidden;';
-  document.body.appendChild(dbg);
-  // Log init state after a brief delay
-  setTimeout(() => {
-    const wrap = document.getElementById('preview-wrap');
-    const c = document.getElementById('c');
-    const sb = document.getElementById('sidebar');
-    const lines = [
-      `wrap: ${wrap?wrap.clientWidth+'x'+wrap.clientHeight:'null'}`,
-      `canvas: ${c?c.width+'x'+c.height:'null'} css:${c?c.offsetWidth+'x'+c.offsetHeight:'?'}`,
-      `gl: ${typeof gl !== 'undefined' ? 'ok' : 'none'}`,
-      `float: ${typeof useFloat !== 'undefined' ? useFloat : '?'}`,
-      `texA: ${typeof texA !== 'undefined' ? (texA ? 'ok' : 'null') : '?'}`,
-      `sidebar children: ${sb ? sb.children.length : 'null'}`,
-      `shaderErrors: ${typeof _glErrors !== 'undefined' ? _glErrors.length : '?'}`,
-    ];
-    if (typeof _glErrors !== 'undefined' && _glErrors.length > 0) {
-      lines.push('ERRORS: ' + _glErrors.slice(0,3).join(' | '));
-    }
-    dbg.textContent = lines.join('\n');
-    _mobileDbgLog.push(...lines);
-  }, 1500);
+  _mDbgEl = document.createElement('div');
+  _mDbgEl.style.cssText = 'position:fixed;top:50px;left:8px;right:8px;z-index:9999;font:10px monospace;color:#0f0;background:rgba(0,0,0,0.85);padding:8px;border-radius:4px;white-space:pre-wrap;pointer-events:none;max-height:50vh;overflow:hidden;';
+  document.body.appendChild(_mDbgEl);
+  mDbg('debug init');
 }
 const canvas = document.getElementById('c');
 const gl = canvas.getContext('webgl2', { alpha: false, antialias: false, powerPreference: 'high-performance' });
@@ -1925,6 +1903,7 @@ void main() {
   o = vec4(scene + bloom * u_strength, 1.0);
 }`;
 
+mDbg('1:shaders');
 const warpP = mkProg(WARP_MESH_VS, WARP_MESH_FS);
 const waveP = mkProg(WAVE_VS, WAVE_FS);
 const waveLegacyP = mkProg(WAVE_VS_LEGACY, WAVE_FS_LEGACY);
@@ -1999,6 +1978,7 @@ function buildWarpMesh() {
   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, warpMeshIdxBuf);
   gl.bindVertexArray(null);
 }
+mDbg('2:mesh');
 buildWarpMesh();
 
 // Wave setup
@@ -2295,6 +2275,7 @@ function updateAudioModeLabel() {
   const el = document.getElementById('am-mode');
   if (el) { el.textContent = audioReactMode === 'split' ? 'S' : 'U'; el.style.color = audioReactMode === 'split' ? 'var(--accent)' : 'var(--dim)'; }
 }
+mDbg('3:monitor');
 buildAudioMonitor();
 
 function updateAudioMonitor(audio) {
@@ -2378,6 +2359,7 @@ function toggleTouchBar() {
   }
 }
 
+mDbg('4:touch');
 buildTouchBar();
 
 // Double-tap canvas to toggle touch bar
@@ -3440,8 +3422,7 @@ function render() {
   const qTag = ` <span class="d">|</span> ${QUALITY_MODES[qualityIdx].name}`;
   const patTag = state.wave_pattern > 0 ? ` <span class="d">|</span> ${PATTERN_NAMES[state.wave_pattern].toUpperCase()}` : '';
   const blendTag = state.wave_blend > 0 ? ` <span class="d">|</span> ${BLEND_NAMES[state.wave_blend].toUpperCase()}` : '';
-  const mobileDbg = window.innerWidth < 769 ? ` <span class="d">|</span> ${canvas.width}x${canvas.height} ${useFloat?'F':'U'}${_glErrors.length?' <span style="color:#f44">ERR:'+_glErrors.length+'</span>':''}` : '';
-  document.getElementById('hud').innerHTML=`${fps} <span class="d">fps</span> ${useMic?'<span class="d">|</span> MIC':''}${trans}${autoTag}${chaosTag}${libTag}${dualTag}${warpTag}${patTag}${blendTag}${qTag}${mobileDbg}`;
+  document.getElementById('hud').innerHTML=`${fps} <span class="d">fps</span> ${useMic?'<span class="d">|</span> MIC':''}${trans}${autoTag}${chaosTag}${libTag}${dualTag}${warpTag}${patTag}${blendTag}${qTag}`;
 
   requestAnimationFrame(render);
 }
@@ -3541,6 +3522,7 @@ function recallFavorite(slot) {
   if (btns[slot]) btns[slot].classList.add('active');
 }
 
+mDbg('5:favs');
 loadFavorites();
 
 // =====================================================
@@ -3599,6 +3581,7 @@ function loadLibrary(event) {
   event.target.value = '';
 }
 
+mDbg('6:lib');
 loadBuiltInLibrary();
 
 // =====================================================
@@ -4190,9 +4173,12 @@ function clearStartup() {
 }
 
 // Init
+mDbg('7:init');
 const startupConfig = loadStartup();
+mDbg('8:buildUI');
 buildUI();
 buildFavBar();
+mDbg('9:initFBs');
 initFBs();
 loadPreset('metheus'); // always start with a visual preset
 syncUI();
@@ -4208,6 +4194,7 @@ if (startupConfig) {
   toggleAudioMonitor();
   toggleOutputPanel();
 }
+mDbg('10:render');
 render();
 </script>
 </body>
