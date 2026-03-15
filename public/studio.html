@@ -117,10 +117,16 @@
   input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; background: var(--accent); border-radius: 50%; cursor: pointer; border: 2px solid var(--bg); }
   input[type="range"]::-moz-range-thumb { width: 12px; height: 12px; background: var(--accent); border-radius: 50%; cursor: pointer; border: 2px solid var(--bg); }
   .toggle-row { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
-  .tex-thumb-strip { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
-  .tex-thumb { width: 40px; height: 40px; border: 2px solid var(--border); border-radius: 3px; cursor: pointer; transition: opacity 0.2s, border-color 0.2s; image-rendering: pixelated; }
-  .tex-thumb:hover { border-color: var(--accent); }
-  .tex-thumb.disabled { opacity: 0.3; border-color: #833; }
+  .tex-thumb-strip { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 5px; }
+  .tex-thumb { width: 38px; text-align: center; cursor: pointer; transition: all 0.2s; }
+  .tex-thumb canvas { width: 38px; height: 38px; border: 2px solid var(--border); border-radius: 3px; display: block; image-rendering: pixelated; }
+  .tex-thumb:hover canvas { border-color: var(--accent); }
+  .tex-thumb.disabled canvas { opacity: 0.3; border-color: #833; }
+  .tex-thumb.active canvas { border-color: var(--accent); box-shadow: 0 0 6px rgba(240,165,0,0.4); }
+  .tex-thumb.empty canvas { opacity: 0.15; }
+  .tex-thumb .tname { font-size: 7px; color: var(--dim); line-height: 1; margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tex-thumb.active .tname { color: var(--accent); }
+  .tex-thumb.has-tex .tname { color: var(--text); }
   .tog {
     font: 9px 'Courier New', monospace; padding: 2px 6px;
     background: var(--input-bg); border: 1px dashed var(--border); color: var(--dim);
@@ -1266,28 +1272,50 @@ function buildTexThumbStrip() {
   const strip = document.getElementById('tex-thumb-strip');
   if (!strip) return;
   strip.innerHTML = '';
-  if (texPool.length === 0) return;
-  // Ensure texPoolEnabled matches pool length
-  while (texPoolEnabled.length < texPool.length) texPoolEnabled.push(true);
-  texPoolEnabled.length = texPool.length;
-  for (let i = 0; i < texPool.length; i++) {
+  const total = TEX_SHAPE_NAMES.length; // 32 slots
+  // Ensure texPoolEnabled matches total
+  while (texPoolEnabled.length < total) texPoolEnabled.push(true);
+  texPoolEnabled.length = total;
+  for (let i = 0; i < total; i++) {
+    const wrapper = document.createElement('div');
+    const hasTex = i < texPool.length && texPool[i];
+    const isActive = texCurrentIdx === i;
+    wrapper.className = 'tex-thumb'
+      + (texPoolEnabled[i] ? '' : ' disabled')
+      + (hasTex ? ' has-tex' : ' empty')
+      + (isActive ? ' active' : '');
+    wrapper.id = `tex-th-${i}`;
+    wrapper.title = TEX_SHAPE_NAMES[i] + (hasTex ? '' : ' (no texture)') + '\nShift-click to toggle in/out';
     const c = document.createElement('canvas');
-    c.width = 40; c.height = 40;
-    c.className = 'tex-thumb' + (texPoolEnabled[i] ? '' : ' disabled');
-    c.title = 'Shift-click to toggle texture #' + (i + 1) + ' in/out of rotation';
-    // Draw thumbnail
-    const ctx = c.getContext('2d');
-    const img = new Image();
-    img.onload = () => { ctx.drawImage(img, 0, 0, 40, 40); };
-    img.src = texPool[i];
-    // Shift-click to toggle
-    c.addEventListener('click', (e) => {
+    c.width = 38; c.height = 38;
+    if (hasTex) {
+      const ctx = c.getContext('2d');
+      const img = new Image();
+      img.onload = () => { ctx.drawImage(img, 0, 0, 38, 38); };
+      img.src = texPool[i];
+    }
+    wrapper.appendChild(c);
+    const label = document.createElement('div');
+    label.className = 'tname';
+    label.textContent = TEX_SHAPE_NAMES[i] || `#${i+1}`;
+    wrapper.appendChild(label);
+    // Shift-click to toggle pool
+    wrapper.addEventListener('click', (e) => {
       if (!e.shiftKey) return;
       texPoolEnabled[i] = !texPoolEnabled[i];
-      c.classList.toggle('disabled', !texPoolEnabled[i]);
+      wrapper.classList.toggle('disabled', !texPoolEnabled[i]);
     });
-    strip.appendChild(c);
+    strip.appendChild(wrapper);
   }
+}
+
+// Update which thumbnail has the active highlight (called during crossfade)
+function updateTexThumbActive() {
+  const strip = document.getElementById('tex-thumb-strip');
+  if (!strip) return;
+  strip.querySelectorAll('.tex-thumb').forEach((el, i) => {
+    el.classList.toggle('active', i === texCurrentIdx);
+  });
 }
 
 function mkTexPatCycle() {
@@ -5079,6 +5107,17 @@ const texChaosLock = {};
 let texMode = 1; // 0=off, 1=custom
 let texPool = []; // array of base64 data URLs
 let texPoolEnabled = []; // parallel array: true = in rotation, false = disabled
+
+// Shape names matching workshop order (32 shapes) — used for thumbnail labels
+const TEX_SHAPE_NAMES = [
+  'Jinxed','Gearwork','Motherboard','Circuit Brd','Clockwork',
+  'Flower','Sri Yantra','Mandala','Metatron','Hex Field',
+  'Mycelium','Voronoi','Coral','Erosion','Tree of Life',
+  'Spirograph','Lissajous','Moiré','Topography',
+  'Sierpinski','Koch Snow','Julia Set','Dragon',
+  'Cathedral','Shatter','Lattice','Labyrinth','Cityscape',
+  'Escher Tile','Escher Spi','Impossible','Tessellation',
+];
 let texGLA = null, texGLB = null; // two GL textures for crossfade
 let texGLAReady = false, texGLBReady = false;
 let texCurrentIdx = -1; // which pool index is showing (texA)
@@ -5117,8 +5156,8 @@ function loadTexPool() {
     const single = localStorage.getItem('synthestasia_texture');
     if (single) texPool = [single];
   }
-  // Reset enabled array to match pool length (all enabled by default)
-  texPoolEnabled = texPool.map(() => true);
+  // Ensure enabled array covers all slots, preserving existing toggles
+  while (texPoolEnabled.length < TEX_SHAPE_NAMES.length) texPoolEnabled.push(true);
   if (texPool.length > 0 && texCurrentIdx < 0) {
     texCurrentIdx = 0;
     if (texGLA) gl.deleteTexture(texGLA);
@@ -5163,6 +5202,7 @@ function stepTexture(now) {
       const tmp = texGLA; texGLA = texGLB; texGLB = tmp;
       const tmpR = texGLAReady; texGLAReady = texGLBReady; texGLBReady = tmpR;
       texCurrentIdx = texNextIdx;
+      updateTexThumbActive();
     }
   }
   // Time for next change?
