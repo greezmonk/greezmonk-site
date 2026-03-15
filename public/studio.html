@@ -4742,7 +4742,7 @@ function render() {
       const origSc = state.wave_scale;
       state.wave_mode = g3Shape;
       state.wave_mystery = (now_g3 * 0.001) + audio.treb * 0.5;
-      state.wave_scale = Math.max(state.wave_scale * (1.1 + audio.bass * 0.2), G3_MIN_SCALE);
+      state.wave_scale = Math.min(Math.max(state.wave_scale * (1.1 + audio.bass * 0.2), G3_MIN_SCALE), 1.8);
       const wvG3 = buildWaveVerts(wave, aspect);
       state.wave_mode = origMode; state.wave_mystery = origMy;
       state.wave_scale = origSc;
@@ -4758,8 +4758,8 @@ function render() {
   // Reset driver to bass for glow pass (wave1's glow)
   waveDriver = audio.bass;
 
-  // Thick/brighten glow pass
-  if (state.wave_thick || state.wave_brighten) {
+  // Thick/brighten glow pass — follows wave 1 visibility
+  if (!wave1Hidden && (state.wave_thick || state.wave_brighten)) {
     const wvT = buildWaveVerts(wave, aspect);
     drawWave(wvT, state.wave_r*1.2, state.wave_g*1.2, state.wave_b*1.2, state.wave_a*0.4, state.wave_dots, 1.8, state.wave_r2*1.2, state.wave_g2*1.2, state.wave_b2*1.2, state.wave_gradient, state.wave_pattern, state.wave_pattern_speed);
   }
