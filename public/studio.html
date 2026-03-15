@@ -365,7 +365,7 @@
     <button id="btn-desktop" onclick="startDesktopAudio()" title="Capture desktop/tab audio — share a tab playing music">desktop</button>
     <button id="btn-player" onclick="document.getElementById('load-audio').click()" title="Load audio files (mp3/wav) for clean playback">player</button>
     <input type="file" id="load-audio" accept="audio/*" multiple style="display:none" onchange="loadAudioFiles(event)">
-    <button id="btn-editor" onclick="toggleEditorView()" title="Editor view — centers shapes &amp; texture, pauses motion (V)">editor</button>
+    <button id="btn-editor" onclick="toggleEditorView()" title="Editor view — centers shapes &amp; texture, pauses motion (N)">editor</button>
     <button id="btn-fs" onclick="goFullscreen()" title="Enter fullscreen mode (F)">fullscreen</button>
   </div>
   <div id="player-bar" style="display:none;">
@@ -436,7 +436,7 @@
     <div class="help-row"><span class="help-key">Ctrl+Shift + 1-0</span><span class="help-desc">store to favorite slot</span></div>
     <h3>Display</h3>
     <div class="help-row"><span class="help-key">F</span><span class="help-desc">fullscreen</span></div>
-    <div class="help-row"><span class="help-key">V</span><span class="help-desc">editor view — centers shapes &amp; texture, pauses motion</span></div>
+    <div class="help-row"><span class="help-key">N</span><span class="help-desc">editor view — centers shapes &amp; texture, pauses motion</span></div>
     <div class="help-row"><span class="help-key">M</span><span class="help-desc">toggle microphone</span></div>
     <div class="help-row"><span class="help-key">H</span><span class="help-desc">toggle HUD</span></div>
     <div class="help-row"><span class="help-key">S</span><span class="help-desc">toggle audio monitor (bass/mid/treb/energy bars)</span></div>
@@ -5913,7 +5913,7 @@ document.addEventListener('keydown', e => {
     case 'a': toggleAutoRandom(); break;
     case 'c': toggleChaos(); break;
     case 'f': goFullscreen(); break;
-    case 'v': toggleEditorView(); break;
+    case 'n': toggleEditorView(); break;
     case 'm': toggleMic(); break;
     case 'd': cycleDual(); break;
     case 'e': toggleWave2Edit(); break;
