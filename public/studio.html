@@ -112,6 +112,7 @@
   .ctl:last-child { margin-bottom: 0; }
   .ctl label { display: flex; justify-content: space-between; font-size: 10px; color: var(--dim); margin-bottom: 2px; }
   .ctl .val { color: var(--accent); min-width: 44px; text-align: right; }
+  .tcbox { width:12px; height:12px; accent-color: var(--accent); cursor:pointer; margin:0 4px 0 auto; flex-shrink:0; }
   input[type="range"] { -webkit-appearance: none; width: 100%; height: 3px; background: var(--input-bg); border-radius: 1px; outline: none; }
   input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; background: var(--accent); border-radius: 50%; cursor: pointer; border: 2px solid var(--bg); }
   input[type="range"]::-moz-range-thumb { width: 12px; height: 12px; background: var(--accent); border-radius: 50%; cursor: pointer; border: 2px solid var(--bg); }
@@ -365,6 +366,7 @@
     <button onclick="document.getElementById('load-library').click()" title="Load config library folder">library</button>
     <input type="file" id="load-file" accept=".json" style="display:none" onchange="loadConfig(event)">
     <input type="file" id="load-library" accept=".json" multiple style="display:none" onchange="loadLibrary(event)">
+    <button onclick="window.open('textures.html','_blank')" title="Open texture workshop — create custom textures for the feedback loop" style="color:#f0a;">textures</button>
   </div>
   <div class="favorites" id="fav-bar"></div>
 </header>
@@ -409,6 +411,7 @@
     <div class="help-row"><span class="help-key">S</span><span class="help-desc">toggle audio monitor (bass/mid/treb/energy bars)</span></div>
     <div class="help-row"><span class="help-key">G</span><span class="help-desc">audio react mode: SPLIT (shape1=bass, shape2=mid) / UNIFIED (both=bass)</span></div>
     <div class="help-row"><span class="help-key">X</span><span class="help-desc">toggle on-screen touch controls (auto-shows on phones)</span></div>
+    <div class="help-row"><span class="help-key">I</span><span class="help-desc">toggle texture overlay (from workshop)</span></div>
     <div class="help-row"><span class="help-key">T</span><span class="help-desc">toggle title attribution</span></div>
     <h3>Shape Pool</h3>
     <div class="help-row"><span class="help-key">Shift+Click shape</span><span class="help-desc">toggle shape in auto/chaos pool</span></div>
@@ -601,6 +604,12 @@ const DEFAULTS = {
   bloom_strength: 0.3, bloom_threshold: 0.4,
   audio_bass_gain: 1.54, audio_mid_gain: 1.67, audio_treb_gain: 1.77, audio_trigger: 0.18,
   transition_speed: 0.003, auto_interval: 5,
+  tex_opacity: 0.35, tex_interval: 8, tex_crossfade: 2,
+  tex_scale: 1, tex_stretch_x: 1, tex_stretch_y: 1,
+  tex_x: 0, tex_y: 0, tex_rot: 0,
+  tex_tint_r: 1, tex_tint_g: 1, tex_tint_b: 1,
+  tex_displace: 0, tex_colorize: 0, tex_pat_amt: 0,
+  tex_invert: 0, tex_neg: 0, tex_multiply: 0,
 };
 
 const PRESETS = {
@@ -705,6 +714,7 @@ const GROUP_TIPS = {
   'Audio Sensitivity': 'How much bass, mid, and treble affect the visuals',
   'Bloom': 'Glow effect around bright areas',
   'Post-Processing': 'Screen-wide effects: brighten, darken, solarize, invert (applies to entire frame)',
+  'Texture': 'Custom texture overlaid into the feedback loop — generates from the workshop tab (I to toggle)',
 };
 const GROUPS = [
   { name: 'Wave Shape', controls: [
@@ -779,6 +789,29 @@ const GROUPS = [
   { name: 'Post-Processing', collapsed: true, controls: [
     { type: 'toggles', keys: ['brighten','darken','solarize','invert'] },
   ]},
+  { name: 'Texture', collapsed: true, controls: [
+    { type: 'texcycle' },
+    { type: 'slider', key: 'tex_opacity', min: 0, max: 1, step: 0.01, label: 'opacity', chaos: true },
+    { type: 'slider', key: 'tex_interval', min: 1, max: 60, step: 1, label: 'interval (s)', chaos: true },
+    { type: 'slider', key: 'tex_crossfade', min: 0.1, max: 10, step: 0.1, label: 'crossfade (s)', chaos: true },
+    { type: 'slider', key: 'tex_scale', min: 0.1, max: 5, step: 0.01, label: 'scale', chaos: true },
+    { type: 'slider', key: 'tex_stretch_x', min: 0.1, max: 3, step: 0.01, label: 'stretch x', chaos: true },
+    { type: 'slider', key: 'tex_stretch_y', min: 0.1, max: 3, step: 0.01, label: 'stretch y', chaos: true },
+    { type: 'slider', key: 'tex_x', min: -1, max: 1, step: 0.01, label: 'x pos', chaos: true },
+    { type: 'slider', key: 'tex_y', min: -1, max: 1, step: 0.01, label: 'y pos', chaos: true },
+    { type: 'slider', key: 'tex_rot', min: -3.14, max: 3.14, step: 0.01, label: 'rotation', chaos: true },
+    { type: 'slider', key: 'tex_displace', min: 0, max: 1, step: 0.01, label: 'displacement', chaos: true },
+    { type: 'slider', key: 'tex_colorize', min: 0, max: 1, step: 0.01, label: 'colorize', chaos: true },
+    { type: 'slider', key: 'tex_tint_r', min: 0, max: 1, step: 0.01, label: 'tint red', chaos: true },
+    { type: 'slider', key: 'tex_tint_g', min: 0, max: 1, step: 0.01, label: 'tint green', chaos: true },
+    { type: 'slider', key: 'tex_tint_b', min: 0, max: 1, step: 0.01, label: 'tint blue', chaos: true },
+    { type: 'color', keys: ['tex_tint_r','tex_tint_g','tex_tint_b'] },
+    { type: 'texpatcycle' },
+    { type: 'slider', key: 'tex_pat_amt', min: 0, max: 1, step: 0.01, label: 'pattern amount', chaos: true },
+    { type: 'textoggles' },
+    { type: 'texchaosspeed' },
+    { type: 'texchaos' },
+  ]},
 ];
 
 function buildUI() {
@@ -803,6 +836,11 @@ function buildUI() {
       else if (c.type === 'blendcycle') body.appendChild(mkBlendCycle());
       else if (c.type === 'patterncycle') body.appendChild(mkPatternCycle());
       else if (c.type === 'palette') body.appendChild(mkPalette());
+      else if (c.type === 'texcycle') body.appendChild(mkTexCycle());
+      else if (c.type === 'texpatcycle') body.appendChild(mkTexPatCycle());
+      else if (c.type === 'textoggles') body.appendChild(mkTexToggles());
+      else if (c.type === 'texchaosspeed') body.appendChild(mkTexChaosSpeed());
+      else if (c.type === 'texchaos') body.appendChild(mkTexChaos());
     }
     div.appendChild(body);
     sb.appendChild(div);
@@ -844,6 +882,21 @@ const TIPS = {
   audio_trigger: 'Audio level threshold that triggers chaos events',
   bloom_strength: 'Glow intensity around bright areas',
   bloom_threshold: 'Brightness cutoff for bloom effect',
+  tex_opacity: 'How strongly the texture is drawn into the feedback loop each frame',
+  tex_interval: 'Seconds between random texture changes',
+  tex_crossfade: 'Seconds to crossfade between textures',
+  tex_scale: 'Overall scale of the texture — smaller values zoom in',
+  tex_stretch_x: 'Horizontal stretch of the texture',
+  tex_stretch_y: 'Vertical stretch of the texture',
+  tex_x: 'Horizontal position offset of the texture',
+  tex_y: 'Vertical position offset of the texture',
+  tex_rot: 'Rotation of the texture in radians',
+  tex_displace: 'Noise displacement — warps the texture shape with animated noise',
+  tex_colorize: 'Gradient colorization — color spreads from tint to white from center outward',
+  tex_pat_amt: 'How much the fill pattern cuts into the texture shape',
+  tex_tint_r: 'Red channel of texture tint color',
+  tex_tint_g: 'Green channel of texture tint color',
+  tex_tint_b: 'Blue channel of texture tint color',
   brighten: 'Post-processing: brighten the whole frame (shift+click to lock)',
   darken: 'Post-processing: darken the whole frame (shift+click to lock)',
   solarize: 'Post-processing: solarize color inversion effect (shift+click to lock)',
@@ -854,13 +907,19 @@ function mkSlider(c) {
   const d = document.createElement('div'); d.className = 'ctl';
   if (TIPS[c.key]) d.title = TIPS[c.key];
   const dec = c.step < 0.01 ? 3 : 2;
-  d.innerHTML = `<label><span>${c.label}</span><span class="val" id="v-${c.key}">${Number(state[c.key]).toFixed(dec)}</span></label>
+  // Chaos lock checkbox for texture sliders
+  const chaosCheck = c.chaos ? `<input type="checkbox" id="tc-${c.key}" class="tcbox" ${texChaosLock[c.key] ? '' : 'checked'} title="Include in texture chaos">` : '';
+  d.innerHTML = `<label><span>${c.label}</span>${chaosCheck}<span class="val" id="v-${c.key}">${Number(state[c.key]).toFixed(dec)}</span></label>
     <input type="range" id="s-${c.key}" min="${c.min}" max="${c.max}" step="${c.step}" value="${state[c.key]}">`;
-  d.querySelector('input').addEventListener('input', e => {
+  d.querySelector('input[type=range]').addEventListener('input', e => {
     state[c.key] = parseFloat(e.target.value);
     document.getElementById(`v-${c.key}`).textContent = Number(e.target.value).toFixed(dec);
     onParamChange();
   });
+  if (c.chaos) {
+    const cb = d.querySelector('.tcbox');
+    if (cb) cb.addEventListener('change', e => { texChaosLock[c.key] = !e.target.checked; });
+  }
   return d;
 }
 
@@ -1179,6 +1238,94 @@ function getRandomPaletteColor() {
   return pal.colors[Math.floor(Math.random() * pal.colors.length)];
 }
 
+function mkTexCycle() {
+  const d = document.createElement('div'); d.className = 'ctl';
+  const b = document.createElement('button');
+  b.id = 'btn-texcycle';
+  b.className = 'tog' + (texMode > 0 ? ' on' : '');
+  b.textContent = 'tex: ' + TEX_MODES[texMode];
+  b.style.cssText = 'width:100%;padding:4px 0';
+  b.onclick = () => { cycleTexMode(); b.className = 'tog' + (texMode > 0 ? ' on' : ''); };
+  d.title = 'Toggle custom texture in feedback loop (I key). Generate textures in the workshop tab.';
+  d.appendChild(b);
+  return d;
+}
+
+function mkTexPatCycle() {
+  const d = document.createElement('div'); d.className = 'ctl';
+  const label = document.createElement('label');
+  label.innerHTML = '<span>fill pattern</span><span class="val" id="v-tex_pattern">' + TEX_PAT_NAMES[texPatternMode] + '</span>';
+  d.title = 'Procedural fill pattern overlaid on the texture shape. Modulated by pattern amount slider.';
+  d.appendChild(label);
+  const row = document.createElement('div'); row.className = 'toggle-row';
+  for (let i = 0; i < TEX_PAT_NAMES.length; i++) {
+    const b = document.createElement('button');
+    b.className = 'tog' + (texPatternMode === i ? ' on' : '');
+    b.textContent = TEX_PAT_NAMES[i]; b.id = `tpat-${i}`;
+    b.onclick = () => {
+      texPatternMode = i;
+      row.querySelectorAll('.tog').forEach(t => t.classList.remove('on'));
+      b.classList.add('on');
+      const vl = document.getElementById('v-tex_pattern');
+      if (vl) vl.textContent = TEX_PAT_NAMES[i];
+    };
+    row.appendChild(b);
+  }
+  d.appendChild(row); return d;
+}
+
+function mkTexChaosSpeed() {
+  const d = document.createElement('div'); d.className = 'ctl';
+  const label = document.createElement('label');
+  label.innerHTML = `<span>chaos speed</span><span class="val" id="v-texchaosspeed">${texChaosSpeed.toFixed(2)}</span>`;
+  d.appendChild(label);
+  d.title = 'How fast texture chaos drifts all unlocked params. Low = glacial, high = twitchy.';
+  const inp = document.createElement('input');
+  inp.type = 'range'; inp.min = 0; inp.max = 1; inp.step = 0.01; inp.value = texChaosSpeed;
+  inp.id = 'sl-texchaosspeed';
+  inp.oninput = () => { texChaosSpeed = parseFloat(inp.value); const vl = document.getElementById('v-texchaosspeed'); if (vl) vl.textContent = texChaosSpeed.toFixed(2); };
+  d.appendChild(inp);
+  return d;
+}
+
+function mkTexToggles() {
+  const d = document.createElement('div'); d.className = 'ctl';
+  const label = document.createElement('label');
+  label.innerHTML = '<span>blend effects</span>';
+  d.appendChild(label);
+  const row = document.createElement('div'); row.className = 'toggle-row';
+  const toggles = [
+    { key: 'tex_invert', label: 'invert', tip: 'Invert texture colors (black shapes)' },
+    { key: 'tex_neg', label: 'negative', tip: 'Subtract texture from framebuffer' },
+    { key: 'tex_multiply', label: 'multiply', tip: 'Multiply blend — darkens through texture' },
+  ];
+  for (const t of toggles) {
+    const b = document.createElement('button');
+    b.className = 'tog' + (state[t.key] ? ' on' : '');
+    b.textContent = t.label; b.id = `ttog-${t.key}`;
+    b.title = t.tip;
+    b.onclick = () => {
+      state[t.key] = state[t.key] ? 0 : 1; b.classList.toggle('on');
+      if (t.key === 'tex_invert') onTexInvertChange();
+    };
+    row.appendChild(b);
+  }
+  d.appendChild(row); return d;
+}
+
+function mkTexChaos() {
+  const d = document.createElement('div'); d.className = 'ctl';
+  const b = document.createElement('button');
+  b.id = 'btn-texchaos';
+  b.className = 'tog' + (texChaosEnabled ? ' on' : '');
+  b.textContent = 'tex chaos: ' + (texChaosEnabled ? 'ON' : 'off');
+  b.style.cssText = 'width:100%;padding:4px 0';
+  b.onclick = () => { toggleTexChaos(); b.className = 'tog' + (texChaosEnabled ? ' on' : ''); b.textContent = 'tex chaos: ' + (texChaosEnabled ? 'ON' : 'off'); };
+  d.title = 'Brownian drift on checked texture params. Uncheck sliders to lock them from chaos.';
+  d.appendChild(b);
+  return d;
+}
+
 function mkPalette() {
   const d = document.createElement('div'); d.className = 'ctl';
   d.id = 'palette-container';
@@ -1299,6 +1446,29 @@ function syncUI() {
         const cat = a.closest('.wm-cat');
         if (cat) cat.classList.remove('collapsed');
       }
+    } else if (c.type === 'texcycle') {
+      const tb = document.getElementById('btn-texcycle');
+      if (tb) { tb.textContent = 'tex: ' + TEX_MODES[texMode]; tb.className = 'tog' + (texMode > 0 ? ' on' : ''); }
+    } else if (c.type === 'texpatcycle') {
+      for (let pi = 0; pi < TEX_PAT_NAMES.length; pi++) {
+        const pb = document.getElementById(`tpat-${pi}`);
+        if (pb) pb.classList.toggle('on', texPatternMode === pi);
+      }
+      const tpvl = document.getElementById('v-tex_pattern');
+      if (tpvl) tpvl.textContent = TEX_PAT_NAMES[texPatternMode];
+    } else if (c.type === 'texchaosspeed') {
+      const sl = document.getElementById('sl-texchaosspeed');
+      if (sl) sl.value = texChaosSpeed;
+      const vl = document.getElementById('v-texchaosspeed');
+      if (vl) vl.textContent = texChaosSpeed.toFixed(2);
+    } else if (c.type === 'textoggles') {
+      for (const tk of ['tex_invert','tex_neg','tex_multiply']) {
+        const tb = document.getElementById(`ttog-${tk}`);
+        if (tb) tb.classList.toggle('on', !!state[tk]);
+      }
+    } else if (c.type === 'texchaos') {
+      const tcb = document.getElementById('btn-texchaos');
+      if (tcb) { tcb.textContent = 'tex chaos: ' + (texChaosEnabled ? 'ON' : 'off'); tcb.className = 'tog' + (texChaosEnabled ? ' on' : ''); }
     }
   }
   // Color previews
@@ -2229,6 +2399,103 @@ void main() {
   o = vec4(scene + bloom * u_strength, 1.0);
 }`;
 
+// Texture overlay — draws custom texture into feedback loop with crossfade + transforms + effects
+const TEX_OVERLAY_FS = `#version 300 es
+precision highp float;
+in vec2 v_uv; out vec4 o;
+uniform sampler2D u_texA;
+uniform sampler2D u_texB;
+uniform float u_mix;
+uniform float u_opacity;
+uniform vec2 u_texScale;
+uniform vec2 u_texPos;
+uniform float u_texRot;
+uniform vec3 u_texTint;
+uniform float u_texDisplace; // noise displacement amount
+uniform float u_texColorize; // gradient color amount
+uniform int u_texPattern;    // fill pattern mode (0=none)
+uniform float u_texPatAmt;   // pattern mix amount
+uniform float u_time;
+uniform bool u_texInvert;    // invert texture colors (black shapes)
+uniform bool u_texNeg;       // negative — subtract from framebuffer
+
+// Hash noise for displacement
+float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float noise(vec2 p) {
+  vec2 i = floor(p), f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(hash(i), hash(i+vec2(1,0)), f.x), mix(hash(i+vec2(0,1)), hash(i+vec2(1,1)), f.x), f.y);
+}
+float fbm(vec2 p) {
+  float v = 0.0, a = 0.5;
+  for (int i = 0; i < 4; i++) { v += a * noise(p); p *= 2.0; a *= 0.5; }
+  return v;
+}
+
+// Procedural fill patterns (0=none, 1-10)
+float fillPattern(vec2 uv, int mode, float t) {
+  if (mode == 1) return smoothstep(0.4, 0.6, fract(uv.y * 20.0 + t * 0.5));  // scanlines
+  if (mode == 2) return smoothstep(0.4, 0.6, fract(uv.x * 20.0 + t * 0.3));  // v-lines
+  if (mode == 3) return smoothstep(0.4, 0.6, fract((uv.x + uv.y) * 14.0 + t * 0.4));  // diagonal
+  if (mode == 4) return max(smoothstep(0.4, 0.6, fract(uv.x * 15.0)), smoothstep(0.4, 0.6, fract(uv.y * 15.0)));  // grid
+  if (mode == 5) return smoothstep(0.4, 0.6, fract(length(uv - 0.5) * 12.0 - t * 0.3));  // rings
+  if (mode == 6) return smoothstep(0.4, 0.6, fract((abs(uv.x-0.5)+abs(uv.y-0.5)) * 10.0 - t * 0.2));  // diamonds
+  if (mode == 7) return smoothstep(0.4, 0.6, fract(uv.y * 10.0 + sin(uv.x * 20.0 + t) * 0.3));  // waves
+  if (mode == 8) { vec2 g = fract(uv * 12.0) - 0.5; return 1.0 - smoothstep(0.12, 0.18, length(g)); }  // dots
+  if (mode == 9) return max(smoothstep(0.4,0.6,fract((uv.x+uv.y)*14.0)), smoothstep(0.4,0.6,fract((uv.x-uv.y)*14.0)));  // crosshatch
+  if (mode == 10) return smoothstep(0.3, 0.7, fract(uv.x*8.0 + sin(uv.y*12.0+t)*0.5)) * smoothstep(0.3, 0.7, fract(uv.y*8.0 + cos(uv.x*12.0+t*0.7)*0.5));  // weave
+  return 1.0;
+}
+
+void main() {
+  // Transform UVs
+  vec2 uv = v_uv - 0.5;
+  float ca = cos(u_texRot), sa = sin(u_texRot);
+  uv = vec2(uv.x * ca - uv.y * sa, uv.x * sa + uv.y * ca);
+  uv = uv / max(u_texScale, vec2(0.01)) + 0.5 - u_texPos;
+
+  // Noise displacement — warps the texture UVs
+  if (u_texDisplace > 0.001) {
+    vec2 d = vec2(fbm(uv * 4.0 + u_time * 0.2) - 0.5, fbm(uv * 4.0 + 100.0 + u_time * 0.15) - 0.5);
+    uv += d * u_texDisplace * 0.8;
+  }
+
+  // Bounds check
+  vec2 clampUV = clamp(uv, 0.0, 1.0);
+  float inBounds = step(0.0, uv.x) * step(uv.x, 1.0) * step(0.0, uv.y) * step(uv.y, 1.0);
+  vec4 a = texture(u_texA, clampUV) * inBounds;
+  vec4 b = texture(u_texB, clampUV) * inBounds;
+  vec4 c = mix(a, b, u_mix);
+
+  // Colorize — tint always applies; colorize adds animated gradient variation
+  c.rgb *= u_texTint;
+  if (u_texColorize > 0.001) {
+    // Animated radial gradient: tint at center, complementary at edges, shifts over time
+    float grad = length(uv - 0.5) * 2.0;
+    float hueShift = u_time * 0.1;
+    vec3 edgeCol = vec3(
+      0.5 + 0.5 * sin(hueShift),
+      0.5 + 0.5 * sin(hueShift + 2.094),
+      0.5 + 0.5 * sin(hueShift + 4.189)
+    );
+    vec3 gradCol = mix(u_texTint, edgeCol, grad);
+    c.rgb = mix(c.rgb, gradCol, u_texColorize * c.a);
+  }
+
+  // Fill pattern overlay — modulates both alpha AND brightness for visible contrast
+  if (u_texPattern > 0 && u_texPatAmt > 0.001) {
+    float pat = fillPattern(v_uv, u_texPattern, u_time);
+    float amt = u_texPatAmt;
+    c.a *= mix(1.0, pat, amt);
+    c.rgb *= mix(1.0, pat, amt * 0.6); // darken gaps for visible pattern on white shapes
+  }
+
+  // Invert flips the texture color (black shapes instead of white)
+  if (u_texInvert) c.rgb = 1.0 - c.rgb;
+  // Negative flag is handled via GL blend mode on the JS side
+  o = vec4(c.rgb, c.a * u_opacity);
+}`;
+
 mDbg('1:shaders');
 const warpP = mkProg(WARP_MESH_VS, WARP_MESH_FS);
 const waveP = mkProg(WAVE_VS, WAVE_FS);
@@ -2238,6 +2505,7 @@ const compP = mkProg(QUAD_VS, COMP_FS);
 const bloomExtP = mkProg(QUAD_VS, BLOOM_EXTRACT_FS);
 const bloomBlurP = mkProg(QUAD_VS, BLOOM_BLUR_FS);
 const bloomBlendP = mkProg(QUAD_VS, BLOOM_BLEND_FS);
+const texOverlayP = mkProg(QUAD_VS, TEX_OVERLAY_FS);
 
 function uL(p,n) { return gl.getUniformLocation(p,n); }
 const wU={}; ['u_prev','u_time','u_zoom','u_rot','u_warp','u_cx','u_cy','u_dx','u_dy','u_sx','u_sy','u_decay','u_warp_mode','u_warp_blend'].forEach(n=>wU[n]=uL(warpP,n));
@@ -2247,6 +2515,7 @@ const vUL={}; ['u_col'].forEach(n=>vUL[n]=uL(waveLegacyP,n));
 const beU={}; ['u_tex','u_threshold'].forEach(n=>beU[n]=uL(bloomExtP,n));
 const bbU={}; ['u_tex','u_dir'].forEach(n=>bbU[n]=uL(bloomBlurP,n));
 const blU={}; ['u_scene','u_bloom','u_strength'].forEach(n=>blU[n]=uL(bloomBlendP,n));
+const tOU={}; ['u_texA','u_texB','u_mix','u_opacity','u_texScale','u_texPos','u_texRot','u_texTint','u_texDisplace','u_texColorize','u_texPattern','u_texPatAmt','u_time','u_texInvert','u_texNeg'].forEach(n=>tOU[n]=uL(texOverlayP,n));
 
 // Quad buffer (for comp, bloom passes)
 const qBuf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, qBuf);
@@ -2262,6 +2531,7 @@ const compVAO = mkQuadVAO(compP);
 const bloomExtVAO = mkQuadVAO(bloomExtP);
 const bloomBlurVAO = mkQuadVAO(bloomBlurP);
 const bloomBlendVAO = mkQuadVAO(bloomBlendP);
+const texOverlayVAO = mkQuadVAO(texOverlayP);
 
 // Warp mesh — variable resolution grid like projectM
 let MESH_W = 48, MESH_H = 36;
@@ -3649,6 +3919,48 @@ function render() {
   gl.uniform1f(wU.u_warp_mode, warpMode);
   gl.bindVertexArray(warpVAO); gl.drawElements(gl.TRIANGLES, warpMeshCount, gl.UNSIGNED_SHORT, 0);
 
+  // Pass 1.5: Texture overlay — drawn INTO the feedback loop so warp pulls it
+  stepTexture(now);
+  stepTexChaos();
+  if (texMode > 0 && texGLAReady && texGLA) {
+    gl.enable(gl.BLEND);
+    // Blend mode: negative subtracts, multiply darkens, default alpha-blends
+    if (state.tex_neg) {
+      gl.blendEquation(gl.FUNC_REVERSE_SUBTRACT);
+      gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
+    } else if (state.tex_multiply) {
+      gl.blendFunc(gl.DST_COLOR, gl.ZERO);
+    } else {
+      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    }
+    gl.useProgram(texOverlayP);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, texGLA);
+    gl.uniform1i(tOU.u_texA, 0);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, texGLBReady && texGLB ? texGLB : texGLA);
+    gl.uniform1i(tOU.u_texB, 1);
+    gl.uniform1f(tOU.u_mix, texFading ? texMix : 0.0);
+    gl.uniform1f(tOU.u_opacity, state.tex_opacity);
+    gl.uniform2f(tOU.u_texScale, state.tex_scale * state.tex_stretch_x, state.tex_scale * state.tex_stretch_y);
+    gl.uniform2f(tOU.u_texPos, state.tex_x, state.tex_y);
+    gl.uniform1f(tOU.u_texRot, state.tex_rot);
+    gl.uniform3f(tOU.u_texTint, state.tex_tint_r, state.tex_tint_g, state.tex_tint_b);
+    gl.uniform1f(tOU.u_texDisplace, state.tex_displace);
+    gl.uniform1f(tOU.u_texColorize, state.tex_colorize);
+    gl.uniform1i(tOU.u_texPattern, texPatternMode);
+    gl.uniform1f(tOU.u_texPatAmt, state.tex_pat_amt);
+    gl.uniform1f(tOU.u_time, t);
+    gl.uniform1i(tOU.u_texInvert, state.tex_invert ? 1 : 0);
+    gl.uniform1i(tOU.u_texNeg, state.tex_neg ? 1 : 0);
+    gl.bindVertexArray(texOverlayVAO);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    gl.activeTexture(gl.TEXTURE0);
+    // Reset blend state
+    if (state.tex_neg) gl.blendEquation(gl.FUNC_ADD);
+    gl.disable(gl.BLEND);
+  }
+
   // Pass 2: Waves
   // If editing wave2, state has wave2's values — swap to wave1 for drawing
   let editSwapped = false;
@@ -3958,7 +4270,8 @@ function render() {
   const qTag = ` <span class="d">|</span> ${QUALITY_MODES[qualityIdx].name}`;
   const patTag = state.wave_pattern > 0 ? ` <span class="d">|</span> ${PATTERN_NAMES[state.wave_pattern].toUpperCase()}` : '';
   const blendTag = state.wave_blend > 0 ? ` <span class="d">|</span> ${BLEND_NAMES[state.wave_blend].toUpperCase()}` : '';
-  document.getElementById('hud').innerHTML=`${fps} <span class="d">fps</span> ${useMic?'<span class="d">|</span> MIC':''}${trans}${autoTag}${chaosTag}${g3Tag}${libTag}${dualTag}${warpTag}${patTag}${blendTag}${qTag}`;
+  const texTag = texMode > 0 ? ` <span class="d">|</span> TEX` : '';
+  document.getElementById('hud').innerHTML=`${fps} <span class="d">fps</span> ${useMic?'<span class="d">|</span> MIC':''}${trans}${autoTag}${chaosTag}${g3Tag}${libTag}${dualTag}${warpTag}${patTag}${blendTag}${texTag}${qTag}`;
 
   requestAnimationFrame(render);
 }
@@ -3970,7 +4283,10 @@ function loadPreset(name) {
   if (autoRandomInterval) toggleAutoRandom();
   transitionTarget = null; transitionFrom = null;
   currentPresetName=name;
+  // Preserve texture settings through preset changes
+  const texSave = {}; for (const k of Object.keys(state)) { if (k.startsWith('tex_')) texSave[k] = state[k]; }
   Object.assign(state, DEFAULTS, {...p}); delete state._name;
+  Object.assign(state, texSave); // restore tex state
   syncUI(); updateMilk();
   document.querySelectorAll('.presets button').forEach(b=>b.classList.remove('active'));
   const btn=document.getElementById(`pre-${name}`); if(btn) btn.classList.add('active');
@@ -4342,6 +4658,8 @@ function randomize() {
   target.transition_speed = state.transition_speed;
   target.auto_interval = state.auto_interval;
 
+  // Strip tex_* from transition target — texture settings persist through randomize
+  for (const k of Object.keys(target)) { if (k.startsWith('tex_')) delete target[k]; }
   transitionFrom = { ...state };
   transitionTarget = target;
   transitionProgress = 0;
@@ -4572,6 +4890,208 @@ function toggleG3() {
 }
 
 // =====================================================
+// TEXTURE SYSTEM — custom textures in the feedback loop
+// =====================================================
+const TEX_PAT_NAMES = ['none','scanlines','v-lines','diagonal','grid','rings','diamonds','waves','dots','crosshatch','weave'];
+let texPatternMode = 0;
+
+// Per-slider chaos lock — true = EXCLUDED from chaos
+const texChaosLock = {};
+
+let texMode = 1; // 0=off, 1=custom
+let texPool = []; // array of base64 data URLs
+let texGLA = null, texGLB = null; // two GL textures for crossfade
+let texGLAReady = false, texGLBReady = false;
+let texCurrentIdx = -1; // which pool index is showing (texA)
+let texNextIdx = -1;    // which pool index is fading to (texB)
+let texMix = 0;         // 0 = all texA, 1 = all texB
+let texLastChange = 0;  // timestamp of last texture change
+let texFading = false;  // currently crossfading?
+
+function makeGLTex(dataURL, cb) {
+  const t = gl.createTexture();
+  const img = new Image();
+  img.onload = () => {
+    gl.bindTexture(gl.TEXTURE_2D, t);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    if (cb) cb(t);
+  };
+  img.src = dataURL;
+  return t;
+}
+
+function loadTexPool() {
+  const count = parseInt(localStorage.getItem('synthestasia_tex_count')) || 0;
+  if (count > 0) {
+    texPool = [];
+    for (let i = 0; i < count; i++) {
+      const d = localStorage.getItem('synthestasia_tex_' + i);
+      if (d) texPool.push(d);
+    }
+  }
+  // Fallback: single texture
+  if (texPool.length === 0) {
+    const single = localStorage.getItem('synthestasia_texture');
+    if (single) texPool = [single];
+  }
+  if (texPool.length > 0 && texCurrentIdx < 0) {
+    texCurrentIdx = 0;
+    if (texGLA) gl.deleteTexture(texGLA);
+    texGLA = makeGLTex(texPool[0], () => { texGLAReady = true; });
+    // Pre-load a second texture
+    if (texPool.length > 1) {
+      texNextIdx = 1;
+      if (texGLB) gl.deleteTexture(texGLB);
+      texGLB = makeGLTex(texPool[1], () => { texGLBReady = true; });
+    }
+  }
+}
+
+function pickNextTexture() {
+  if (texPool.length < 2) return;
+  let next;
+  do { next = Math.floor(Math.random() * texPool.length); } while (next === texCurrentIdx && texPool.length > 1);
+  texNextIdx = next;
+  if (texGLB) gl.deleteTexture(texGLB);
+  texGLBReady = false;
+  texGLB = makeGLTex(texPool[next], () => { texGLBReady = true; });
+  texFading = true;
+  texMix = 0;
+}
+
+function stepTexture(now) {
+  if (texMode === 0 || texPool.length === 0) return;
+  const t = now / 1000;
+  // Crossfade in progress
+  if (texFading && texGLBReady) {
+    texMix += (1 / 60) / Math.max(state.tex_crossfade, 0.1); // approx per frame at 60fps
+    if (texMix >= 1) {
+      texMix = 0;
+      texFading = false;
+      // Swap A ← B
+      const tmp = texGLA; texGLA = texGLB; texGLB = tmp;
+      const tmpR = texGLAReady; texGLAReady = texGLBReady; texGLBReady = tmpR;
+      texCurrentIdx = texNextIdx;
+    }
+  }
+  // Time for next change?
+  if (!texFading && texPool.length > 1 && t - texLastChange >= state.tex_interval) {
+    texLastChange = t;
+    pickNextTexture();
+  }
+}
+
+// Live sync: workshop saves → visualizer picks up pool
+window.addEventListener('storage', e => {
+  if (e.key && e.key.startsWith('synthestasia_tex')) loadTexPool();
+});
+
+loadTexPool();
+
+const TEX_MODES = ['OFF', 'CUSTOM'];
+function cycleTexMode() {
+  texMode = (texMode + 1) % TEX_MODES.length;
+  if (texMode === 1 && texPool.length === 0) loadTexPool();
+  if (texMode === 1) texLastChange = performance.now() / 1000;
+  const btn = document.getElementById('btn-texcycle');
+  if (btn) { btn.textContent = 'tex: ' + TEX_MODES[texMode]; btn.className = 'tog' + (texMode > 0 ? ' on' : ''); }
+}
+
+// Load texture from data URL (for drag-drop fallback)
+function loadTextureFromDataURL(dataURL) {
+  texPool = [dataURL];
+  texCurrentIdx = 0;
+  if (texGLA) gl.deleteTexture(texGLA);
+  texGLA = makeGLTex(dataURL, () => { texGLAReady = true; });
+  if (texMode === 0) cycleTexMode();
+}
+
+canvas.addEventListener('dragover', e => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; });
+canvas.addEventListener('drop', e => {
+  e.preventDefault();
+  const file = e.dataTransfer.files[0];
+  if (file && file.type.startsWith('image/')) {
+    const reader = new FileReader();
+    reader.onload = () => loadTextureFromDataURL(reader.result);
+    reader.readAsDataURL(file);
+  }
+});
+
+// =====================================================
+// TEXTURE CHAOS — Brownian drift on texture transforms
+// =====================================================
+let texChaosEnabled = false;
+const texChaosVel = { opacity:0, interval:0, xfade:0, scale:0, sx:0, sy:0, x:0, y:0, rot:0, disp:0, color:0, tr:0, tg:0, tb:0, patamt:0 };
+let texChaosSpeed = 0.5; // 0–1 speed multiplier, default mid
+const texChaosCfg = {
+  opacity: { key:'tex_opacity',   min:0.05, max:0.6, force:0.004, damp:0.96 },
+  interval:{ key:'tex_interval',  min:2,   max:40,   force:0.08,  damp:0.95 },
+  xfade:   { key:'tex_crossfade', min:0.2, max:8,    force:0.03,  damp:0.95 },
+  scale:  { key:'tex_scale',     min:0.8, max:1.9,  force:0.008, damp:0.94 },
+  sx:     { key:'tex_stretch_x', min:0.5, max:2.0,  force:0.006, damp:0.94 },
+  sy:     { key:'tex_stretch_y', min:0.5, max:2.0,  force:0.006, damp:0.94 },
+  x:      { key:'tex_x',        min:-0.35, max:0.35, force:0.004, damp:0.93, center:0 },
+  y:      { key:'tex_y',        min:-0.35, max:0.35, force:0.004, damp:0.93, center:0 },
+  rot:    { key:'tex_rot',      min:-3.14, max:3.14, force:0.012, damp:0.95 },
+  disp:   { key:'tex_displace', min:0,   max:0.7,   force:0.006, damp:0.95 },
+  color:  { key:'tex_colorize', min:0,   max:1,     force:0.006, damp:0.95 },
+  tr:     { key:'tex_tint_r',   min:0,   max:1,     force:0.008, damp:0.96 },
+  tg:     { key:'tex_tint_g',   min:0,   max:1,     force:0.008, damp:0.96 },
+  tb:     { key:'tex_tint_b',   min:0,   max:1,     force:0.008, damp:0.96 },
+  patamt: { key:'tex_pat_amt',  min:0,   max:1,     force:0.006, damp:0.95 },
+};
+
+// When invert flips on, randomly activate negative, multiply, or both
+// When invert flips off, clear them back
+function onTexInvertChange() {
+  if (state.tex_invert) {
+    const roll = Math.random();
+    if (roll < 0.33) { state.tex_neg = 1; state.tex_multiply = 0; }
+    else if (roll < 0.66) { state.tex_neg = 0; state.tex_multiply = 1; }
+    else { state.tex_neg = 1; state.tex_multiply = 1; }
+  } else {
+    state.tex_neg = 0; state.tex_multiply = 0;
+  }
+  // Sync the toggle buttons visually
+  for (const tk of ['tex_invert','tex_neg','tex_multiply']) {
+    const tb = document.getElementById(`ttog-${tk}`);
+    if (tb) tb.classList.toggle('on', !!state[tk]);
+  }
+}
+
+let texChaosFrameCount = 0;
+function stepTexChaos() {
+  if (!texChaosEnabled || texMode === 0) return;
+  texChaosFrameCount++;
+  const spd = 0.2 + texChaosSpeed * 1.8; // map 0–1 to 0.2–2.0 multiplier
+  for (const [param, cfg] of Object.entries(texChaosCfg)) {
+    if (texChaosLock[cfg.key]) continue; // locked — skip
+    texChaosVel[param] += (Math.random() - 0.5) * cfg.force * spd;
+    texChaosVel[param] *= cfg.damp;
+    // Center-pull: params with a center value get tugged back (sharp curve near edges)
+    if (cfg.center !== undefined) {
+      const dist = state[cfg.key] - cfg.center;
+      const range = (cfg.max - cfg.min) * 0.5;
+      const pull = (dist / range) * (dist / range) * Math.sign(dist) * 0.002 * spd;
+      texChaosVel[param] -= pull;
+    }
+    state[cfg.key] = Math.max(cfg.min, Math.min(cfg.max, state[cfg.key] + texChaosVel[param]));
+  }
+  if (texChaosFrameCount % 20 === 0) syncUI(); // update sliders visually
+}
+
+function toggleTexChaos() {
+  texChaosEnabled = !texChaosEnabled;
+  if (!texChaosEnabled) {
+    for (const k of Object.keys(texChaosVel)) texChaosVel[k] = 0;
+  }
+}
+
+// =====================================================
 // KEYBOARD
 // =====================================================
 document.addEventListener('keydown', e => {
@@ -4619,6 +5139,7 @@ document.addEventListener('keydown', e => {
     case 'g': toggleAudioReactMode(); break;
     case 'v': toggleG3(); break;
     case 't': toggleAttribution(); break;
+    case 'i': cycleTexMode(); break;
     case ' ': paused=!paused; e.preventDefault(); break;
   }
 });
@@ -4634,6 +5155,12 @@ const STARTUP_PREF_KEYS = [
   'transition_speed', 'auto_interval',
   'audio_bass_gain', 'audio_mid_gain', 'audio_treb_gain', 'audio_trigger',
   'bloom_strength', 'bloom_threshold',
+  'tex_opacity', 'tex_interval', 'tex_crossfade',
+  'tex_scale', 'tex_stretch_x', 'tex_stretch_y',
+  'tex_x', 'tex_y', 'tex_rot',
+  'tex_displace', 'tex_colorize', 'tex_pat_amt',
+  'tex_tint_r', 'tex_tint_g', 'tex_tint_b',
+  'tex_invert', 'tex_neg', 'tex_multiply',
 ];
 
 function saveStartup() {
@@ -4656,6 +5183,11 @@ function saveStartup() {
     audioReactMode: audioReactMode,
     monitorOff: !audioMonitorVisible,
     panelCollapsed: document.getElementById('output-panel').classList.contains('collapsed'),
+    texMode: texMode,
+    texPatternMode: texPatternMode,
+    texChaosOn: texChaosEnabled,
+    texChaosSpeed: texChaosSpeed,
+    texChaosLock: { ...texChaosLock },
   };
   localStorage.setItem(STARTUP_KEY, JSON.stringify(config));
   const btn = document.getElementById('btn-save-startup');
@@ -4703,6 +5235,11 @@ function loadStartup() {
     if (config.togglePool2) Object.assign(togglePool2, config.togglePool2);
     if (config.dualIdx !== undefined) dualIdx = config.dualIdx;
     if (config.audioReactMode) audioReactMode = config.audioReactMode;
+    if (config.texMode !== undefined) texMode = config.texMode;
+    if (config.texPatternMode !== undefined) texPatternMode = config.texPatternMode;
+    if (config.texChaosOn !== undefined) texChaosEnabled = config.texChaosOn;
+    if (config.texChaosSpeed !== undefined) texChaosSpeed = config.texChaosSpeed;
+    if (config.texChaosLock) Object.assign(texChaosLock, config.texChaosLock);
     return config;
   } catch(e) { return false; }
 }
