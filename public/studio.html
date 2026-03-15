@@ -117,7 +117,22 @@
   input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; background: var(--accent); border-radius: 50%; cursor: pointer; border: 2px solid var(--bg); }
   input[type="range"]::-moz-range-thumb { width: 12px; height: 12px; background: var(--accent); border-radius: 50%; cursor: pointer; border: 2px solid var(--bg); }
   .toggle-row { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
-  .tex-thumb-strip { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 5px; }
+  .tex-thumb-strip { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 5px; max-height: 200px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+  .tex-thumb-strip.collapsed { display: none; }
+  .drop-header { display: flex; justify-content: space-between; align-items: center; cursor: pointer; padding: 3px 6px; background: var(--input-bg); border: 1px dashed var(--border); border-radius: 2px; margin-top: 3px; user-select: none; }
+  .drop-header:hover { border-color: var(--accent); }
+  .drop-header .drop-val { font: 9px 'Courier New', monospace; color: var(--accent); }
+  .drop-header .drop-arrow { font-size: 8px; color: var(--dim); transition: transform 0.2s; }
+  .drop-header.open .drop-arrow { transform: rotate(180deg); }
+  .drop-panel { display: none; margin-top: 3px; border: 1px dashed var(--border); border-radius: 2px; padding: 4px; background: var(--group-bg); max-height: 220px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+  .drop-panel.open { display: flex; flex-wrap: wrap; gap: 3px; }
+  .drop-panel .tog { font-size: 8px; padding: 2px 4px; }
+  .drop-panel .dpat-geo { border-color: #665522; }
+  .drop-panel .dpat-color { border-color: #335566; }
+  .drop-panel .dpat-comp { border-color: #553366; }
+  .drop-panel .dpat-geo.on { background: rgba(180,140,40,0.1); }
+  .drop-panel .dpat-color.on { background: rgba(60,160,200,0.1); }
+  .drop-panel .dpat-comp.on { background: rgba(160,80,200,0.1); }
   .tex-thumb { width: 38px; text-align: center; cursor: pointer; transition: all 0.2s; }
   .tex-thumb canvas { width: 38px; height: 38px; border: 2px solid var(--border); border-radius: 3px; display: block; image-rendering: pixelated; }
   .tex-thumb:hover canvas { border-color: var(--accent); }
@@ -1260,11 +1275,17 @@ function mkTexCycle() {
   b.onclick = () => { cycleTexMode(); b.className = 'tog' + (texMode > 0 ? ' on' : ''); };
   d.title = 'Toggle custom texture in feedback loop (I key). Generate textures in the workshop tab.';
   d.appendChild(b);
-  // Thumbnail strip container
+  // Dropdown header for texture thumbnails
+  const hdr = document.createElement('div'); hdr.className = 'drop-header'; hdr.id = 'tex-thumb-hdr';
+  hdr.innerHTML = '<span class="drop-val" id="tex-thumb-sel">textures ▸ <span id="tex-thumb-name">' + (TEX_SHAPE_NAMES[0] || '#1') + '</span></span><span class="drop-arrow">▾</span>';
+  hdr.title = 'Click to expand texture library. Shift-click thumbnails to toggle chaos pool.';
+  d.appendChild(hdr);
+  // Thumbnail strip container (starts collapsed)
   const strip = document.createElement('div');
   strip.id = 'tex-thumb-strip';
-  strip.className = 'tex-thumb-strip';
+  strip.className = 'tex-thumb-strip collapsed';
   d.appendChild(strip);
+  hdr.onclick = () => { hdr.classList.toggle('open'); strip.classList.toggle('collapsed'); };
   return d;
 }
 
@@ -1326,39 +1347,68 @@ function updateTexThumbActive() {
   strip.querySelectorAll('.tex-thumb').forEach((el, i) => {
     el.classList.toggle('active', i === texCurrentIdx);
   });
+  // Update dropdown header with active texture name
+  const nameEl = document.getElementById('tex-thumb-name');
+  if (nameEl) {
+    if (texPool.length > TEX_SHAPE_NAMES.length) {
+      const shapeIdx = Math.floor(texCurrentIdx / 8);
+      const mapIdx = texCurrentIdx % 8;
+      nameEl.textContent = (TEX_SHAPE_NAMES[shapeIdx] || `#${shapeIdx}`) + ' [' + (TEX_MAP_LABELS[mapIdx] || '') + ']';
+    } else {
+      nameEl.textContent = TEX_SHAPE_NAMES[texCurrentIdx] || `#${texCurrentIdx+1}`;
+    }
+  }
 }
 
 function mkTexPatCycle() {
   const d = document.createElement('div'); d.className = 'ctl';
   const label = document.createElement('label');
   label.innerHTML = '<span>fill pattern</span><span class="val" id="v-tex_pattern">' + TEX_PAT_NAMES[texPatternMode] + '</span>';
-  d.title = 'Click to select pattern. Shift-click to toggle in/out of chaos rotation.';
   d.appendChild(label);
-  const row = document.createElement('div'); row.className = 'toggle-row';
-  for (let i = 0; i < TEX_PAT_NAMES.length; i++) {
-    const b = document.createElement('button');
-    b.className = 'tog'
-      + (texPatternMode === i ? ' on' : '')
-      + (texPatPool[i] ? ' pooled' : ' locked');
-    b.textContent = TEX_PAT_NAMES[i]; b.id = `tpat-${i}`;
-    b.onclick = (e) => {
-      if (e.shiftKey) {
-        // Toggle pool membership
-        texPatPool[i] = !texPatPool[i];
-        b.classList.toggle('pooled', texPatPool[i]);
-        b.classList.toggle('locked', !texPatPool[i]);
-        return;
-      }
-      // Regular click — select this pattern
-      texPatternMode = i;
-      row.querySelectorAll('.tog').forEach(t => t.classList.remove('on'));
-      b.classList.add('on');
-      const vl = document.getElementById('v-tex_pattern');
-      if (vl) vl.textContent = TEX_PAT_NAMES[i];
-    };
-    row.appendChild(b);
+  // Dropdown header
+  const hdr = document.createElement('div'); hdr.className = 'drop-header';
+  hdr.innerHTML = '<span class="drop-val" id="tpat-sel">' + TEX_PAT_NAMES[texPatternMode] + '</span><span class="drop-arrow">▾</span>';
+  hdr.title = 'Click to expand. Select a pattern or shift-click to toggle chaos pool.';
+  d.appendChild(hdr);
+  // Dropdown panel
+  const panel = document.createElement('div'); panel.className = 'drop-panel'; panel.id = 'tpat-panel';
+  const cats = [
+    { label: 'geometric', start: 0, end: 11, cls: 'dpat-geo' },
+    { label: 'color', start: 11, end: 37, cls: 'dpat-color' },
+    { label: 'compositing', start: 37, end: 47, cls: 'dpat-comp' }
+  ];
+  for (const cat of cats) {
+    const catLabel = document.createElement('div');
+    catLabel.style.cssText = 'width:100%;font:8px Courier New,monospace;text-transform:uppercase;letter-spacing:1px;color:var(--dim);padding:2px 0;border-bottom:1px dotted var(--border);margin:2px 0';
+    catLabel.textContent = cat.label;
+    panel.appendChild(catLabel);
+    for (let i = cat.start; i < cat.end; i++) {
+      const b = document.createElement('button');
+      b.className = 'tog ' + cat.cls
+        + (texPatternMode === i ? ' on' : '')
+        + (texPatPool[i] ? ' pooled' : ' locked');
+      b.textContent = TEX_PAT_NAMES[i]; b.id = `tpat-${i}`;
+      b.onclick = (e) => {
+        if (e.shiftKey) {
+          texPatPool[i] = !texPatPool[i];
+          b.classList.toggle('pooled', texPatPool[i]);
+          b.classList.toggle('locked', !texPatPool[i]);
+          return;
+        }
+        texPatternMode = i;
+        panel.querySelectorAll('.tog').forEach(t => t.classList.remove('on'));
+        b.classList.add('on');
+        const vl = document.getElementById('v-tex_pattern');
+        if (vl) vl.textContent = TEX_PAT_NAMES[i];
+        const sel = document.getElementById('tpat-sel');
+        if (sel) sel.textContent = TEX_PAT_NAMES[i];
+      };
+      panel.appendChild(b);
+    }
   }
-  d.appendChild(row); return d;
+  d.appendChild(panel);
+  hdr.onclick = () => { hdr.classList.toggle('open'); panel.classList.toggle('open'); };
+  return d;
 }
 
 function mkTexChaosSpeed() {
@@ -1547,6 +1597,8 @@ function syncUI() {
       }
       const tpvl = document.getElementById('v-tex_pattern');
       if (tpvl) tpvl.textContent = TEX_PAT_NAMES[texPatternMode];
+      const tpsel = document.getElementById('tpat-sel');
+      if (tpsel) tpsel.textContent = TEX_PAT_NAMES[texPatternMode];
     } else if (c.type === 'texchaosspeed') {
       const sl = document.getElementById('sl-texchaosspeed');
       if (sl) sl.value = texChaosSpeed;
@@ -2523,6 +2575,12 @@ float fbm(vec2 p) {
   return v;
 }
 
+vec3 hsv2rgb(vec3 c) {
+  vec4 K = vec4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
+  vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+  return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
 // Procedural fill patterns (0=none, 1-10)
 float fillPattern(vec2 uv, int mode, float t) {
   if (mode == 1) return smoothstep(0.4, 0.6, fract(uv.y * 20.0 + t * 0.5));  // scanlines
@@ -2536,6 +2594,340 @@ float fillPattern(vec2 uv, int mode, float t) {
   if (mode == 9) return max(smoothstep(0.4,0.6,fract((uv.x+uv.y)*14.0)), smoothstep(0.4,0.6,fract((uv.x-uv.y)*14.0)));  // crosshatch
   if (mode == 10) return smoothstep(0.3, 0.7, fract(uv.x*8.0 + sin(uv.y*12.0+t)*0.5)) * smoothstep(0.3, 0.7, fract(uv.y*8.0 + cos(uv.x*12.0+t*0.7)*0.5));  // weave
   return 1.0;
+}
+
+vec4 colorPattern(vec2 uv, int mode, float time, vec3 texCol) {
+  // Map 2D UV to a 1D 't' value for pattern evaluation
+  float t = length(uv - 0.5) * 2.0; // radial distance, 0 at center, ~1.4 at corners
+  float angle = atan(uv.y - 0.5, uv.x - 0.5) / 6.28318 + 0.5; // 0-1 angle
+  t = mix(t, angle, 0.3); // blend radial + angular for richer patterns
+  float alphaOut = 1.0; // alpha modifier — compositing patterns change this
+  float bass = 0.4; // simulated bass for pattern animation
+  float spd = 1.0;
+  vec3 c1 = u_texTint;
+  vec3 c2 = 1.0 - u_texTint; // complement
+
+  // Patterns 11-37 matching wave shader patterns 0-26
+  if (mode == 1) { // Rainbow
+    float hue = fract(t + time * spd * 0.3);
+    return vec4(hsv2rgb(vec3(hue, 0.85, 1.0)), alphaOut);
+  }
+  if (mode == 2) { // Stripes
+    float freq = 6.0 + bass * 8.0;
+    float stripe = step(0.5, fract(t * freq - time * spd * 2.0));
+    return vec4(mix(c1, c2, stripe), alphaOut);
+  }
+  if (mode == 3) { // Pulse
+    float wave = sin((t * 8.0 - time * spd * 3.0) * 3.14159) * 0.5 + 0.5;
+    wave = smoothstep(0.2, 0.8, wave);
+    return vec4(mix(c1, c2, wave), alphaOut);
+  }
+  if (mode == 4) { // Fire
+    float flicker = sin(t * 20.0 + time * spd * 5.0) * 0.15 + sin(t * 7.3 + time * 3.7) * 0.1;
+    float fireT = clamp(t + flicker + bass * 0.3, 0.0, 1.0);
+    vec3 fireCol;
+    if (fireT < 0.33) fireCol = mix(vec3(0.6, 0.0, 0.0), vec3(1.0, 0.3, 0.0), fireT * 3.0);
+    else if (fireT < 0.66) fireCol = mix(vec3(1.0, 0.3, 0.0), vec3(1.0, 0.85, 0.0), (fireT - 0.33) * 3.0);
+    else fireCol = mix(vec3(1.0, 0.85, 0.0), vec3(1.0, 1.0, 0.9), (fireT - 0.66) * 3.0);
+    return vec4(fireCol, alphaOut);
+  }
+  if (mode == 5) { // Frequency
+    float hue = t * 0.7;
+    hue = fract(hue - bass * 0.15 + time * spd * 0.05);
+    return vec4(hsv2rgb(vec3(hue, 0.9, 0.8 + bass * 0.2)), alphaOut);
+  }
+  if (mode == 6) { // Bounce
+    float ping = abs(fract(t + time * spd * 0.5) * 2.0 - 1.0);
+    ping = ping * ping * (3.0 - 2.0 * ping);
+    return vec4(mix(c1, c2, ping), alphaOut);
+  }
+  if (mode == 7) { // Christmas
+    float pos = t * 12.0 - time * spd * 2.0;
+    float cell = floor(pos);
+    float local = fract(pos);
+    float idx = mod(cell, 4.0);
+    vec3 col;
+    if (idx < 1.0) col = vec3(1.0, 0.1, 0.1);
+    else if (idx < 2.0) col = vec3(0.1, 1.0, 0.2);
+    else if (idx < 3.0) col = vec3(0.2, 0.4, 1.0);
+    else col = vec3(1.0, 0.85, 0.0);
+    float spot = 1.0 - smoothstep(0.0, 0.45, abs(local - 0.5));
+    spot = spot * spot;
+    float pulse = 0.7 + 0.3 * sin(cell * 2.7 + time * spd * 4.0);
+    return vec4(col * spot * pulse, alphaOut);
+  }
+  if (mode == 8) { // Neon
+    float glow = sin(t * 6.2832 * 3.0 - time * spd * 2.0) * 0.5 + 0.5;
+    glow = glow * glow;
+    float hot = glow * 0.7;
+    vec3 deep = c1 * 0.4;
+    vec3 white = vec3(1.0, 0.95, 0.9);
+    return vec4(mix(deep, mix(c1 * 1.5, white, hot * 0.6), 0.3 + hot * 0.7), alphaOut);
+  }
+  if (mode == 9) { // Plasma
+    float p1 = sin(t * 10.0 + time * spd * 1.5);
+    float p2 = sin(t * 7.3 - time * spd * 2.1 + 2.0);
+    float p3 = sin((t * 5.0 + sin(time * spd * 0.7)) * 3.0);
+    float v = (p1 + p2 + p3) / 3.0;
+    float hue = fract(v * 0.5 + 0.5 + time * spd * 0.05);
+    return vec4(hsv2rgb(vec3(hue, 0.8, 0.9)), alphaOut);
+  }
+  if (mode == 10) { // Lightning
+    float n1 = fract(sin(t * 127.1 + floor(time * spd * 8.0) * 43.7) * 4375.5);
+    float n2 = fract(sin(t * 269.3 + floor(time * spd * 12.0) * 17.3) * 7291.3);
+    float bolt = step(0.7, n1);
+    vec3 electric = mix(c1, vec3(0.7, 0.85, 1.0), 0.5);
+    return vec4(mix(c1 * 0.15, electric * 1.5, bolt), alphaOut);
+  }
+  if (mode == 11) { // Ocean
+    float wave1 = sin(t * 8.0 - time * spd * 1.2) * 0.5 + 0.5;
+    float wave2 = sin(t * 12.0 + time * spd * 0.8 + 1.5) * 0.3 + 0.5;
+    float foam = smoothstep(0.3, 0.7, wave1 * wave2 + bass * 0.3);
+    vec3 deep = vec3(0.0, 0.05, 0.2);
+    vec3 mid = vec3(0.0, 0.3, 0.5);
+    vec3 seafoam = vec3(0.5, 0.95, 0.8);
+    return vec4(mix(mix(deep, mid, wave1), seafoam, foam), alphaOut);
+  }
+  if (mode == 12) { // Aurora
+    float curtain = sin(t * 4.0 + sin(t * 2.0 + time * spd * 0.3) * 2.0) * 0.5 + 0.5;
+    float hue = fract(0.3 + curtain * 0.25 + time * spd * 0.02);
+    float val = 0.3 + curtain * 0.7;
+    return vec4(hsv2rgb(vec3(hue, 0.6 + curtain * 0.3, val)), alphaOut);
+  }
+  if (mode == 13) { // Lava
+    float flow = sin(t * 4.0 - time * spd * 0.5) * 0.5 + 0.5;
+    float crack = sin(t * 15.0 + time * spd * 0.3) * 0.5 + 0.5;
+    crack = crack * crack * crack;
+    float heat = clamp(max(flow * 0.6, crack) + bass * 0.3, 0.0, 1.0);
+    vec3 crust = vec3(0.1, 0.02, 0.0);
+    vec3 molten = vec3(1.0, 0.4, 0.0);
+    vec3 hotCore = vec3(1.0, 0.9, 0.3);
+    vec3 col = mix(crust, molten, smoothstep(0.1, 0.5, heat));
+    return vec4(mix(col, hotCore, smoothstep(0.6, 1.0, heat)), alphaOut);
+  }
+  if (mode == 14) { // Stardust
+    float n = fract(sin(t * 999.1 + floor(time * spd * 3.0) * 71.7) * 43758.5);
+    float dot = step(0.92, n);
+    return vec4(mix(c1, c2, fract(t * 7.0 + time * 0.2)) * dot * 1.5, alphaOut);
+  }
+  if (mode == 15) { // Morse
+    float pos = t * 20.0 - time * spd * 1.5;
+    float cell = floor(pos);
+    float local = fract(pos);
+    float isDash = step(0.5, fract(cell * 0.7));
+    float dashShape = smoothstep(0.1, 0.15, local) * (1.0 - smoothstep(0.6, 0.65, local));
+    float dotShape = 1.0 - smoothstep(0.0, 0.2, abs(local - 0.3));
+    float shape = mix(dotShape, dashShape, isDash);
+    return vec4(mix(c1, c2, fract(cell * 0.3)) * shape, alphaOut);
+  }
+  if (mode == 16) { // Fireflies
+    float n1 = fract(sin(t * 311.7) * 43758.5);
+    float fly = sin(t * 50.0 + n1 * 6.28 + time * spd * (2.0 + n1 * 3.0));
+    fly = pow(max(fly * 0.5 + 0.5, 0.0), 12.0);
+    float hue = fract(t + time * spd * 0.1 + n1 * 0.5);
+    return vec4(hsv2rgb(vec3(hue, 0.3, 1.0)) * fly, alphaOut);
+  }
+  if (mode == 17) { // Prism
+    float spread = 0.15 + bass * 0.35;
+    float center = fract(time * spd * 0.1);
+    float dist = abs(t - center);
+    float hue = fract(dist / max(spread, 0.01));
+    float bright = smoothstep(spread * 1.2, spread * 0.3, dist);
+    return vec4(hsv2rgb(vec3(hue, 0.7 + bright * 0.3, bright)), alphaOut);
+  }
+  if (mode == 18) { // Glitch
+    float block = floor(t * 15.0);
+    float tick = floor(time * spd * 6.0);
+    float n = fract(sin(block * 43.7 + tick * 17.3) * 4375.5);
+    float corrupt = step(0.6, n);
+    float shift = (n - 0.5) * 0.4 * corrupt;
+    float r = sin((t + shift) * 25.0 + time * 3.0) * 0.5 + 0.5;
+    float g = sin((t + shift * 0.5) * 25.0 + time * 3.7) * 0.5 + 0.5;
+    float b = sin((t - shift * 0.7) * 25.0 + time * 2.3) * 0.5 + 0.5;
+    vec3 clean = mix(c1, c2, t);
+    return vec4(mix(clean, vec3(r, g, b), corrupt * 0.8 + 0.2), alphaOut);
+  }
+  if (mode == 19) { // Ember
+    float n1 = fract(sin(t * 173.7) * 43758.5);
+    float n2 = fract(sin(t * 419.3) * 28461.7);
+    float drift = fract(n1 + time * spd * (0.3 + n2 * 0.7));
+    float spark = pow(max(sin(drift * 6.28318), 0.0), 20.0);
+    spark *= 0.6 + bass * 1.5;
+    vec3 dark = vec3(0.05, 0.01, 0.0);
+    vec3 hot = vec3(1.0, 0.5, 0.05);
+    vec3 white = vec3(1.0, 0.9, 0.7);
+    float glow = spark * 0.3;
+    vec3 col = mix(dark, hot, glow + spark * 0.3);
+    return vec4(mix(col, white, spark * 0.5), alphaOut);
+  }
+  if (mode == 20) { // Frost
+    float crystal = fract(sin(t * 500.0 + floor(time * spd * 2.0) * 7.1) * 43758.5);
+    float crack = step(0.85, crystal);
+    float ice = sin(t * 12.0 + sin(t * 30.0) * 0.5 - time * spd * 0.4) * 0.5 + 0.5;
+    ice = ice * ice;
+    vec3 deep = vec3(0.1, 0.15, 0.3);
+    vec3 ice_blue = vec3(0.5, 0.75, 0.95);
+    vec3 white = vec3(0.9, 0.95, 1.0);
+    vec3 col = mix(deep, ice_blue, ice);
+    return vec4(mix(col, white, crack * 0.7), alphaOut);
+  }
+  if (mode == 21) { // Nebula
+    float cloud1 = sin(t * 5.0 + time * spd * 0.3) * 0.5 + 0.5;
+    float cloud2 = sin(t * 8.3 - time * spd * 0.5 + 2.0) * 0.5 + 0.5;
+    float cloud = cloud1 * cloud2;
+    float hue = fract(0.75 + cloud * 0.15 + t * 0.05 + time * spd * 0.01);
+    vec3 col = hsv2rgb(vec3(hue, 0.5 + cloud * 0.4, 0.15 + cloud * 0.5));
+    float starN = fract(sin(t * 777.7 + floor(time * spd * 4.0) * 33.3) * 43758.5);
+    col += step(0.93, starN) * vec3(0.8, 0.7, 1.0);
+    return vec4(min(col, vec3(1.0)), alphaOut);
+  }
+  if (mode == 22) { // Toxic
+    float vein1 = sin(t * 15.0 + time * spd * 2.0);
+    float vein2 = sin(t * 23.0 - time * spd * 1.3 + 1.0);
+    float vein = smoothstep(0.0, 0.3, min(abs(vein1), abs(vein2)));
+    float pulse = 0.7 + 0.3 * sin(t * 3.0 + time * spd * 1.5);
+    float toxicity = vein * pulse + bass * 0.3;
+    vec3 dark = vec3(0.02, 0.05, 0.0);
+    vec3 acid = vec3(0.3, 1.0, 0.1);
+    return vec4(mix(dark, acid, toxicity * 0.8), alphaOut);
+  }
+  if (mode == 23) { // Hologram
+    float ang = t * 6.28318 + time * spd * 0.8;
+    float tilt = sin(ang) * 0.5 + 0.5;
+    float shift = sin(ang * 2.3 + 1.0) * 0.5 + 0.5;
+    float hue = fract(tilt * 0.6 + shift * 0.3 + time * spd * 0.15);
+    float iridescence = abs(sin(t * 40.0 + time * spd * 3.0)) * 0.3;
+    vec3 col = hsv2rgb(vec3(hue, 0.5 + iridescence, 0.6 + tilt * 0.3));
+    float scan = step(0.7, sin(t * 80.0 - time * spd * 5.0) * 0.5 + 0.5) * 0.15;
+    return vec4(min(col + scan, vec3(1.0)), alphaOut);
+  }
+  if (mode == 24) { // Bloodstream
+    float n = fract(sin(t * 311.7) * 43758.5);
+    float cell = fract(n + time * spd * (0.5 + n * 0.5));
+    cell = pow(max(sin(cell * 6.28318), 0.0), 8.0);
+    vec3 dark = vec3(0.15, 0.0, 0.0);
+    vec3 blood = vec3(0.5, 0.02, 0.02);
+    vec3 bright = vec3(1.0, 0.15, 0.1);
+    float flow = fract(t * 3.0 - time * spd * 0.8);
+    vec3 col = mix(dark, blood, flow * 0.6 + 0.3);
+    return vec4(mix(col, bright, cell * 0.7), alphaOut);
+  }
+  if (mode == 25) { // Signal
+    float carrier = sin(t * 20.0 - time * spd * 2.0) * 0.5 + 0.5;
+    carrier = carrier * carrier;
+    float modulation = sin(t * 3.0 + time * spd * 0.5) * 0.5 + 0.5;
+    float signal = carrier * modulation;
+    vec3 col = mix(c1 * 0.2, c2, signal);
+    col += vec3(0.1, 0.3, 0.1) * signal * 0.3;
+    return vec4(min(col, vec3(1.0)), alphaOut);
+  }
+  if (mode == 26) { // Cascade
+    float fall = fract(t * 5.0 - time * spd * 1.5);
+    fall = fall * fall;
+    float layer1 = sin(fall * 6.28318 * 2.0) * 0.5 + 0.5;
+    float layer2 = sin((t * 8.0 - time * spd * 2.5) * 3.0 + 1.5) * 0.5 + 0.5;
+    float energy = clamp(layer1 * 0.5 + layer2 * 0.5, 0.0, 1.0);
+    float hue = fract(0.55 + energy * 0.15 + time * spd * 0.03);
+    vec3 col = hsv2rgb(vec3(hue, 0.6 + energy * 0.3, energy * 0.8 + 0.15));
+    return vec4(mix(col, c1, 0.2), alphaOut);
+  }
+  // --- Compositing patterns (modes 27-36) — adapted for texture overlay ---
+  if (mode == 27) { // Void — sections breathe in and out of existence
+    float breath = sin(t * 8.0 + time * spd * 1.5) * 0.5 + 0.5;
+    float hole = sin(t * 20.0 - time * spd * 3.0) * 0.5 + 0.5;
+    hole = smoothstep(0.3, 0.7, hole);
+    alphaOut = breath * hole + bass * 0.3;
+    alphaOut = clamp(alphaOut, 0.0, 1.0);
+    float hue = fract(t * 0.5 + time * spd * 0.05);
+    return vec4(hsv2rgb(vec3(hue, 0.6, 0.8)), alphaOut);
+  }
+  if (mode == 28) { // X-Ray — inverts the texture behind the pattern
+    vec3 inverted = 1.0 - texCol;
+    float edge = sin(t * 12.0 - time * spd * 1.0) * 0.5 + 0.5;
+    float strength = 0.7 + bass * 0.3;
+    vec3 col = mix(inverted, inverted * vec3(0.7, 0.85, 1.0), 0.3); // cool tint
+    col = mix(texCol, col, strength * edge);
+    return vec4(col, alphaOut);
+  }
+  if (mode == 29) { // Shadow — darkens the texture with rolling waves
+    float wave = sin(t * 6.0 + time * spd * 0.8) * 0.5 + 0.5;
+    float depth = 0.3 + wave * 0.5 + bass * 0.2;
+    vec3 col = texCol * (1.0 - depth * 0.7);
+    return vec4(col, alphaOut);
+  }
+  if (mode == 30) { // Ghost — fading translucent with flicker holes
+    float phase = sin(t * 4.0 + time * spd * 0.6) * 0.5 + 0.5;
+    float flicker = fract(sin(t * 77.7 + floor(time * spd * 8.0) * 13.1) * 43758.5);
+    alphaOut = phase * 0.6 + 0.1;
+    alphaOut *= 1.0 - step(0.92, flicker) * 0.5;
+    alphaOut = clamp(alphaOut + bass * 0.2, 0.0, 1.0);
+    vec3 ghostCol = mix(c1, vec3(1.0), 0.4);
+    return vec4(mix(texCol, ghostCol, 0.3), alphaOut);
+  }
+  if (mode == 31) { // Portal — sections inverted, dimensional rift
+    float rift = sin(t * 10.0 + time * spd * 1.5);
+    float isPortal = step(0.0, rift);
+    float edge_glow = 1.0 - abs(rift);
+    edge_glow = pow(edge_glow, 4.0) * (1.5 + bass * 2.0);
+    vec3 inverted = 1.0 - texCol;
+    vec3 normal = mix(c1, c2, t);
+    vec3 col = mix(normal, inverted, isPortal * 0.8);
+    col += edge_glow * vec3(0.3, 0.1, 0.8);
+    return vec4(min(col, vec3(1.0)), alphaOut);
+  }
+  if (mode == 32) { // Shatter — fragments break away with alpha holes
+    float block = floor(t * 20.0);
+    float tick = floor(time * spd * 3.0);
+    float n = fract(sin(block * 127.1 + tick * 311.7) * 43758.5);
+    float shattered = step(0.5 - bass * 0.3, n);
+    float fragPos = fract(sin(block * 43.7) * 7291.3);
+    alphaOut = mix(1.0, fragPos, shattered * 0.8);
+    float edge_zone = abs(fract(t * 20.0) - 0.5) * 2.0;
+    float atEdge = 1.0 - smoothstep(0.0, 0.15, edge_zone);
+    vec3 col = mix(texCol, 1.0 - texCol, atEdge * shattered * 0.7);
+    col *= 0.5 + shattered * 0.8;
+    return vec4(col, alphaOut);
+  }
+  if (mode == 33) { // Breath — whole texture slowly breathes alpha
+    float inhale = sin(time * spd * 0.5) * 0.5 + 0.5;
+    float wave = sin(t * 3.0 + time * spd * 0.3) * 0.3;
+    alphaOut = inhale + wave + bass * 0.3;
+    alphaOut = clamp(alphaOut * 0.8 + 0.1, 0.05, 1.0);
+    float hue = fract(0.05 + inhale * 0.15 - (1.0 - inhale) * 0.1);
+    return vec4(hsv2rgb(vec3(hue, 0.6 + inhale * 0.3, 0.5 + inhale * 0.5)), alphaOut);
+  }
+  if (mode == 34) { // Eclipse — dark core, bright corona
+    float center = fract(time * spd * 0.08);
+    float dist = abs(t - center);
+    float core = 1.0 - smoothstep(0.0, 0.1 + bass * 0.05, dist);
+    float corona = smoothstep(0.05, 0.15 + bass * 0.1, dist) * (1.0 - smoothstep(0.15, 0.35, dist));
+    corona = corona * (1.5 + bass * 2.0);
+    vec3 darkened = texCol * (1.0 - core * 0.9);
+    vec3 hot = vec3(1.0, 0.6, 0.1) * corona;
+    vec3 rim = vec3(1.0, 0.3, 0.05) * core * 0.3;
+    vec3 col = mix(darkened, hot + rim, core * 0.8 + corona * 0.5);
+    return vec4(min(col, vec3(1.0)), alphaOut);
+  }
+  if (mode == 35) { // Mirage — heat shimmer distortion
+    float wobble = sin(t * 30.0 + time * spd * 4.0) * 0.3;
+    float drift = sin(t * 8.0 - time * spd * 1.0) * 0.2;
+    float shimmer = abs(sin(t * 50.0 + time * spd * 6.0)) * 0.3;
+    vec3 shifted = texCol * (1.0 + wobble * 0.3) * (1.0 + drift * 0.2);
+    shifted += shimmer * vec3(0.2, 0.15, 0.05);
+    alphaOut = 0.8 + shimmer * 0.5;
+    return vec4(min(mix(c1, shifted, 0.7 + bass * 0.2), vec3(1.0)), alphaOut);
+  }
+  if (mode == 36) { // Phase — alternates additive bright and subtractive dark
+    float zone = sin(t * 8.0 - time * spd * 1.5);
+    float isAdd = step(0.0, zone);
+    float intensity = abs(zone) * (0.7 + bass * 0.5);
+    vec3 addCol = mix(c1, c2, t) * (1.0 + intensity);
+    vec3 subCol = texCol * (1.0 - intensity * 0.6);
+    vec3 col = mix(subCol, addCol, isAdd);
+    col += (1.0 - isAdd) * c1 * 0.2;
+    return vec4(min(col, vec3(1.0)), alphaOut);
+  }
+  return vec4(c1, alphaOut); // fallback
 }
 
 void main() {
@@ -2573,12 +2965,20 @@ void main() {
     c.rgb = mix(c.rgb, gradCol, u_texColorize * c.a);
   }
 
-  // Fill pattern overlay — modulates both alpha AND brightness for visible contrast
+  // Fill pattern overlay — modes 1-10 are geometric, 11-37 are color patterns
   if (u_texPattern > 0 && u_texPatAmt > 0.001) {
-    float pat = fillPattern(v_uv, u_texPattern, u_time);
     float amt = u_texPatAmt;
-    c.a *= mix(1.0, pat, amt);
-    c.rgb *= mix(1.0, pat, amt * 0.6); // darken gaps for visible pattern on white shapes
+    if (u_texPattern <= 10) {
+      // Geometric fill patterns — modulate alpha and brightness
+      float pat = fillPattern(v_uv, u_texPattern, u_time);
+      c.a *= mix(1.0, pat, amt);
+      c.rgb *= mix(1.0, pat, amt * 0.6);
+    } else {
+      // Color patterns — blend color onto the texture
+      vec4 patResult = colorPattern(v_uv, u_texPattern - 10, u_time, c.rgb);
+      c.rgb = mix(c.rgb, patResult.rgb, amt * c.a);
+      c.a *= mix(1.0, patResult.a, amt);
+    }
   }
 
   // Invert flips the texture color (black shapes instead of white)
@@ -5122,10 +5522,10 @@ function toggleG3() {
 // =====================================================
 // TEXTURE SYSTEM — custom textures in the feedback loop
 // =====================================================
-const TEX_PAT_NAMES = ['none','scanlines','v-lines','diagonal','grid','rings','diamonds','waves','dots','crosshatch','weave'];
+const TEX_PAT_NAMES = ['none','scanlines','v-lines','diagonal','grid','rings','diamonds','waves','dots','crosshatch','weave','rainbow','stripes','pulse','fire','frequency','bounce','christmas','neon','plasma','lightning','ocean','aurora','lava','stardust','morse','fireflies','prism','glitch','ember','frost','nebula','toxic','hologram','bloodstream','signal','cascade','void','x-ray','shadow','ghost','portal','shatter','breath','eclipse','mirage','phase'];
 let texPatternMode = 0;
 // Pattern pool — which fill patterns chaos can cycle through (true = enabled)
-let texPatPool = new Array(11).fill(true); // all 11 patterns (including 'none')
+let texPatPool = new Array(47).fill(true); // all 47 patterns (including 'none')
 texPatPool[0] = false; // 'none' excluded by default
 let texPatCycleInterval = 180; // frames between pattern switches (~3sec at 60fps)
 
