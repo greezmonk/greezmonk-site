@@ -998,7 +998,7 @@ function mkWaveToggle() {
   const btn2 = document.createElement('button'); btn2.className = 'wt-btn' + (wave2Hidden ? ' hidden-wave' : ''); btn2.id = 'wt-2';
   btn2.textContent = wave2Hidden ? '(wave 2)' : 'wave 2';
   btn2.title = 'Edit wave 2 settings (E to toggle). Shift+click to hide/show wave.';
-  btn2.onclick = (e) => { if (e.shiftKey) { wave2Hidden = !wave2Hidden; btn2.classList.toggle('hidden-wave', wave2Hidden); btn2.textContent = wave2Hidden ? '(wave 2)' : 'wave 2'; if (!wave2Hidden) { if (dualIdx === 0) { dualIdx = 1; dualFadeTarget = 1; } dualFade = Math.max(dualFade, 0.02); } return; } setEditingWave(2); };
+  btn2.onclick = (e) => { if (e.shiftKey) { wave2Hidden = !wave2Hidden; btn2.classList.toggle('hidden-wave', wave2Hidden); btn2.textContent = wave2Hidden ? '(wave 2)' : 'wave 2'; return; } setEditingWave(2); };
   d.appendChild(btn1); d.appendChild(btn2); return d;
 }
 
