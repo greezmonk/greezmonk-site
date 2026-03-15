@@ -4412,6 +4412,8 @@ function toggleEditorView() {
       warp: state.warp, decay: state.decay,
       chaos: chaosEnabled, auto: autoRandomInterval !== null,
       texChaos: texChaosEnabled,
+      chaosVel: { ...chaosVelocity },
+      texChaosVel: typeof texChaosVel !== 'undefined' ? { ...texChaosVel } : {},
     };
     // Center everything
     state.wave_x = 0.5; state.wave_y = 0.5;
@@ -4429,8 +4431,16 @@ function toggleEditorView() {
       state.wave_x = editorStash.w1x; state.wave_y = editorStash.w1y;
       wave2.x = editorStash.w2x; wave2.y = editorStash.w2y;
       state.tex_x = editorStash.texX; state.tex_y = editorStash.texY; state.tex_rot = editorStash.texRot;
+      // Restore velocities before re-enabling so motion resumes at same speed
+      if (editorStash.chaosVel) Object.assign(chaosVelocity, editorStash.chaosVel);
+      if (editorStash.texChaosVel) Object.assign(texChaosVel, editorStash.texChaosVel);
       if (editorStash.chaos && !chaosEnabled) toggleChaos();
-      if (editorStash.auto && !autoRandomInterval) toggleAutoRandom();
+      if (editorStash.auto && !autoRandomInterval) {
+        // Resume auto without immediate randomize — just restart the interval
+        autoRandomInterval = setInterval(randomize, state.auto_interval * 1000);
+        const ab = document.getElementById('btn-auto');
+        if (ab) { ab.textContent = 'auto: ON'; ab.classList.add('active'); }
+      }
       if (editorStash.texChaos && !texChaosEnabled) toggleTexChaos();
       editorStash = null;
     }
