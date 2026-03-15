@@ -365,6 +365,7 @@
     <button id="btn-desktop" onclick="startDesktopAudio()" title="Capture desktop/tab audio — share a tab playing music">desktop</button>
     <button id="btn-player" onclick="document.getElementById('load-audio').click()" title="Load audio files (mp3/wav) for clean playback">player</button>
     <input type="file" id="load-audio" accept="audio/*" multiple style="display:none" onchange="loadAudioFiles(event)">
+    <button id="btn-editor" onclick="toggleEditorView()" title="Editor view — centers shapes &amp; texture, pauses motion (V)">editor</button>
     <button id="btn-fs" onclick="goFullscreen()" title="Enter fullscreen mode (F)">fullscreen</button>
   </div>
   <div id="player-bar" style="display:none;">
@@ -435,6 +436,7 @@
     <div class="help-row"><span class="help-key">Ctrl+Shift + 1-0</span><span class="help-desc">store to favorite slot</span></div>
     <h3>Display</h3>
     <div class="help-row"><span class="help-key">F</span><span class="help-desc">fullscreen</span></div>
+    <div class="help-row"><span class="help-key">V</span><span class="help-desc">editor view — centers shapes &amp; texture, pauses motion</span></div>
     <div class="help-row"><span class="help-key">M</span><span class="help-desc">toggle microphone</span></div>
     <div class="help-row"><span class="help-key">H</span><span class="help-desc">toggle HUD</span></div>
     <div class="help-row"><span class="help-key">S</span><span class="help-desc">toggle audio monitor (bass/mid/treb/energy bars)</span></div>
@@ -3677,6 +3679,12 @@ const wiggle = { w1x: 0, w1y: 0, w2x: 0, w2y: 0 };
 let w2MidRotation = 0; // accumulated rotation for wave2 driven by mid
 let lastTreb = 0; // treble level for vertex jitter
 function updateScalePulse(audio) {
+  if (editorMode) {
+    scalePulse.w1 = 0; scalePulse.w2 = 0;
+    wiggle.w1x = 0; wiggle.w1y = 0; wiggle.w2x = 0; wiggle.w2y = 0;
+    w2MidRotation = 0;
+    return;
+  }
   if (audioReactMode === 'unified') {
     scalePulse.w1 = 0; scalePulse.w2 = 0;
     wiggle.w1x = 0; wiggle.w1y = 0; wiggle.w2x = 0; wiggle.w2y = 0;
@@ -4373,6 +4381,48 @@ function goFullscreen() {
   }
 }
 
+// Editor View — centers everything, pauses motion
+let editorMode = false;
+let editorStash = null;
+function toggleEditorView() {
+  editorMode = !editorMode;
+  const btn = document.getElementById('btn-editor');
+  if (editorMode) {
+    // Stash current state
+    editorStash = {
+      w1x: state.wave_x, w1y: state.wave_y,
+      w2x: wave2.x, w2y: wave2.y,
+      texX: state.tex_x, texY: state.tex_y, texRot: state.tex_rot,
+      warp: state.warp, decay: state.decay,
+      chaos: chaosEnabled, auto: autoRandomInterval !== null,
+      texChaos: texChaosEnabled,
+    };
+    // Center everything
+    state.wave_x = 0.5; state.wave_y = 0.5;
+    wave2.x = 0.5; wave2.y = 0.5;
+    state.tex_x = 0; state.tex_y = 0; state.tex_rot = 0;
+    // Pause motion
+    if (chaosEnabled) toggleChaos();
+    if (autoRandomInterval) toggleAutoRandom();
+    if (texChaosEnabled) toggleTexChaos();
+    if (btn) { btn.textContent = 'EDITOR'; btn.style.background = 'rgba(240,165,0,0.15)'; btn.style.color = '#f0a500'; btn.style.borderColor = '#f0a500'; }
+    syncUI();
+  } else {
+    // Restore everything
+    if (editorStash) {
+      state.wave_x = editorStash.w1x; state.wave_y = editorStash.w1y;
+      wave2.x = editorStash.w2x; wave2.y = editorStash.w2y;
+      state.tex_x = editorStash.texX; state.tex_y = editorStash.texY; state.tex_rot = editorStash.texRot;
+      if (editorStash.chaos && !chaosEnabled) toggleChaos();
+      if (editorStash.auto && !autoRandomInterval) toggleAutoRandom();
+      if (editorStash.texChaos && !texChaosEnabled) toggleTexChaos();
+      editorStash = null;
+    }
+    if (btn) { btn.textContent = 'editor'; btn.style.background = ''; btn.style.color = ''; btn.style.borderColor = ''; }
+    syncUI();
+  }
+}
+
 // Render loop
 let frameCount=0, lastFpsTime=performance.now(), fps=0, startTime=performance.now();
 
@@ -4774,7 +4824,8 @@ function render() {
   const patTag = state.wave_pattern > 0 ? ` <span class="d">|</span> ${PATTERN_NAMES[state.wave_pattern].toUpperCase()}` : '';
   const blendTag = state.wave_blend > 0 ? ` <span class="d">|</span> ${BLEND_NAMES[state.wave_blend].toUpperCase()}` : '';
   const texTag = texMode > 0 ? ` <span class="d">|</span> TEX` : '';
-  document.getElementById('hud').innerHTML=`${fps} <span class="d">fps</span> ${useMic?'<span class="d">|</span> MIC':''}${trans}${autoTag}${chaosTag}${g3Tag}${libTag}${dualTag}${warpTag}${patTag}${blendTag}${texTag}${qTag}`;
+  const editorTag = editorMode ? ' <span class="d">|</span> <span style="color:#f0a500">EDITOR</span>' : '';
+  document.getElementById('hud').innerHTML=`${fps} <span class="d">fps</span> ${useMic?'<span class="d">|</span> MIC':''}${trans}${autoTag}${chaosTag}${g3Tag}${libTag}${dualTag}${warpTag}${patTag}${blendTag}${texTag}${editorTag}${qTag}`;
 
   requestAnimationFrame(render);
 }
@@ -5862,6 +5913,7 @@ document.addEventListener('keydown', e => {
     case 'a': toggleAutoRandom(); break;
     case 'c': toggleChaos(); break;
     case 'f': goFullscreen(); break;
+    case 'v': toggleEditorView(); break;
     case 'm': toggleMic(); break;
     case 'd': cycleDual(); break;
     case 'e': toggleWave2Edit(); break;
