@@ -5445,7 +5445,8 @@ const startupConfig = loadStartup();
 mDbg('8:buildUI');
 buildUI();
 buildFavBar();
-buildTexThumbStrip(); // populate thumbnails now that DOM exists
+loadTexPool(); // re-run now that DOM exists (first run was before buildUI)
+buildTexThumbStrip();
 mDbg('9:initFBs');
 initFBs();
 loadPreset('metheus'); // always start with a visual preset
