@@ -4253,10 +4253,13 @@ function setEditingWave(num) {
     for (const k of WAVE2_KEYS) state[k] = wave1Stash[k];
   }
   syncUI();
-  // Update toggle buttons
+  // Update toggle buttons — preserve hidden-wave state
   document.querySelectorAll('.wt-btn').forEach(b => b.classList.remove('active'));
   const activeBtn = document.getElementById(editingWave2 ? 'wt-2' : 'wt-1');
   if (activeBtn) activeBtn.classList.add('active');
+  const b1 = document.getElementById('wt-1'), b2 = document.getElementById('wt-2');
+  if (b1) { b1.classList.toggle('hidden-wave', wave1Hidden); b1.textContent = wave1Hidden ? '(wave 1)' : 'wave 1'; }
+  if (b2) { b2.classList.toggle('hidden-wave', wave2Hidden); b2.textContent = wave2Hidden ? '(wave 2)' : 'wave 2'; }
 }
 
 function toggleWave2Edit() {
