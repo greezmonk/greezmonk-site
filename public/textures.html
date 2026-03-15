@@ -2,10 +2,10 @@
 <html><head><meta charset="utf-8"><title>Synthestasia Texture Workshop</title>
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
-body { background:#0a0a0f; color:#eee; font-family:'Segoe UI',sans-serif; padding:20px; overflow-y:auto; }
-h1 { font-size:1.3em; color:#0ff; margin-bottom:2px; letter-spacing:1px; }
-h1 span { font-size:0.55em; color:#444; font-weight:normal; }
-.subtitle { font-size:0.7em; color:#555; margin-bottom:16px; }
+body { background:#1a1a1a; color:#c8c0b0; font-family:'Courier New',monospace; padding:20px; overflow-y:auto; }
+h1 { font-size:13px; font-weight:400; color:#f0a500; margin-bottom:2px; letter-spacing:1.5px; text-transform:uppercase; }
+h1 span { color:#706860; font-weight:normal; }
+.subtitle { font-size:0.7em; color:#706860; margin-bottom:16px; }
 
 /* Two-panel layout */
 .workshop { display:flex; gap:16px; height:calc(100vh - 80px); }
@@ -14,43 +14,43 @@ h1 span { font-size:0.55em; color:#444; font-weight:normal; }
 
 /* Category sections */
 .cat-section { margin-bottom:8px; }
-.cat-header { font-size:0.65em; color:#0ff; text-transform:uppercase; letter-spacing:2px; margin-bottom:4px; padding-bottom:2px; border-bottom:1px solid #1a1a2a; }
+.cat-header { font-size:0.65em; color:#f0a500; text-transform:uppercase; letter-spacing:2px; margin-bottom:4px; padding-bottom:2px; border-bottom:1px dashed #333; }
 .thumb-grid { display:flex; flex-wrap:wrap; gap:5px; margin-bottom:4px; }
-.thumb { width:86px; cursor:pointer; text-align:center; border:2px solid transparent; border-radius:6px; padding:3px; transition:all 0.2s; background:#111118; }
-.thumb:hover { border-color:#555; background:#1a1a25; }
-.thumb.active { border-color:#0ff; background:#0a1a2a; box-shadow:0 0 12px rgba(0,255,255,0.15); }
+.thumb { width:86px; cursor:pointer; text-align:center; border:2px solid transparent; border-radius:6px; padding:3px; transition:all 0.2s; background:#1f1f1f; }
+.thumb:hover { border-color:#555; background:#252525; }
+.thumb.active { border-color:#f0a500; background:#252525; box-shadow:0 0 12px rgba(240,165,0,0.15); }
 .thumb canvas { display:block; margin:0 auto 2px; border-radius:3px; }
 .thumb .tname { font-size:0.6em; color:#888; line-height:1.1; }
-.thumb.active .tname { color:#0ff; font-weight:bold; }
+.thumb.active .tname { color:#f0a500; font-weight:bold; }
 
 /* Controls */
-.ctrl-bar { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px; align-items:flex-end; padding:8px 12px; background:#111118; border:1px solid #1a1a2a; border-radius:8px; }
+.ctrl-bar { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px; align-items:flex-end; padding:8px 12px; background:#1f1f1f; border:1px dashed #333; border-radius:8px; }
 .ctrl { display:flex; flex-direction:column; gap:1px; }
-.ctrl label { font-size:0.6em; color:#555; letter-spacing:0.5px; }
-.ctrl input, .ctrl select { background:#0a0a12; color:#eee; border:1px solid #2a2a3a; padding:2px 5px; border-radius:4px; font-size:0.75em; }
-.ctrl input[type=range] { width:85px; accent-color:#0ff; }
-.ctrl-val { font-size:0.6em; color:#0ff; min-width:18px; text-align:center; }
+.ctrl label { font-size:0.6em; color:#706860; letter-spacing:0.5px; }
+.ctrl input, .ctrl select { background:#252525; color:#c8c0b0; border:1px dashed #333; padding:2px 5px; border-radius:4px; font-size:0.75em; }
+.ctrl input[type=range] { width:85px; accent-color:#f0a500; }
+.ctrl-val { font-size:0.6em; color:#f0a500; min-width:18px; text-align:center; }
 .btn { border:none; padding:5px 14px; border-radius:4px; cursor:pointer; font-weight:bold; font-size:0.75em; letter-spacing:0.5px; transition:all 0.15s; }
-.btn-gen { background:#0ff; color:#0a0a0f; }
-.btn-gen:hover { background:#0dd; }
-.btn-all { background:#0f0; color:#0a0a0f; }
+.btn-gen { background:#f0a500; color:#1a1a1a; }
+.btn-gen:hover { background:#a87200; }
+.btn-all { background:#0f0; color:#1a1a1a; }
 .btn-all:hover { background:#0d0; }
 
 /* Map output */
 .maps-header { display:flex; align-items:center; gap:12px; margin-bottom:8px; }
-.maps-label { font-size:0.7em; color:#555; text-transform:uppercase; letter-spacing:2px; }
+.maps-label { font-size:0.7em; color:#706860; text-transform:uppercase; letter-spacing:2px; }
 .canvases { display:flex; flex-wrap:wrap; gap:8px; }
-.map-card { background:#111118; border:1px solid #1a1a2a; border-radius:8px; padding:6px; text-align:center; }
+.map-card { background:#1f1f1f; border:1px dashed #333; border-radius:8px; padding:6px; text-align:center; }
 .map-card canvas { border:1px solid #222; cursor:pointer; display:block; margin:0 auto; border-radius:4px; }
-.map-card .label { font-size:0.6em; color:#0ff; margin:4px 0 3px; letter-spacing:0.5px; }
-.map-card button { background:#1a1a2a; color:#0ff; border:1px solid #2a2a4a; padding:2px 8px; border-radius:4px; cursor:pointer; font-size:0.6em; font-weight:bold; transition:all 0.15s; }
-.map-card button:hover { background:#0ff; color:#0a0a0f; }
-.checker { background-image:linear-gradient(45deg,#1a1a25 25%,transparent 25%),linear-gradient(-45deg,#1a1a25 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#1a1a25 75%),linear-gradient(-45deg,transparent 75%,#1a1a25 75%);background-size:14px 14px;background-position:0 0,0 7px,7px -7px,-7px 0; }
+.map-card .label { font-size:0.6em; color:#f0a500; margin:4px 0 3px; letter-spacing:0.5px; }
+.map-card button { background:#252525; color:#f0a500; border:1px dashed #333; padding:2px 8px; border-radius:4px; cursor:pointer; font-size:0.6em; font-weight:bold; transition:all 0.15s; }
+.map-card button:hover { background:#f0a500; color:#1a1a1a; }
+.checker { background-image:linear-gradient(45deg,#252525 25%,transparent 25%),linear-gradient(-45deg,#252525 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#252525 75%),linear-gradient(-45deg,transparent 75%,#252525 75%);background-size:14px 14px;background-position:0 0,0 7px,7px -7px,-7px 0; }
 
 /* Scrollbar styling */
 .left-panel::-webkit-scrollbar, .right-panel::-webkit-scrollbar { width:6px; }
-.left-panel::-webkit-scrollbar-track, .right-panel::-webkit-scrollbar-track { background:#0a0a0f; }
-.left-panel::-webkit-scrollbar-thumb, .right-panel::-webkit-scrollbar-thumb { background:#2a2a3a; border-radius:3px; }
+.left-panel::-webkit-scrollbar-track, .right-panel::-webkit-scrollbar-track { background:#1a1a1a; }
+.left-panel::-webkit-scrollbar-thumb, .right-panel::-webkit-scrollbar-thumb { background:#333; border-radius:3px; }
 .left-panel::-webkit-scrollbar-thumb:hover, .right-panel::-webkit-scrollbar-thumb:hover { background:#444; }
 </style>
 </head><body>
@@ -60,9 +60,12 @@ h1 span { font-size:0.55em; color:#444; font-weight:normal; }
   <div class="left-panel" id="shapeGrid"></div>
 
   <div class="right-panel">
-    <div style="display:flex;gap:8px;margin-bottom:8px;">
-      <button class="btn btn-gen" onclick="saveSet()" style="background:#f0a;color:#0a0a0f;font-size:0.8em;padding:6px 16px;">Save Set to Visualizer</button>
-      <button class="btn" onclick="resetShape()" style="background:#333;color:#0ff;border:1px solid #0ff;font-size:0.8em;padding:6px 16px;">Reset Shape</button>
+    <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
+      <button class="btn btn-gen" onclick="saveSet()" style="background:#f0a;color:#1a1a1a;font-size:0.8em;padding:6px 16px;">Save Set to Visualizer</button>
+      <button class="btn" onclick="resetShape()" style="background:#252525;color:#f0a500;border:1px dashed #f0a500;font-size:0.8em;padding:6px 16px;">Reset Shape</button>
+      <button class="btn" onclick="exportPalette()" style="background:#252525;color:#c8c0b0;border:1px dashed #333;font-size:0.8em;padding:6px 16px;" title="Download palette as shareable file">Export Palette</button>
+      <button class="btn" onclick="document.getElementById('import-file').click()" style="background:#252525;color:#c8c0b0;border:1px dashed #333;font-size:0.8em;padding:6px 16px;" title="Load palette from file">Import Palette</button>
+      <input type="file" id="import-file" accept=".synth-tex,.json" style="display:none" onchange="importPalette(this)">
     </div>
     <div class="ctrl-bar">
       <div class="ctrl"><label>Size</label><select id="sz"><option value="512">512</option><option value="1024" selected>1024</option><option value="2048">2048</option></select></div>
@@ -848,7 +851,7 @@ function buildGrid() {
       const canvas = document.createElement('canvas');
       canvas.width = canvas.height = 80;
       canvas.style.width = canvas.style.height = '80px';
-      canvas.style.background = '#0a0a12';
+      canvas.style.background = '#252525';
 
       const label = document.createElement('div');
       label.className = 'tname';
@@ -971,5 +974,59 @@ restoreAllSettings();
 loadSlidersForShape(currentShape);
 buildGrid();
 generate();
+
+// ===== EXPORT / IMPORT PALETTE =====
+function exportPalette() {
+  saveCurrentSliders();
+  persistAllSettings();
+  const palette = {
+    version: 1,
+    type: 'synthestasia-texture-palette',
+    created: new Date().toISOString(),
+    settings: { ...shapeSettings },
+  };
+  const blob = new Blob([JSON.stringify(palette)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `synthestasia-palette-${Date.now()}.synth-tex`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function importPalette(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const palette = JSON.parse(reader.result);
+      if (palette.settings) {
+        for (const [id, s] of Object.entries(palette.settings)) {
+          if (shapeSettings[id]) Object.assign(shapeSettings[id], s);
+        }
+        persistAllSettings();
+        loadSlidersForShape(currentShape);
+        buildGrid();
+        generate();
+        // Flash feedback
+        const btn = document.querySelector('[onclick*="import-file"]');
+        if (btn) { const orig = btn.textContent; btn.textContent = 'Loaded!'; btn.style.color = '#f0a500'; setTimeout(() => { btn.textContent = orig; btn.style.color = ''; }, 1500); }
+      }
+    } catch(e) { alert('Could not read palette file'); }
+  };
+  reader.readAsText(file);
+  input.value = ''; // reset so same file can be re-imported
+}
+
+// Drag-drop palette files onto the workshop
+document.addEventListener('dragover', e => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; });
+document.addEventListener('drop', e => {
+  const file = e.dataTransfer.files[0];
+  if (file && (file.name.endsWith('.synth-tex') || file.name.endsWith('.json'))) {
+    e.preventDefault();
+    const fakeInput = { files: [file], value: '' };
+    importPalette(fakeInput);
+  }
+});
 </script>
 </body></html>

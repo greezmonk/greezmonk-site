@@ -1,0 +1,13 @@
+{
+  "rules": {
+    "configs": {
+      "$code": {
+        ".read": true,
+        ".write": true,
+        ".validate": "newData.hasChildren(['config', 'name', 'created'])"
+      }
+    },
+    ".read": false,
+    ".write": false
+  }
+}

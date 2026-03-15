@@ -117,6 +117,10 @@
   input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; background: var(--accent); border-radius: 50%; cursor: pointer; border: 2px solid var(--bg); }
   input[type="range"]::-moz-range-thumb { width: 12px; height: 12px; background: var(--accent); border-radius: 50%; cursor: pointer; border: 2px solid var(--bg); }
   .toggle-row { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
+  .tex-thumb-strip { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
+  .tex-thumb { width: 40px; height: 40px; border: 2px solid var(--border); border-radius: 3px; cursor: pointer; transition: opacity 0.2s, border-color 0.2s; image-rendering: pixelated; }
+  .tex-thumb:hover { border-color: var(--accent); }
+  .tex-thumb.disabled { opacity: 0.3; border-color: #833; }
   .tog {
     font: 9px 'Courier New', monospace; padding: 2px 6px;
     background: var(--input-bg); border: 1px dashed var(--border); color: var(--dim);
@@ -367,6 +371,8 @@
     <input type="file" id="load-file" accept=".json" style="display:none" onchange="loadConfig(event)">
     <input type="file" id="load-library" accept=".json" multiple style="display:none" onchange="loadLibrary(event)">
     <button onclick="window.open('textures.html','_blank')" title="Open texture workshop — create custom textures for the feedback loop" style="color:#f0a;">textures</button>
+    <button onclick="shareConfig()" title="Share current config — generates a short code anyone can load" style="color:#0f0;">share</button>
+    <button onclick="promptLoadCode()" title="Load a shared config by code">load code</button>
   </div>
   <div class="favorites" id="fav-bar"></div>
 </header>
@@ -1248,7 +1254,40 @@ function mkTexCycle() {
   b.onclick = () => { cycleTexMode(); b.className = 'tog' + (texMode > 0 ? ' on' : ''); };
   d.title = 'Toggle custom texture in feedback loop (I key). Generate textures in the workshop tab.';
   d.appendChild(b);
+  // Thumbnail strip container
+  const strip = document.createElement('div');
+  strip.id = 'tex-thumb-strip';
+  strip.className = 'tex-thumb-strip';
+  d.appendChild(strip);
   return d;
+}
+
+function buildTexThumbStrip() {
+  const strip = document.getElementById('tex-thumb-strip');
+  if (!strip) return;
+  strip.innerHTML = '';
+  if (texPool.length === 0) return;
+  // Ensure texPoolEnabled matches pool length
+  while (texPoolEnabled.length < texPool.length) texPoolEnabled.push(true);
+  texPoolEnabled.length = texPool.length;
+  for (let i = 0; i < texPool.length; i++) {
+    const c = document.createElement('canvas');
+    c.width = 40; c.height = 40;
+    c.className = 'tex-thumb' + (texPoolEnabled[i] ? '' : ' disabled');
+    c.title = 'Shift-click to toggle texture #' + (i + 1) + ' in/out of rotation';
+    // Draw thumbnail
+    const ctx = c.getContext('2d');
+    const img = new Image();
+    img.onload = () => { ctx.drawImage(img, 0, 0, 40, 40); };
+    img.src = texPool[i];
+    // Shift-click to toggle
+    c.addEventListener('click', (e) => {
+      if (!e.shiftKey) return;
+      texPoolEnabled[i] = !texPoolEnabled[i];
+      c.classList.toggle('disabled', !texPoolEnabled[i]);
+    });
+    strip.appendChild(c);
+  }
 }
 
 function mkTexPatCycle() {
@@ -4323,6 +4362,145 @@ function loadConfig(event) {
 }
 
 // =====================================================
+// CLOUD CONFIG — share/load via Firebase Realtime DB
+// =====================================================
+const FIREBASE_DB = 'https://greezmonk-prime-ff5ce-default-rtdb.firebaseio.com';
+
+function generateCode() {
+  const chars = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // no ambiguous 0/O/1/I/L
+  let code = '';
+  for (let i = 0; i < 5; i++) code += chars[Math.floor(Math.random() * chars.length)];
+  return code;
+}
+
+function buildCloudConfig() {
+  return {
+    version: 1,
+    state: { ...state },
+    texSettings: (() => {
+      try {
+        const d = localStorage.getItem('synthestasia_workshop_settings');
+        return d ? JSON.parse(d) : null;
+      } catch(e) { return null; }
+    })(),
+    pools: {
+      shapePool: [...shapePool], patternPool: [...patternPool], blendPool: [...blendPool],
+      shapePool2: [...shapePool2], patternPool2: [...patternPool2], blendPool2: [...blendPool2],
+      togglePool: { ...togglePool }, togglePool2: { ...togglePool2 },
+    },
+    texMode, texPatternMode, texChaosEnabled, texChaosSpeed, texChaosLock: { ...texChaosLock },
+    texPoolEnabled: [...texPoolEnabled],
+    dualIdx, chaosOn: chaosEnabled, g3On: g3Enabled, audioReactMode,
+    presetName: currentPresetName || 'custom',
+  };
+}
+
+function applyCloudConfig(cfg) {
+  if (cfg.state) {
+    const texSave = {};
+    for (const k of Object.keys(state)) { if (k.startsWith('tex_')) texSave[k] = state[k]; }
+    Object.assign(state, DEFAULTS, cfg.state);
+    // Only restore tex from cloud if it has tex keys, otherwise keep local
+    if (!cfg.state.tex_opacity) Object.assign(state, texSave);
+  }
+  if (cfg.pools) {
+    if (cfg.pools.shapePool) cfg.pools.shapePool.forEach((v, i) => { if (i < shapePool.length) shapePool[i] = v; });
+    if (cfg.pools.patternPool) cfg.pools.patternPool.forEach((v, i) => { if (i < patternPool.length) patternPool[i] = v; });
+    if (cfg.pools.blendPool) cfg.pools.blendPool.forEach((v, i) => { if (i < blendPool.length) blendPool[i] = v; });
+    if (cfg.pools.shapePool2) cfg.pools.shapePool2.forEach((v, i) => { if (i < shapePool2.length) shapePool2[i] = v; });
+    if (cfg.pools.patternPool2) cfg.pools.patternPool2.forEach((v, i) => { if (i < patternPool2.length) patternPool2[i] = v; });
+    if (cfg.pools.blendPool2) cfg.pools.blendPool2.forEach((v, i) => { if (i < blendPool2.length) blendPool2[i] = v; });
+    if (cfg.pools.togglePool) Object.assign(togglePool, cfg.pools.togglePool);
+    if (cfg.pools.togglePool2) Object.assign(togglePool2, cfg.pools.togglePool2);
+  }
+  if (cfg.texSettings) {
+    try { localStorage.setItem('synthestasia_workshop_settings', JSON.stringify(cfg.texSettings)); } catch(e) {}
+  }
+  if (cfg.dualIdx !== undefined) dualIdx = cfg.dualIdx;
+  if (cfg.texMode !== undefined) texMode = cfg.texMode;
+  if (cfg.texPatternMode !== undefined) texPatternMode = cfg.texPatternMode;
+  if (cfg.texChaosEnabled !== undefined) texChaosEnabled = cfg.texChaosEnabled;
+  if (cfg.texChaosSpeed !== undefined) texChaosSpeed = cfg.texChaosSpeed;
+  if (cfg.texChaosLock) Object.assign(texChaosLock, cfg.texChaosLock);
+  if (cfg.texPoolEnabled) texPoolEnabled = [...cfg.texPoolEnabled];
+  currentPresetName = cfg.presetName || '';
+  syncUI(); updateMilk();
+  document.querySelectorAll('.presets button').forEach(b => b.classList.remove('active'));
+}
+
+async function shareConfig() {
+  const code = generateCode();
+  const config = buildCloudConfig();
+  const payload = {
+    config,
+    name: currentPresetName || 'custom',
+    author: 'anonymous',
+    created: new Date().toISOString(),
+    loads: 0,
+  };
+  try {
+    const resp = await fetch(`${FIREBASE_DB}/configs/${code}.json`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!resp.ok) throw new Error('Firebase write failed');
+    // Show the code to the user
+    const name = prompt(`Config shared! Your code is:\n\n${code}\n\nGive it a name (or cancel for default):`, currentPresetName || 'my config');
+    if (name !== null && name.trim()) {
+      // Update the name
+      await fetch(`${FIREBASE_DB}/configs/${code}/name.json`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(name.trim()),
+      });
+    }
+    // Copy code to clipboard
+    try { await navigator.clipboard.writeText(code); } catch(e) {}
+    // Flash the share button
+    const btn = document.querySelector('[onclick="shareConfig()"]');
+    if (btn) { const orig = btn.textContent; btn.textContent = code + ' copied!'; btn.style.color = '#0f0'; setTimeout(() => { btn.textContent = orig; btn.style.color = '#0f0'; }, 3000); }
+  } catch(e) {
+    alert('Share failed — check your connection');
+    console.error(e);
+  }
+}
+
+async function promptLoadCode() {
+  const code = prompt('Enter a share code:');
+  if (!code || !code.trim()) return;
+  await loadCloudConfig(code.trim().toUpperCase());
+}
+
+async function loadCloudConfig(code) {
+  try {
+    const resp = await fetch(`${FIREBASE_DB}/configs/${code}.json`);
+    const data = await resp.json();
+    if (!data || !data.config) { alert(`Code "${code}" not found`); return; }
+    applyCloudConfig(data.config);
+    // Increment load counter
+    fetch(`${FIREBASE_DB}/configs/${code}/loads.json`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify((data.loads || 0) + 1),
+    }).catch(() => {});
+    // Flash feedback
+    const btn = document.querySelector('[onclick="promptLoadCode()"]');
+    if (btn) { const orig = btn.textContent; btn.textContent = `loaded: ${data.name || code}`; btn.style.color = 'var(--accent)'; setTimeout(() => { btn.textContent = orig; btn.style.color = ''; }, 2500); }
+  } catch(e) {
+    alert('Load failed — check your connection');
+    console.error(e);
+  }
+}
+
+// Check URL for ?code=XXXXX on load
+function checkUrlCode() {
+  const params = new URLSearchParams(window.location.search);
+  const code = params.get('code');
+  if (code) loadCloudConfig(code.toUpperCase());
+}
+
+// =====================================================
 // FAVORITES (10 slots, localStorage, Shift+1-0)
 // =====================================================
 const FAV_KEY = 'visualizer-studio-favorites';
@@ -4900,6 +5078,7 @@ const texChaosLock = {};
 
 let texMode = 1; // 0=off, 1=custom
 let texPool = []; // array of base64 data URLs
+let texPoolEnabled = []; // parallel array: true = in rotation, false = disabled
 let texGLA = null, texGLB = null; // two GL textures for crossfade
 let texGLAReady = false, texGLBReady = false;
 let texCurrentIdx = -1; // which pool index is showing (texA)
@@ -4938,6 +5117,8 @@ function loadTexPool() {
     const single = localStorage.getItem('synthestasia_texture');
     if (single) texPool = [single];
   }
+  // Reset enabled array to match pool length (all enabled by default)
+  texPoolEnabled = texPool.map(() => true);
   if (texPool.length > 0 && texCurrentIdx < 0) {
     texCurrentIdx = 0;
     if (texGLA) gl.deleteTexture(texGLA);
@@ -4949,12 +5130,18 @@ function loadTexPool() {
       texGLB = makeGLTex(texPool[1], () => { texGLBReady = true; });
     }
   }
+  buildTexThumbStrip();
 }
 
 function pickNextTexture() {
-  if (texPool.length < 2) return;
+  // Build list of enabled indices
+  const enabled = [];
+  for (let i = 0; i < texPool.length; i++) {
+    if (texPoolEnabled[i]) enabled.push(i);
+  }
+  if (enabled.length < 2) return; // need at least 2 enabled to cycle
   let next;
-  do { next = Math.floor(Math.random() * texPool.length); } while (next === texCurrentIdx && texPool.length > 1);
+  do { next = enabled[Math.floor(Math.random() * enabled.length)]; } while (next === texCurrentIdx && enabled.length > 1);
   texNextIdx = next;
   if (texGLB) gl.deleteTexture(texGLB);
   texGLBReady = false;
@@ -5188,6 +5375,7 @@ function saveStartup() {
     texChaosOn: texChaosEnabled,
     texChaosSpeed: texChaosSpeed,
     texChaosLock: { ...texChaosLock },
+    texPoolEnabled: [...texPoolEnabled],
   };
   localStorage.setItem(STARTUP_KEY, JSON.stringify(config));
   const btn = document.getElementById('btn-save-startup');
@@ -5240,6 +5428,7 @@ function loadStartup() {
     if (config.texChaosOn !== undefined) texChaosEnabled = config.texChaosOn;
     if (config.texChaosSpeed !== undefined) texChaosSpeed = config.texChaosSpeed;
     if (config.texChaosLock) Object.assign(texChaosLock, config.texChaosLock);
+    if (config.texPoolEnabled) texPoolEnabled = [...config.texPoolEnabled];
     return config;
   } catch(e) { return false; }
 }
@@ -5256,6 +5445,7 @@ const startupConfig = loadStartup();
 mDbg('8:buildUI');
 buildUI();
 buildFavBar();
+buildTexThumbStrip(); // populate thumbnails now that DOM exists
 mDbg('9:initFBs');
 initFBs();
 loadPreset('metheus'); // always start with a visual preset
@@ -5289,6 +5479,8 @@ document.addEventListener('visibilitychange', () => {
 
 mDbg('10:render');
 render();
+// Check for ?code=XXXXX in URL — load shared config after render starts
+checkUrlCode();
 </script>
 </body>
 </html>
