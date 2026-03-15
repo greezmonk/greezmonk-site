@@ -162,6 +162,8 @@
     border-radius: 2px; cursor: pointer; transition: all 0.2s;
   }
   .wt-btn.active { border-color: var(--accent); border-style: solid; color: var(--accent); background: rgba(240,165,0,0.08); }
+  .wt-btn.hidden-wave { opacity: 0.35; border-style: dotted; text-decoration: line-through; }
+  .wt-btn.hidden-wave.active { opacity: 0.5; }
   .wt-btn:hover { border-color: var(--accent-dim); color: var(--text); }
   .wm-cat { margin-bottom: 4px; }
   .wm-cat-hdr {
@@ -476,6 +478,7 @@ const DUAL_MODES = [
   { name: 'COMBINE', count: 2 },
 ];
 let dualIdx = 0;
+let wave1Hidden = false, wave2Hidden = false; // shift-click wave buttons to hide
 let wave_mode2 = -1; // -1 = auto-pick
 
 // Ghost Wave 3 (G3) — anti-white-out scavenger, on by default
@@ -983,10 +986,14 @@ if (blendPool2.length === 0) blendPool2 = new Array(BLEND_NAMES.length).fill(tru
 
 function mkWaveToggle() {
   const d = document.createElement('div'); d.className = 'wave-toggle';
-  const btn1 = document.createElement('button'); btn1.className = 'wt-btn active'; btn1.id = 'wt-1';
-  btn1.textContent = 'wave 1'; btn1.title = 'Edit wave 1 settings (E to toggle)'; btn1.onclick = () => setEditingWave(1);
-  const btn2 = document.createElement('button'); btn2.className = 'wt-btn'; btn2.id = 'wt-2';
-  btn2.textContent = 'wave 2'; btn2.title = 'Edit wave 2 settings — independent shape, color, pools (E to toggle)'; btn2.onclick = () => setEditingWave(2);
+  const btn1 = document.createElement('button'); btn1.className = 'wt-btn active' + (wave1Hidden ? ' hidden-wave' : ''); btn1.id = 'wt-1';
+  btn1.textContent = wave1Hidden ? '(wave 1)' : 'wave 1';
+  btn1.title = 'Edit wave 1 settings (E to toggle). Shift+click to hide/show wave.';
+  btn1.onclick = (e) => { if (e.shiftKey) { wave1Hidden = !wave1Hidden; btn1.classList.toggle('hidden-wave', wave1Hidden); btn1.textContent = wave1Hidden ? '(wave 1)' : 'wave 1'; return; } setEditingWave(1); };
+  const btn2 = document.createElement('button'); btn2.className = 'wt-btn' + (wave2Hidden ? ' hidden-wave' : ''); btn2.id = 'wt-2';
+  btn2.textContent = wave2Hidden ? '(wave 2)' : 'wave 2';
+  btn2.title = 'Edit wave 2 settings (E to toggle). Shift+click to hide/show wave.';
+  btn2.onclick = (e) => { if (e.shiftKey) { wave2Hidden = !wave2Hidden; btn2.classList.toggle('hidden-wave', wave2Hidden); btn2.textContent = wave2Hidden ? '(wave 2)' : 'wave 2'; return; } setEditingWave(2); };
   d.appendChild(btn1); d.appendChild(btn2); return d;
 }
 
@@ -4571,6 +4578,7 @@ function render() {
   state.wave_x += wiggle.w1x;
   state.wave_y += wiggle.w1y;
 
+  if (!wave1Hidden) {
   if (xfading) {
     const ease = transitionProgress < 0.5 ? 2*transitionProgress*transitionProgress : 1-Math.pow(-2*transitionProgress+2,2)/2;
     const fadeOut = 1 - ease, fadeIn = ease;
@@ -4588,6 +4596,7 @@ function render() {
     const wv = buildWaveVerts(wave, aspect);
     drawWave(wv, state.wave_r, state.wave_g, state.wave_b, state.wave_a, state.wave_dots, 1, state.wave_r2, state.wave_g2, state.wave_b2, state.wave_gradient, state.wave_pattern, state.wave_pattern_speed);
   }
+  } // wave1Hidden
   state.wave_scale = savedScale1;
   state.wave_x = savedX1; state.wave_y = savedY1;
 
@@ -4596,7 +4605,7 @@ function render() {
   waveDriver = audioReactMode === 'split' ? audio.mid : audio.bass;
   stepDualFade();
   stepWave2Transition();
-  if (dualFade > 0.01) {
+  if (dualFade > 0.01 && !wave2Hidden) {
     const origMode = state.wave_mode, origMy = state.wave_mystery;
     const origSc = state.wave_scale, origX = state.wave_x, origY = state.wave_y;
     const isIndependent = (DUAL_MODES[dualIdx].name === 'SPLIT' || DUAL_MODES[dualIdx].name === 'LAYER' || DUAL_MODES[dualIdx].name === 'COMBINE');
@@ -4842,7 +4851,7 @@ function buildCloudConfig() {
     },
     texMode, texPatternMode, texChaosEnabled, texChaosSpeed, texChaosLock: { ...texChaosLock }, texPatPool: [...texPatPool],
     texPoolEnabled: [...texPoolEnabled],
-    dualIdx, chaosOn: chaosEnabled, g3On: g3Enabled, audioReactMode,
+    dualIdx, wave1Hidden, wave2Hidden, chaosOn: chaosEnabled, g3On: g3Enabled, audioReactMode,
     presetName: currentPresetName || 'custom',
   };
 }
@@ -4869,6 +4878,8 @@ function applyCloudConfig(cfg) {
     try { localStorage.setItem('synthestasia_workshop_settings', JSON.stringify(cfg.texSettings)); } catch(e) {}
   }
   if (cfg.dualIdx !== undefined) dualIdx = cfg.dualIdx;
+  if (cfg.wave1Hidden !== undefined) wave1Hidden = cfg.wave1Hidden;
+  if (cfg.wave2Hidden !== undefined) wave2Hidden = cfg.wave2Hidden;
   if (cfg.texMode !== undefined) texMode = cfg.texMode;
   if (cfg.texPatternMode !== undefined) texPatternMode = cfg.texPatternMode;
   if (cfg.texChaosEnabled !== undefined) texChaosEnabled = cfg.texChaosEnabled;
@@ -5899,6 +5910,7 @@ function saveStartup() {
     togglePool: { ...togglePool },
     togglePool2: { ...togglePool2 },
     dualIdx: dualIdx,
+    wave1Hidden: wave1Hidden, wave2Hidden: wave2Hidden,
     autoOn: autoRandomInterval !== null,
     chaosOn: chaosEnabled,
     g3On: g3Enabled,
@@ -5958,6 +5970,8 @@ function loadStartup() {
     if (config.togglePool) Object.assign(togglePool, config.togglePool);
     if (config.togglePool2) Object.assign(togglePool2, config.togglePool2);
     if (config.dualIdx !== undefined) dualIdx = config.dualIdx;
+    if (config.wave1Hidden !== undefined) wave1Hidden = config.wave1Hidden;
+    if (config.wave2Hidden !== undefined) wave2Hidden = config.wave2Hidden;
     if (config.audioReactMode) audioReactMode = config.audioReactMode;
     if (config.texMode !== undefined) texMode = config.texMode;
     if (config.texPatternMode !== undefined) texPatternMode = config.texPatternMode;
