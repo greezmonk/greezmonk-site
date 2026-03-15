@@ -1332,14 +1332,24 @@ function mkTexPatCycle() {
   const d = document.createElement('div'); d.className = 'ctl';
   const label = document.createElement('label');
   label.innerHTML = '<span>fill pattern</span><span class="val" id="v-tex_pattern">' + TEX_PAT_NAMES[texPatternMode] + '</span>';
-  d.title = 'Procedural fill pattern overlaid on the texture shape. Modulated by pattern amount slider.';
+  d.title = 'Click to select pattern. Shift-click to toggle in/out of chaos rotation.';
   d.appendChild(label);
   const row = document.createElement('div'); row.className = 'toggle-row';
   for (let i = 0; i < TEX_PAT_NAMES.length; i++) {
     const b = document.createElement('button');
-    b.className = 'tog' + (texPatternMode === i ? ' on' : '');
+    b.className = 'tog'
+      + (texPatternMode === i ? ' on' : '')
+      + (texPatPool[i] ? ' pooled' : ' locked');
     b.textContent = TEX_PAT_NAMES[i]; b.id = `tpat-${i}`;
-    b.onclick = () => {
+    b.onclick = (e) => {
+      if (e.shiftKey) {
+        // Toggle pool membership
+        texPatPool[i] = !texPatPool[i];
+        b.classList.toggle('pooled', texPatPool[i]);
+        b.classList.toggle('locked', !texPatPool[i]);
+        return;
+      }
+      // Regular click — select this pattern
       texPatternMode = i;
       row.querySelectorAll('.tog').forEach(t => t.classList.remove('on'));
       b.classList.add('on');
@@ -1529,7 +1539,11 @@ function syncUI() {
     } else if (c.type === 'texpatcycle') {
       for (let pi = 0; pi < TEX_PAT_NAMES.length; pi++) {
         const pb = document.getElementById(`tpat-${pi}`);
-        if (pb) pb.classList.toggle('on', texPatternMode === pi);
+        if (pb) {
+          pb.classList.toggle('on', texPatternMode === pi);
+          pb.classList.toggle('pooled', texPatPool[pi]);
+          pb.classList.toggle('locked', !texPatPool[pi]);
+        }
       }
       const tpvl = document.getElementById('v-tex_pattern');
       if (tpvl) tpvl.textContent = TEX_PAT_NAMES[texPatternMode];
@@ -4426,7 +4440,7 @@ function buildCloudConfig() {
       shapePool2: [...shapePool2], patternPool2: [...patternPool2], blendPool2: [...blendPool2],
       togglePool: { ...togglePool }, togglePool2: { ...togglePool2 },
     },
-    texMode, texPatternMode, texChaosEnabled, texChaosSpeed, texChaosLock: { ...texChaosLock },
+    texMode, texPatternMode, texChaosEnabled, texChaosSpeed, texChaosLock: { ...texChaosLock }, texPatPool: [...texPatPool],
     texPoolEnabled: [...texPoolEnabled],
     dualIdx, chaosOn: chaosEnabled, g3On: g3Enabled, audioReactMode,
     presetName: currentPresetName || 'custom',
@@ -5110,6 +5124,10 @@ function toggleG3() {
 // =====================================================
 const TEX_PAT_NAMES = ['none','scanlines','v-lines','diagonal','grid','rings','diamonds','waves','dots','crosshatch','weave'];
 let texPatternMode = 0;
+// Pattern pool — which fill patterns chaos can cycle through (true = enabled)
+let texPatPool = new Array(11).fill(true); // all 11 patterns (including 'none')
+texPatPool[0] = false; // 'none' excluded by default
+let texPatCycleInterval = 180; // frames between pattern switches (~3sec at 60fps)
 
 // Per-slider chaos lock — true = EXCLUDED from chaos
 const texChaosLock = {};
@@ -5372,6 +5390,19 @@ function stepTexChaos() {
     }
     state[cfg.key] = Math.max(cfg.min, Math.min(cfg.max, state[cfg.key] + texChaosVel[param]));
   }
+  // Cycle fill pattern from pool
+  if (texChaosFrameCount % texPatCycleInterval === 0) {
+    const enabled = [];
+    for (let i = 0; i < texPatPool.length; i++) { if (texPatPool[i]) enabled.push(i); }
+    if (enabled.length > 0) {
+      const pick = enabled[Math.floor(Math.random() * enabled.length)];
+      if (pick !== texPatternMode) {
+        texPatternMode = pick;
+        // Also bump pattern amount if it's at zero so the pattern is visible
+        if (state.tex_pat_amt < 0.15 && !texChaosLock['tex_pat_amt']) state.tex_pat_amt = 0.3 + Math.random() * 0.4;
+      }
+    }
+  }
   if (texChaosFrameCount % 20 === 0) syncUI(); // update sliders visually
 }
 
@@ -5479,6 +5510,7 @@ function saveStartup() {
     texChaosOn: texChaosEnabled,
     texChaosSpeed: texChaosSpeed,
     texChaosLock: { ...texChaosLock },
+    texPatPool: [...texPatPool],
     texPoolEnabled: [...texPoolEnabled],
   };
   localStorage.setItem(STARTUP_KEY, JSON.stringify(config));
@@ -5532,6 +5564,7 @@ function loadStartup() {
     if (config.texChaosOn !== undefined) texChaosEnabled = config.texChaosOn;
     if (config.texChaosSpeed !== undefined) texChaosSpeed = config.texChaosSpeed;
     if (config.texChaosLock) Object.assign(texChaosLock, config.texChaosLock);
+    if (config.texPatPool) texPatPool = [...config.texPatPool];
     if (config.texPoolEnabled) texPoolEnabled = [...config.texPoolEnabled];
     return config;
   } catch(e) { return false; }
