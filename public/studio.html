@@ -1272,10 +1272,9 @@ function buildTexThumbStrip() {
   const strip = document.getElementById('tex-thumb-strip');
   if (!strip) return;
   strip.innerHTML = '';
-  const total = TEX_SHAPE_NAMES.length; // 32 slots
-  // Ensure texPoolEnabled matches total
+  const total = Math.max(texPool.length, TEX_SHAPE_NAMES.length);
+  // Ensure texPoolEnabled matches
   while (texPoolEnabled.length < total) texPoolEnabled.push(true);
-  texPoolEnabled.length = total;
   for (let i = 0; i < total; i++) {
     const wrapper = document.createElement('div');
     const hasTex = i < texPool.length && texPool[i];
@@ -1285,7 +1284,20 @@ function buildTexThumbStrip() {
       + (hasTex ? ' has-tex' : ' empty')
       + (isActive ? ' active' : '');
     wrapper.id = `tex-th-${i}`;
-    wrapper.title = TEX_SHAPE_NAMES[i] + (hasTex ? '' : ' (no texture)') + '\nShift-click to toggle in/out';
+    // Determine label: if 256 textures, show shape + map type
+    let labelText;
+    if (texPool.length > TEX_SHAPE_NAMES.length) {
+      // Multi-map mode: shape name + map type
+      const shapeIdx = Math.floor(i / 8);
+      const mapIdx = i % 8;
+      const shapeName = TEX_SHAPE_NAMES[shapeIdx] || `#${shapeIdx}`;
+      const mapName = TEX_MAP_LABELS[mapIdx] || '';
+      labelText = shapeName;
+      wrapper.title = shapeName + ' — ' + mapName + (hasTex ? '' : ' (empty)') + '\nShift-click to toggle';
+    } else {
+      labelText = TEX_SHAPE_NAMES[i] || `#${i+1}`;
+      wrapper.title = labelText + (hasTex ? '' : ' (no texture)') + '\nShift-click to toggle';
+    }
     const c = document.createElement('canvas');
     c.width = 38; c.height = 38;
     if (hasTex) {
@@ -1297,9 +1309,8 @@ function buildTexThumbStrip() {
     wrapper.appendChild(c);
     const label = document.createElement('div');
     label.className = 'tname';
-    label.textContent = TEX_SHAPE_NAMES[i] || `#${i+1}`;
+    label.textContent = labelText;
     wrapper.appendChild(label);
-    // Shift-click to toggle pool
     wrapper.addEventListener('click', (e) => {
       if (!e.shiftKey) return;
       texPoolEnabled[i] = !texPoolEnabled[i];
@@ -1309,7 +1320,6 @@ function buildTexThumbStrip() {
   }
 }
 
-// Update which thumbnail has the active highlight (called during crossfade)
 function updateTexThumbActive() {
   const strip = document.getElementById('tex-thumb-strip');
   if (!strip) return;
@@ -5104,6 +5114,40 @@ let texPatternMode = 0;
 // Per-slider chaos lock — true = EXCLUDED from chaos
 const texChaosLock = {};
 
+// IndexedDB texture storage
+const TEX_DB_NAME = 'synthestasia-textures';
+const TEX_DB_VER = 1;
+const TEX_STORE = 'textures';
+
+function openTexDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(TEX_DB_NAME, TEX_DB_VER);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(TEX_STORE)) {
+        db.createObjectStore(TEX_STORE, { keyPath: 'id' });
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function texDBGetAll(db) {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(TEX_STORE, 'readonly');
+    const req = tx.objectStore(TEX_STORE).getAll();
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+// Listen for workshop broadcasts
+const texBroadcast = new BroadcastChannel('synthestasia-tex-sync');
+texBroadcast.onmessage = (e) => {
+  if (e.data && e.data.type === 'textures-updated') loadTexPool();
+};
+
 let texMode = 1; // 0=off, 1=custom
 let texPool = []; // array of base64 data URLs
 let texPoolEnabled = []; // parallel array: true = in rotation, false = disabled
@@ -5118,6 +5162,7 @@ const TEX_SHAPE_NAMES = [
   'Cathedral','Shatter','Lattice','Labyrinth','Cityscape',
   'Escher Tile','Escher Spi','Impossible','Tessellation',
 ];
+const TEX_MAP_LABELS = ['alpha','noise','gradient','edge','invert','mixed','phase','ripple'];
 let texGLA = null, texGLB = null; // two GL textures for crossfade
 let texGLAReady = false, texGLBReady = false;
 let texCurrentIdx = -1; // which pool index is showing (texA)
@@ -5142,7 +5187,34 @@ function makeGLTex(dataURL, cb) {
   return t;
 }
 
-function loadTexPool() {
+async function loadTexPool() {
+  // Try IndexedDB first (new system — all 8 map types)
+  try {
+    const db = await openTexDB();
+    const all = await texDBGetAll(db);
+    db.close();
+    if (all.length > 0) {
+      // Sort by id to maintain order
+      all.sort((a, b) => a.id - b.id);
+      texPool = all.map(entry => entry.dataURL);
+      // Ensure enabled array covers all slots
+      while (texPoolEnabled.length < texPool.length) texPoolEnabled.push(true);
+      if (texPool.length > 0 && texCurrentIdx < 0) {
+        texCurrentIdx = 0;
+        if (texGLA) gl.deleteTexture(texGLA);
+        texGLA = makeGLTex(texPool[0], () => { texGLAReady = true; });
+        if (texPool.length > 1) {
+          texNextIdx = 1;
+          if (texGLB) gl.deleteTexture(texGLB);
+          texGLB = makeGLTex(texPool[1], () => { texGLBReady = true; });
+        }
+      }
+      buildTexThumbStrip();
+      return;
+    }
+  } catch(e) { console.warn('IndexedDB read failed, falling back to localStorage', e); }
+
+  // Fallback: localStorage (old system — alpha maps only)
   const count = parseInt(localStorage.getItem('synthestasia_tex_count')) || 0;
   if (count > 0) {
     texPool = [];
@@ -5151,18 +5223,15 @@ function loadTexPool() {
       if (d) texPool.push(d);
     }
   }
-  // Fallback: single texture
   if (texPool.length === 0) {
     const single = localStorage.getItem('synthestasia_texture');
     if (single) texPool = [single];
   }
-  // Ensure enabled array covers all slots, preserving existing toggles
-  while (texPoolEnabled.length < TEX_SHAPE_NAMES.length) texPoolEnabled.push(true);
+  while (texPoolEnabled.length < texPool.length) texPoolEnabled.push(true);
   if (texPool.length > 0 && texCurrentIdx < 0) {
     texCurrentIdx = 0;
     if (texGLA) gl.deleteTexture(texGLA);
     texGLA = makeGLTex(texPool[0], () => { texGLAReady = true; });
-    // Pre-load a second texture
     if (texPool.length > 1) {
       texNextIdx = 1;
       if (texGLB) gl.deleteTexture(texGLB);
@@ -5211,11 +5280,6 @@ function stepTexture(now) {
     pickNextTexture();
   }
 }
-
-// Live sync: workshop saves → visualizer picks up pool
-window.addEventListener('storage', e => {
-  if (e.key && e.key.startsWith('synthestasia_tex')) loadTexPool();
-});
 
 loadTexPool();
 
